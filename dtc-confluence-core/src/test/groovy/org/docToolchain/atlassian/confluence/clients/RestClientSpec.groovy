@@ -151,18 +151,27 @@ class RestClientSpec extends Specification {
             new RestClient(configService([credentials: 'x'])).doRequestAndReturnOrNull(new HttpGet('/missing')) == null
     }
 
-    def 'doRequestAndReturnOrNull raises on a server error rather than reporting a missing page'() {
-        given: 'a transient server failure'
-            status = 503
-            body = 'service unavailable'
+    def 'doRequestAndReturnOrNull raises on #code, which says nothing about whether the page exists'() {
+        given:
+            status = code
+            body = reason
 
         when:
             new RestClient(configService([credentials: 'x'])).doRequestAndReturnOrNull(new HttpGet('/x'))
 
-        then: """A server error is not an answer about whether the page exists. Reporting it as
-                 null would make a publish create a duplicate page instead of failing."""
+        then: """Only 404 means absence. Reporting a permission problem or a rate limit as absence
+                 would make a publish create a duplicate page instead of failing."""
             def e = thrown(RequestFailedException)
-            e.message.contains('503')
+            e.message.contains(code as String)
+
+        where:
+            code || reason
+            400  || 'bad request'
+            401  || 'unauthorized'
+            403  || 'forbidden'
+            429  || 'too many requests'
+            500  || 'boom'
+            503  || 'service unavailable'
     }
 
     def 'doRequestAndFailIfNot20x reports the status rather than a closed stream'() {
