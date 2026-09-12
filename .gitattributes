@@ -1,7 +1,7 @@
 * text=auto eol=lf
 
-# Windows-Batchdateien des Maven-Wrappers: von Maven mit CRLF ausgeliefert,
-# cmd.exe verlaesst sich darauf. Bewusste Ausnahme von der LF-Regel.
+# Windows batch files of the Maven wrapper: shipped with CRLF by Maven, and
+# cmd.exe relies on it. Deliberate exception to the LF rule.
 *.cmd text eol=crlf
 *.bat text eol=crlf
 

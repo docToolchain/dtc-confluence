@@ -539,7 +539,6 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
         } else {
             page = null
         }
-        // println "Gefunden: " + page.id + " Titel: " + page.title
 
         if (page) {
             println "found existing page: " + page.id +" version "+page.version.number
@@ -632,9 +631,7 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
             println page.title
             def id = pushToConfluence page.title, page.body, page.parent, anchors, pageAnchors, labels
             page.children*.parent = id
-            // println "Push children von id " + id
             pushPages page.children, anchors, pageAnchors, labels
-            // println "Ende Push children von id " + id
         }
     }
 
@@ -728,7 +725,7 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
                 preamble.children.addAll(getPagesRecursive(dom, parentId, anchors, pageAnchors, 1, maxLevel))
             }
 
-            // Falls keine Präambel gefunden wurde, füge Seiten direkt zu pages hinzu
+            // If no preamble was found, add pages to pages directly
             if (pages.isEmpty()) {
                 pages.addAll(getPagesRecursive(dom, parentId, anchors, pageAnchors, 1, maxLevel))
             }

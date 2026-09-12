@@ -28,11 +28,12 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <!-- Gebaut mit JDK 25, ausgeliefert fuer Java 17. -->
+    <!-- Built with JDK 25, released for Java 17. -->
     <maven.compiler.release>17</maven.compiler.release>
 
-    <!-- Bewusst identisch zu docToolchain 3.4.2, damit der Umzug ein reiner
-         Umzug bleibt. Aktualisierung folgt als eigener, pruefbarer Schritt. -->
+    <!-- Deliberately the versions docToolchain uses, so that the move stays a
+         move. Groovy and Spock are the exception: Groovy 3 cannot compile on
+         JDK 25, and Spock has no Groovy 5 build. -->
     <groovy.version>4.0.33</groovy.version>
     <jsoup.version>1.18.1</jsoup.version>
     <httpclient5.version>5.3</httpclient5.version>
@@ -108,7 +109,7 @@
           <artifactId>maven-surefire-plugin</artifactId>
           <version>${maven-surefire-plugin.version}</version>
           <configuration>
-            <!-- Spock-Specs heissen *Spec, nicht *Test. -->
+            <!-- Spock specifications are named *Spec, not *Test. -->
             <includes>
               <include>**/*Spec.java</include>
               <include>**/*Test.java</include>
