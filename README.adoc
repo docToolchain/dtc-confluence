@@ -1,0 +1,48 @@
+= dtc-confluence
+:toc: left
+:icons: font
+
+Confluence support for docs-as-code, extracted from https://doctoolchain.org[docToolchain].
+
+The project publishes AsciiDoctor-generated HTML to Confluence and exports Confluence content back to AsciiDoc.
+It is usable as a plain library and, on top of that, through a CLI and a Maven plugin.
+
+== Status
+
+Early.
+The only module today is `dtc-confluence-core`, a move of the Confluence code from docToolchain 3.4.2.
+That code is Groovy and is being ported to Java class by class; the Spock test suite stays in place throughout to verify each step.
+
+== Modules
+
+`dtc-confluence-core`:: The library, with no binding to any build tool.
+`dtc-confluence-cli`:: Command line tool (planned).
+`dtc-confluence-maven-plugin`:: Maven integration (planned).
+
+== Supported Confluence versions
+
+Confluence Data Center 9.2:: Primary target, tested against a real instance.
+Uses REST API v1 under `/rest/api`.
+Confluence Cloud:: Through REST API v2 under `/api/v2`.
+Present, but not yet verified against a real instance.
+
+[NOTE]
+====
+REST API v2 exists in Cloud only.
+On Data Center `/api/v2` answers with 404, and v1 is the single, undeprecated option there.
+====
+
+== Building
+
+[source,bash]
+----
+./mvnw verify
+----
+
+Builds with JDK 25, targets Java 17.
+Maven comes from the bundled wrapper, so no local Maven installation is required.
+
+== License
+
+MIT, see LICENSE.
+The code originates from docToolchain and keeps its license.
