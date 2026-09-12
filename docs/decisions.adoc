@@ -53,3 +53,38 @@ Packages stay at `org.docToolchain.atlassian.confluence` and friends, unchanged 
 
 Maven coordinates are lowercase throughout (`org.doctoolchain:dtc-confluence`).
 GitHub Packages rejects uppercase, even though Maven Central accepts it.
+
+== An Asciidoctor backend: considered, deferred, interface kept open
+
+Today the pipeline is `AsciiDoc -> asciidoctor(html5) -> HTML -> Jsoup -> storage format`.
+The middle step reconstructs semantics from CSS classes: `div.sect1`, `div.sect2`, `.title`, `.content`, `div#preamble`, `div.arc42help`.
+Information that existed in the AsciiDoc AST (admonition kind, block title, source language, cross-reference target) is flattened into HTML and scraped back out.
+
+Writing an Asciidoctor converter that emits Confluence storage format directly would remove that whole class of defects.
+The mangled block title (`<strong><br/><div><div class="title">`) exists only because the title has to be rediscovered as `div.title`.
+The scraping is also silently coupled to Asciidoctor's HTML markup, which changes between releases without any test noticing.
+
+Deferred, for three reasons:
+
+* An AsciidoctorJ converter drags JRuby into the library. The core has no Asciidoctor dependency at all today, which keeps it small for CI use.
+* A converter emits one string per node, while publishing produces a *tree* of pages driven by `subpagesForSections`. That is buildable but is not the converter API's normal path.
+* The HTML path cannot be retired anyway: `inputHtmlFolder` and `url` inputs accept HTML that Asciidoctor never produced.
+
+=== What it would and would not buy for round-trips
+
+Measured against ASF Confluence DC 9.2.21:
+
+* Publishing an unchanged source is already idempotent. The content hash suppresses the write, the page version does not move, and inline comments survive untouched.
+* Inline comments live *inside* the page body as `<ac:inline-comment-marker ac:ref="...">text</ac:inline-comment-marker>`.
+* When a page does change, publishing replaces the whole body. The marker is gone, and while the comment object survives, its anchor does not.
+
+A better backend does not fix this on its own, because the loss comes from full body replacement, not from the HTML detour.
+Preserving inline comments needs an explicit merge: read the current storage format, extract the markers, and re-apply them to the newly generated body.
+
+The backend makes that merge *tractable* rather than unnecessary, because stable, semantically faithful output is what lets markers be matched reliably.
+
+=== Consequence for the ongoing port
+
+The core must take a **page tree** - titles, storage-format bodies, ancestors, attachments, labels - not an HTML file.
+Today that model is tangled together with the Jsoup scraping inside `Asciidoc2ConfluenceTask`.
+Separating the two is what makes those 823 lines portable in pieces, and it is the same seam a converter would later plug into as an additional producer.
