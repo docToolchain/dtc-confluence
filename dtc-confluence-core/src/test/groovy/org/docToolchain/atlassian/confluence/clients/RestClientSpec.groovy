@@ -142,26 +142,16 @@ class RestClientSpec extends Specification {
             e.message.contains('404')
     }
 
-    def 'doRequestAndReturnOrNull throws on a missing page instead of answering null'() {
+    def 'doRequestAndReturnOrNull answers null for a missing page'() {
         given:
             status = 404
             body = 'not found'
 
-        when:
-            new RestClient(configService([credentials: 'x'])).doRequestAndReturnOrNull(new HttpGet('/missing'))
-
-        then: """Pins current behaviour, not intended behaviour. The check consumes the entity and
-                 the response handler then reads it anyway, so the stream is already closed. The
-                 method cannot return null through this path at all, which makes its name and its
-                 distinction from doRequestAndFailIfNot20x meaningless."""
-            def e = thrown(RuntimeException)
-            e.cause instanceof org.apache.hc.core5.http.StreamClosedException
-
-        and: 'the Groovy implementation this was ported from fails the same way'
-            true
+        expect: 'the caller reads this as "the page does not exist yet"'
+            new RestClient(configService([credentials: 'x'])).doRequestAndReturnOrNull(new HttpGet('/missing')) == null
     }
 
-    def 'doRequestAndReturnOrNull throws on a server error as well'() {
+    def 'doRequestAndReturnOrNull raises on a server error rather than reporting a missing page'() {
         given: 'a transient server failure'
             status = 503
             body = 'service unavailable'
@@ -169,9 +159,22 @@ class RestClientSpec extends Specification {
         when:
             new RestClient(configService([credentials: 'x'])).doRequestAndReturnOrNull(new HttpGet('/x'))
 
-        then: """Same defect. The Groovy original carried a second branch meaning to throw a
-                 RequestFailedException on 5xx, but it was unreachable because the first check
-                 already covers every code above 206."""
-            thrown(RuntimeException)
+        then: """A server error is not an answer about whether the page exists. Reporting it as
+                 null would make a publish create a duplicate page instead of failing."""
+            def e = thrown(RequestFailedException)
+            e.message.contains('503')
+    }
+
+    def 'doRequestAndFailIfNot20x reports the status rather than a closed stream'() {
+        given:
+            status = 500
+            body = 'boom'
+
+        when:
+            new RestClient(configService([credentials: 'x'])).doRequestAndFailIfNot20x(new HttpGet('/x'))
+
+        then:
+            def e = thrown(RequestFailedException)
+            e.message.contains('500')
     }
 }

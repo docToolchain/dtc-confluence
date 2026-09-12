@@ -50,32 +50,35 @@ public class RestClient extends BasicRestClient {
     }
 
     /**
-     * Decides whether a response is acceptable. Implementations consume the entity when they
-     * reject it, because nothing downstream will read it.
+     * Decides what to do with a response the server did not answer with 2xx: either raise, or
+     * signal that the caller should be handed {@code null}.
      */
     @FunctionalInterface
-    private interface ResponseCheck {
-        void check(ClassicHttpResponse response, HttpEntity entity) throws IOException;
+    private interface RejectionPolicy {
+        /**
+         * @return {@code true} if the request should yield {@code null} rather than a value
+         */
+        boolean tolerate(ClassicHttpResponse response) throws IOException;
     }
 
     public Object doRequestAndFailIfNot20x(ClassicHttpRequest httpRequest) {
-        return doRequest(httpRequest, (response, entity) -> {
-            if (isNotSuccessful(response)) {
-                EntityUtils.consume(entity);
-                throw new RequestFailedException(response, null);
-            }
+        return doRequest(httpRequest, response -> {
+            throw new RequestFailedException(response, null);
         });
     }
 
+    /**
+     * Answers {@code null} when Confluence says the resource is not there, and raises when it says
+     * it could not answer. Callers read {@code null} as "this page does not exist yet" and go on to
+     * create it, so a server error must not arrive as {@code null}.
+     */
     public Object doRequestAndReturnOrNull(ClassicHttpRequest httpRequest) {
-        return doRequest(httpRequest, (response, entity) -> {
-            if (isNotSuccessful(response)) {
-                EntityUtils.consume(entity);
-                System.out.println("Got status code " + response.getCode());
+        return doRequest(httpRequest, response -> {
+            if (response.getCode() >= HttpStatus.SC_INTERNAL_SERVER_ERROR) {
+                throw new RequestFailedException(response, null);
             }
-            // The Groovy original had a second branch here, meaning to throw on 5xx. It was
-            // unreachable: the check above already covers every code above 206. Kept as it
-            // behaves, not as it reads, because changing it belongs in its own change.
+            System.out.println("Got status code " + response.getCode());
+            return true;
         });
     }
 
@@ -83,9 +86,9 @@ public class RestClient extends BasicRestClient {
         return response.getCode() < HttpStatus.SC_OK || response.getCode() > HttpStatus.SC_PARTIAL_CONTENT;
     }
 
-    private Object doRequest(ClassicHttpRequest httpRequest, ResponseCheck check) {
+    private Object doRequest(ClassicHttpRequest httpRequest, RejectionPolicy onRejection) {
         rateLimiter.acquire();
-        return doRequest(targetHost, httpRequest, new RestClientResponseHandler(check))
+        return doRequest(targetHost, httpRequest, new RestClientResponseHandler(onRejection))
                 .map(response -> (Object) new JsonSlurper().parseText(response))
                 .orElse(null);
     }
@@ -160,16 +163,22 @@ public class RestClient extends BasicRestClient {
     @Contract(threading = ThreadingBehavior.STATELESS)
     private static class RestClientResponseHandler implements HttpClientResponseHandler<String> {
 
-        private final ResponseCheck check;
+        private final RejectionPolicy onRejection;
 
-        RestClientResponseHandler(ResponseCheck check) {
-            this.check = check;
+        RestClientResponseHandler(RejectionPolicy onRejection) {
+            this.onRejection = onRejection;
         }
 
         @Override
         public String handleResponse(ClassicHttpResponse response) throws IOException {
             HttpEntity entity = response.getEntity();
-            check.check(response, entity);
+            if (isNotSuccessful(response)) {
+                // Consume once, here, and stop. Reading the entity afterwards is what used to
+                // turn every rejected request into a StreamClosedException.
+                EntityUtils.consume(entity);
+                onRejection.tolerate(response);
+                return null;
+            }
             return entity == null ? null : readEntity(entity);
         }
 
