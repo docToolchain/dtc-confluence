@@ -22,12 +22,6 @@ class ConfluenceClientV1 extends ConfluenceClient {
     }
 
     @Override
-    def verifyCredentials() {
-        HttpRequest get = new HttpGet(API_V1_PATH + '/user/current')
-        return callApiAndFailIfNot20x(get)
-    }
-
-    @Override
     def addLabel(pageId, label) {
         HttpRequest post = new HttpPost(API_V1_PATH + '/content/' + pageId + "/label")
         post.setHeader('Content-Type', ContentType.APPLICATION_JSON)

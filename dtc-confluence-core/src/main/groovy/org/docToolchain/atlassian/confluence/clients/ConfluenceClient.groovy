@@ -1,5 +1,6 @@
 package org.docToolchain.atlassian.confluence.clients
 
+import org.apache.hc.client5.http.classic.methods.HttpGet
 import org.apache.hc.client5.http.classic.methods.HttpPost
 import org.apache.hc.client5.http.entity.mime.HttpMultipartMode
 import org.apache.hc.client5.http.entity.mime.InputStreamBody
@@ -63,7 +64,21 @@ abstract class ConfluenceClient {
         return ""
     }
 
-    abstract verifyCredentials()
+    /**
+     * Confluence Data Center answers /user/current with HTTP 200 and a body of
+     * {"type":"anonymous"} when the credentials are invalid, instead of 401.
+     * Checking the status code alone therefore reports success for any token.
+     */
+    def verifyCredentials() {
+        def user = callApiAndFailIfNot20x(new HttpGet(API_V1_PATH + '/user/current'))
+        if (!user || user.type == 'anonymous' || !user.username) {
+            throw new IllegalStateException(
+                "Confluence did not accept the credentials: the API resolved to an anonymous user. " +
+                "Check confluence.bearerToken (Data Center: personal access token) or confluence.credentials.")
+        }
+        println "Authenticated as '${user.username}' (${user.displayName})"
+        return user
+    }
 
     abstract addLabel(pageId, label)
 

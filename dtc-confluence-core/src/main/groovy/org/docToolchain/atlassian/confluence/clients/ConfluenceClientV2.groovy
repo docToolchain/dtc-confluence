@@ -23,12 +23,6 @@ class ConfluenceClientV2 extends ConfluenceClient {
         this.spaceId = fetchSpaceIdByKey(spaceKey)
     }
 
-    @Override
-    def verifyCredentials() {
-        HttpRequest get = new HttpGet(API_V1_PATH + '/user/current')
-        return callApiAndFailIfNot20x(get)
-    }
-
     def fetchSpaceIdByKey(String spaceKey) {
         URI uri = new URIBuilder(API_V2_PATH + '/spaces')
             .addParameter('keys', spaceKey)
