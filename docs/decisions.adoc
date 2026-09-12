@@ -54,6 +54,18 @@ Packages stay at `org.docToolchain.atlassian.confluence` and friends, unchanged 
 Maven coordinates are lowercase throughout (`org.doctoolchain:dtc-confluence`).
 GitHub Packages rejects uppercase, even though Maven Central accepts it.
 
+== Transformation stays independent of the API
+
+The classes under `atlassian.transformer` turn markup into markup.
+They must not depend on `confluence.clients`, so they stay testable without any HTTP in sight, and so a future producer of storage format can reuse them without dragging a REST client along.
+
+== Packages stay free of cycles
+
+The Groovy code is being ported to Java one package at a time, bottom up.
+That only works while the dependency graph is acyclic: a cycle would force two packages to move together, and the port would stop being decomposable.
+
+Every package is its own slice, which is stricter than slicing by top-level sub-package.
+
 == An Asciidoctor backend: considered, deferred, interface kept open
 
 Today the pipeline is `AsciiDoc -> asciidoctor(html5) -> HTML -> Jsoup -> storage format`.
