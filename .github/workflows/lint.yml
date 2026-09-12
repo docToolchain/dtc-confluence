@@ -18,7 +18,10 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Superseding a pull request run is fine - only the latest state matters. On main
+  # it is not: cancelling leaves commits without a lint result, and a cancelled run
+  # is easily mistaken for a failing one.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
