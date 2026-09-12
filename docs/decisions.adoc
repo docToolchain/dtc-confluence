@@ -1,0 +1,55 @@
+= Design decisions
+:toc: left
+:icons: font
+
+Decisions taken while extracting Confluence support from docToolchain, newest last.
+Each entry records what was decided and, more importantly, why.
+
+== Build with Maven, not Gradle
+
+docToolchain builds with Gradle, this project does not.
+Maven is the ecosystem the primary users live in: the first target is a Confluence Data Center customer whose projects are Maven projects.
+Building with Maven also makes the Maven plugin a natural module rather than a foreign body.
+
+A Gradle plugin remains possible later.
+docToolchain can equally consume the plain library and keep its own task definitions, which would make a Gradle plugin unnecessary.
+
+== Java for production code, Spock for tests
+
+Production code is Java, compiled with JDK 25 and released for Java 17.
+
+The moved code is Groovy and is ported class by class, bottom up.
+Ported that way, Groovy classes reference Java classes and never the reverse, so `maven-compiler-plugin` can simply run before `gmavenplus-plugin` and no stub generation is needed.
+
+Tests stay on Spock for the duration of the port, so the suite keeps verifying every ported class.
+Two measured constraints shape the versions:
+
+* Groovy 3.0.13, which docToolchain pins, cannot compile on JDK 25 ("Unsupported class file major version 69").
+* Spock has no Groovy 5 build, so Groovy is capped at 4.x for as long as Spock is used.
+
+== YAML as the primary configuration format, TOML shipped alongside
+
+docToolchain configures itself through `docToolchainConfig.groovy`, which `ConfigSlurper` *executes*.
+That file is code, not data.
+Anyone able to supply it can run arbitrary code in the build, and it ties the configuration to Groovy, which blocks the Java port.
+
+The configuration is therefore a typed model bound by Jackson.
+YAML is the primary format because `confluence.input` is a list of records, which YAML expresses in two lines while TOML needs array-of-tables.
+TOML and JSON come from the same model at the cost of one line in the loader.
+
+Secrets never belong in the configuration file.
+Resolution order is command line argument, then environment variable, then file, then default.
+
+docToolchain keeps its `ConfigSlurper` and maps its `ConfigObject` onto the typed model, so existing users change nothing.
+
+== Legacy configuration options are dropped
+
+`allInOnePage` and `createSubpages` were superseded by `subpagesForSections` in docToolchain and are still read there.
+They are not carried into the typed model.
+
+== Package names are kept
+
+Packages stay at `org.docToolchain.atlassian.confluence` and friends, unchanged from docToolchain, so that Jira can be extracted along the same path later.
+
+Maven coordinates are lowercase throughout (`org.doctoolchain:dtc-confluence`).
+GitHub Packages rejects uppercase, even though Maven Central accepts it.

@@ -32,6 +32,10 @@ REST API v2 exists in Cloud only.
 On Data Center `/api/v2` answers with 404, and v1 is the single, undeprecated option there.
 ====
 
+== Design decisions
+
+See xref:docs/decisions.adoc[Design decisions].
+
 == Building
 
 [source,bash]
