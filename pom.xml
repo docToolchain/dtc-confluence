@@ -39,7 +39,7 @@
          move. Groovy and Spock are the exception: Groovy 3 cannot compile on
          JDK 25, and Spock has no Groovy 5 build. -->
     <groovy.version>4.0.33</groovy.version>
-    <jsoup.version>1.18.1</jsoup.version>
+    <jsoup.version>1.23.2</jsoup.version>
     <httpclient5.version>5.6.4</httpclient5.version>
     <guava.version>33.0.0-jre</guava.version>
     <!-- Spock caps Groovy at 4.x: there is no Groovy 5 build of spock-core.
