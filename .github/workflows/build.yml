@@ -36,6 +36,10 @@ jobs:
 
   sonar:
     name: SonarQube Cloud
+    # push only. On a pull_request this job would run the PR's own Maven build
+    # with SONAR_TOKEN in the environment, and a PR can change the build to
+    # exfiltrate it. Guarding on an empty secret does not isolate untrusted code.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -53,7 +57,9 @@ jobs:
           cache: maven
       - name: Analyse
         if: env.SONAR_TOKEN != ''
-        run: ./mvnw -B -ntp verify sonar:sonar
+        # sonar.qualitygate.wait makes the job fail on a failing gate. Without it
+        # the scanner only submits the analysis and CI stays green regardless.
+        run: ./mvnw -B -ntp verify sonar:sonar -Dsonar.qualitygate.wait=true
       - name: Skipped
         if: env.SONAR_TOKEN == ''
         run: echo "SONAR_TOKEN is not set - skipping analysis. See docs/decisions.adoc."
