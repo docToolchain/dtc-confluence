@@ -28,6 +28,10 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+    <sonar.organization>doctoolchain</sonar.organization>
+    <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+    <sonar.projectKey>docToolchain_dtc-confluence</sonar.projectKey>
     <!-- Built with JDK 25, released for Java 17. -->
     <maven.compiler.release>17</maven.compiler.release>
 
@@ -39,8 +43,13 @@
     <httpclient5.version>5.3</httpclient5.version>
     <guava.version>33.0.0-jre</guava.version>
     <spock.version>2.4-M6-groovy-4.0</spock.version>
+    <!-- Spock 2.4-M6 brings JUnit Platform 1.12.2, so Jupiter has to stay on 5.12.x. -->
+    <junit.version>5.12.2</junit.version>
+    <archunit.version>1.5.0</archunit.version>
 
     <gmavenplus.version>5.1.0</gmavenplus.version>
+    <jacoco.version>0.8.15</jacoco.version>
+    <sonar-maven-plugin.version>5.8.0.7211</sonar-maven-plugin.version>
     <maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
     <maven-surefire-plugin.version>3.6.0</maven-surefire-plugin.version>
   </properties>
@@ -78,6 +87,19 @@
         <version>${spock.version}</version>
         <scope>test</scope>
       </dependency>
+      <dependency>
+        <groupId>org.junit</groupId>
+        <artifactId>junit-bom</artifactId>
+        <version>${junit.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.tngtech.archunit</groupId>
+        <artifactId>archunit-junit5</artifactId>
+        <version>${archunit.version}</version>
+        <scope>test</scope>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -103,6 +125,31 @@
               </goals>
             </execution>
           </executions>
+        </plugin>
+        <plugin>
+          <groupId>org.jacoco</groupId>
+          <artifactId>jacoco-maven-plugin</artifactId>
+          <version>${jacoco.version}</version>
+          <executions>
+            <execution>
+              <id>prepare-agent</id>
+              <goals>
+                <goal>prepare-agent</goal>
+              </goals>
+            </execution>
+            <execution>
+              <id>report</id>
+              <phase>verify</phase>
+              <goals>
+                <goal>report</goal>
+              </goals>
+            </execution>
+          </executions>
+        </plugin>
+        <plugin>
+          <groupId>org.sonarsource.scanner.maven</groupId>
+          <artifactId>sonar-maven-plugin</artifactId>
+          <version>${sonar-maven-plugin.version}</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
