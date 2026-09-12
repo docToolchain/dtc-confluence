@@ -1,0 +1,11 @@
+extends: default
+
+rules:
+  # SHA-pinned `uses:` lines are long by nature and wrapping them would hurt
+  # more than the length does.
+  line-length: disable
+  # `on:` in a workflow is a key, not the boolean true.
+  truthy:
+    check-keys: false
+  comments:
+    min-spaces-from-content: 1
