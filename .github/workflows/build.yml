@@ -2,7 +2,7 @@ name: build
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
 
 # Cancel superseded runs on the same ref (e.g. rapid pushes to a branch).
@@ -40,7 +40,9 @@ jobs:
     # push only. On a pull_request this job would run the PR's own Maven build
     # with SONAR_TOKEN in the environment, and a PR can change the build to
     # exfiltrate it. Guarding on an empty secret does not isolate untrusted code.
-    if: github.event_name == 'push'
+    # main only. develop is the working stream; the analysed state should be the
+    # one that has been reviewed.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
