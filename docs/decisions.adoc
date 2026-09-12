@@ -88,3 +88,34 @@ The backend makes that merge *tractable* rather than unnecessary, because stable
 The core must take a **page tree** - titles, storage-format bodies, ancestors, attachments, labels - not an HTML file.
 Today that model is tangled together with the Jsoup scraping inside `Asciidoc2ConfluenceTask`.
 Separating the two is what makes those 823 lines portable in pieces, and it is the same seam a converter would later plug into as an additional producer.
+
+== Idea: partial updates that preserve inline comments
+
+Not planned for a particular release, recorded so the reasoning is not redone.
+
+Confluence offers no partial update.
+`PUT /rest/api/content/{id}` replaces the body wholesale; there is no section-level patch in the Data Center v1 API.
+"Partial" therefore has to be a client-side merge.
+
+Publishing already skips unchanged pages by content hash, so page-level granularity exists.
+The gap is *within* a page that genuinely changed.
+
+The merge would be:
+
+. Read the current storage format of the page.
+. Extract the `ac:inline-comment-marker` elements with their anchored text and surrounding context.
+. Generate the new body as today.
+. Re-wrap the anchored text in the new body, where it still exists.
+. Report the markers that could not be placed, instead of losing them silently.
+
+The plumbing is already in place: `fetchPageByPageId` expands `body.storage`, and the publisher already compares against the remote body before deciding to update.
+No extra API round trip is needed.
+
+Two things make this harder than it looks:
+
+* Anchored text is not necessarily unique on a page, so context is needed to pick the right occurrence.
+* An anchor may span inline markup, in which case the marker is already split across elements in the stored body.
+
+A useful distinction for scoping this: inline comments are *annotations on* generated content, whereas an edited paragraph or a ticked task box is an *edit of* it.
+For a publishing tool the generated source stays authoritative, so edits are meant to be overwritten.
+Annotations are not, and that is what makes comments worth the merge.
