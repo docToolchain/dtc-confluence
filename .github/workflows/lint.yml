@@ -43,7 +43,7 @@ jobs:
           VALIDATE_BASH: true
           VALIDATE_GITLEAKS: true
           YAML_CONFIG_FILE: .yamllint.yml
-          EDITORCONFIG_FILE_NAME: .ecrc
+          EDITORCONFIG_FILE_NAME: .editorconfig-checker.json
           # Report into the job summary instead of commit statuses and PR
           # comments, so the workflow needs no write permission at all.
           MULTI_STATUS: false
