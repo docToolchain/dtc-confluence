@@ -16,30 +16,30 @@ class ConfluenceClientV2Spec extends ConfluenceClientSpec {
 
     @Override
     ConfluenceClient getConfluenceClient(ConfigService configService) {
-        def mock = GroovySpy(RestClient, global: true, constructorArgs: [configService])
+        def mock = Spy(new RestClient(configService))
         mock.doRequestAndFailIfNot20x(_) >> confluenceClientMockResponse
-        return new ConfluenceClientV2(configService)
+        return new ConfluenceClientV2(configService, mock)
     }
 
     @Override
     ConfluenceClient setupConfluenceClientToFetchPagesBySpaceKey(ConfigService configService) {
-        def mock = GroovySpy(RestClient, global: true, constructorArgs: [configService])
+        def mock = Spy(new RestClient(configService))
         mock.doRequestAndFailIfNot20x(_)  >> confluenceClientMockResponse
             >> new JsonSlurper().parse(new File("${TestUtils.TEST_RESOURCES_DIR}/asciidoc2confluence/json/apiV2/space.json"))
             >> [results: []]
-        return new ConfluenceClientV2(configService)
+        return new ConfluenceClientV2(configService, mock)
     }
 
     @Override
     ConfluenceClient setupConfluenceClientToFetchPagesByAncestorIdKey(ConfigService configService) {
-        def mock = GroovySpy(RestClient, global: true, constructorArgs: [configService])
+        def mock = Spy(new RestClient(configService))
         JsonSlurper jsonSlurper = new JsonSlurper()
         mock.doRequestAndFailIfNot20x(_) >> confluenceClientMockResponse
             >> jsonSlurper.parse(new File("${TestUtils.TEST_RESOURCES_DIR}/asciidoc2confluence/json/apiV2/ancestorId.json"))
             >> [results: []]
             >> jsonSlurper.parse(new File("${TestUtils.TEST_RESOURCES_DIR}/asciidoc2confluence/json/apiV2/ancestorId_child.json"))
             >> [results: []]
-        return new ConfluenceClientV2(configService)
+        return new ConfluenceClientV2(configService, mock)
     }
 
     def "test initialization of the ConfluenceV2 client"() {
