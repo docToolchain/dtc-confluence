@@ -9,3 +9,5 @@ rules:
     check-keys: false
   comments:
     min-spaces-from-content: 1
+  # GitHub workflows conventionally start without a document marker.
+  document-start: disable

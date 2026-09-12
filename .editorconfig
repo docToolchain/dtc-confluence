@@ -13,3 +13,11 @@ indent_size = 2
 
 [*.{md,adoc}]
 trim_trailing_whitespace = false
+
+# The Groovy sources came from docToolchain with their own continuation-line
+# alignment and are transitional: every class leaves as it is ported to Java.
+# Reformatting them would bury the port diffs under whitespace churn, so the
+# indentation rules do not apply to them.
+[*.groovy]
+indent_size = unset
+indent_style = unset
