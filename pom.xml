@@ -38,7 +38,7 @@
     <!-- Deliberately the versions docToolchain uses, so that the move stays a
          move. Groovy and Spock are the exception: Groovy 3 cannot compile on
          JDK 25, and Spock has no Groovy 5 build. -->
-    <groovy.version>4.0.33</groovy.version>
+    <groovy.version>5.1.2</groovy.version>
     <jsoup.version>1.18.1</jsoup.version>
     <httpclient5.version>5.3</httpclient5.version>
     <guava.version>33.0.0-jre</guava.version>
