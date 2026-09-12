@@ -12,6 +12,8 @@ updates:
         patterns:
           - "org.apache.maven.plugins:*"
           - "org.codehaus.gmavenplus:*"
+          - "org.jacoco:jacoco-maven-plugin"
+          - "org.sonarsource.scanner.maven:sonar-maven-plugin"
 
   - package-ecosystem: github-actions
     directory: /
