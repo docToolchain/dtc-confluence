@@ -21,6 +21,10 @@ class ConfluenceClientV1 extends ConfluenceClient {
         super(configService)
     }
 
+    ConfluenceClientV1(ConfigService configService, RestClient restClient) {
+        super(configService, restClient)
+    }
+
     @Override
     def addLabel(pageId, label) {
         HttpRequest post = new HttpPost(API_V1_PATH + '/content/' + pageId + "/label")

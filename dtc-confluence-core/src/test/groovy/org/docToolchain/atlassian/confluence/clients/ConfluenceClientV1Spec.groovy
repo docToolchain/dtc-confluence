@@ -8,26 +8,27 @@ class ConfluenceClientV1Spec extends ConfluenceClientSpec {
 
     @Override
     ConfluenceClient getConfluenceClient(ConfigService configService) {
+        // V1 issues no request while being constructed, so it needs no stand-in client.
         return new ConfluenceClientV1(configService)
     }
 
     @Override
     ConfluenceClient setupConfluenceClientToFetchPagesBySpaceKey(ConfigService configService) {
-        def mock = GroovySpy(RestClient, global: true, constructorArgs: [configService])
+        def mock = Spy(new RestClient(configService))
         mock.doRequestAndFailIfNot20x(_) >> new JsonSlurper().parse(new File("${TestUtils.TEST_RESOURCES_DIR}/asciidoc2confluence/json/apiV1/space.json"))
             >> [results: []]
-        return new ConfluenceClientV1(configService)
+        return new ConfluenceClientV1(configService, mock)
     }
 
     @Override
     ConfluenceClient setupConfluenceClientToFetchPagesByAncestorIdKey(ConfigService configService) {
         JsonSlurper jsonSlurper = new JsonSlurper()
-        def mock = GroovySpy(RestClient, global: true, constructorArgs: [configService])
+        def mock = Spy(new RestClient(configService))
         mock.doRequestAndFailIfNot20x(_) >> jsonSlurper.parse(new File("${TestUtils.TEST_RESOURCES_DIR}/asciidoc2confluence/json/apiV1/ancestorId.json"))
             >> [results: []]
             >> jsonSlurper.parse(new File("${TestUtils.TEST_RESOURCES_DIR}/asciidoc2confluence/json/apiV1/ancestorId_child.json"))
             >> [results: []]
-        return new ConfluenceClientV1(configService)
+        return new ConfluenceClientV1(configService, mock)
     }
 
     def "test attachment diff can be detected correctly"() {

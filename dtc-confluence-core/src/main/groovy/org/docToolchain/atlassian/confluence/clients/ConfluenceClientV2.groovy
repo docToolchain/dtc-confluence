@@ -19,8 +19,12 @@ class ConfluenceClientV2 extends ConfluenceClient {
 
     ConfluenceClientV2(ConfigService configService) {
         super(configService)
-        String spaceKey = configService.getConfigProperty('confluence.spaceKey')
-        this.spaceId = fetchSpaceIdByKey(spaceKey)
+        this.spaceId = fetchSpaceIdByKey(configService.getConfigProperty('confluence.spaceKey') as String)
+    }
+
+    ConfluenceClientV2(ConfigService configService, RestClient restClient) {
+        super(configService, restClient)
+        this.spaceId = fetchSpaceIdByKey(configService.getConfigProperty('confluence.spaceKey') as String)
     }
 
     def fetchSpaceIdByKey(String spaceKey) {
