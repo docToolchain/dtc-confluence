@@ -5,6 +5,13 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    ignore:
+      # Spock publishes no Groovy 5 build. Groovy 5.1.2 fails the build with
+      # "Spock 2.4.0-M6-groovy-4.0 is not compatible with Groovy 5.1.2", so a
+      # major update here is not a decision Dependabot can make for us. Drop
+      # this entry once a Groovy 5 flavour of spock-core exists.
+      - dependency-name: "org.apache.groovy:*"
+        update-types: ["version-update:semver-major"]
     groups:
       # One PR per week for the routine plugin churn, individual PRs for
       # library upgrades, where a regression is worth bisecting.
