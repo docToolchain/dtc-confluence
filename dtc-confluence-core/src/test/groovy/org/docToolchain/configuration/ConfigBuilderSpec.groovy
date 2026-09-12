@@ -62,4 +62,38 @@ class ConfigBuilderSpec extends Specification {
             config.size() == 3
             noExceptionThrown()
     }
+
+    def "an existing config file is left alone"() {
+        String MAIN_CONFIG_FILE = "configBuilderSpec.groovy"
+        String DOCS_DIR = "${TestUtils.TEST_RESOURCES_DIR}/config"
+
+        given:
+            ConfigBuilder configBuilder = new ConfigBuilder(DOCS_DIR, MAIN_CONFIG_FILE)
+            boolean actionRan = false
+
+        when: 'the file is already there'
+            configBuilder.prepareConfigFileIfNotExists({ actionRan = true })
+
+        then: 'nothing is written over it'
+            !actionRan
+
+        and: 'and the existing configuration is still what gets parsed'
+            configBuilder.build().getProperty("outputPath") == "build/docs"
+    }
+
+    def "an unreadable config file is reported with its path"() {
+        String MAIN_CONFIG_FILE = "config.groovy"
+        String DOCS_DIR = "${TestUtils.TEST_OUTPUT_DIR}/${this.getClass().getSimpleName()}/unreadable"
+
+        given: 'something that exists but cannot be read as a file'
+            File asDirectory = new File(DOCS_DIR, MAIN_CONFIG_FILE)
+            asDirectory.mkdirs()
+
+        when:
+            new ConfigBuilder(DOCS_DIR, MAIN_CONFIG_FILE).build()
+
+        then: 'the failure names the file rather than surfacing a bare IOException'
+            def e = thrown(UncheckedIOException)
+            e.message.contains(MAIN_CONFIG_FILE)
+    }
 }
