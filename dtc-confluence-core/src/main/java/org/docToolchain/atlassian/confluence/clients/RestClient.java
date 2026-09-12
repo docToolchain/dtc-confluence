@@ -50,36 +50,31 @@ public class RestClient extends BasicRestClient {
     }
 
     /**
-     * Decides what to do with a response the server did not answer with 2xx: either raise, or
-     * signal that the caller should be handed {@code null}.
+     * Decides whether a response the server did not answer with 2xx still counts as an answer.
      */
     @FunctionalInterface
     private interface RejectionPolicy {
         /**
-         * @return {@code true} if the request should yield {@code null} rather than a value
+         * @return {@code true} if the request should yield {@code null} instead of raising
          */
-        boolean tolerate(ClassicHttpResponse response) throws IOException;
+        boolean isAcceptable(ClassicHttpResponse response);
     }
 
     public Object doRequestAndFailIfNot20x(ClassicHttpRequest httpRequest) {
-        return doRequest(httpRequest, response -> {
-            throw new RequestFailedException(response, null);
-        });
+        return doRequest(httpRequest, response -> false);
     }
 
     /**
-     * Answers {@code null} when Confluence says the resource is not there, and raises when it says
-     * it could not answer. Callers read {@code null} as "this page does not exist yet" and go on to
-     * create it, so a server error must not arrive as {@code null}.
+     * Answers {@code null} only when Confluence says the resource is not there, and raises for
+     * every other rejection.
+     *
+     * <p>Callers read {@code null} as "this page does not exist yet" and go on to create it. Only
+     * 404 carries that meaning. A 401, 403 or 429 says nothing about whether the page exists, and
+     * reporting any of them as absence would turn a permission problem or a rate limit into a
+     * duplicate page.</p>
      */
     public Object doRequestAndReturnOrNull(ClassicHttpRequest httpRequest) {
-        return doRequest(httpRequest, response -> {
-            if (response.getCode() >= HttpStatus.SC_INTERNAL_SERVER_ERROR) {
-                throw new RequestFailedException(response, null);
-            }
-            System.out.println("Got status code " + response.getCode());
-            return true;
-        });
+        return doRequest(httpRequest, response -> response.getCode() == HttpStatus.SC_NOT_FOUND);
     }
 
     private static boolean isNotSuccessful(ClassicHttpResponse response) {
@@ -176,7 +171,10 @@ public class RestClient extends BasicRestClient {
                 // Consume once, here, and stop. Reading the entity afterwards is what used to
                 // turn every rejected request into a StreamClosedException.
                 EntityUtils.consume(entity);
-                onRejection.tolerate(response);
+                if (!onRejection.isAcceptable(response)) {
+                    throw new RequestFailedException(response, null);
+                }
+                System.out.println("Got status code " + response.getCode());
                 return null;
             }
             return entity == null ? null : readEntity(entity);
