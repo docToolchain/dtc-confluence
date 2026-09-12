@@ -45,6 +45,13 @@
 
   <build>
     <plugins>
+      <!-- javac runs BEFORE groovyc, on purpose. The port proceeds bottom up, so
+           Groovy classes reference Java classes and never the reverse; that lets
+           groovyc compile against target/classes and spares us stub generation. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+      </plugin>
       <plugin>
         <groupId>org.codehaus.gmavenplus</groupId>
         <artifactId>gmavenplus-plugin</artifactId>
