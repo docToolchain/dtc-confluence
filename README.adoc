@@ -46,6 +46,20 @@ See xref:docs/decisions.adoc[Design decisions].
 Builds with JDK 25, targets Java 17.
 Maven comes from the bundled wrapper, so no local Maven installation is required.
 
+== Linting
+
+The build does not lint workflows, YAML, XML or shell scripts; CI does, through super-linter.
+To run the same checks before pushing:
+
+[source,bash]
+----
+./tools/lint.sh
+----
+
+It calls the tools directly rather than through super-linter, which publishes no arm64 image and takes minutes to start under emulation.
+The configuration files are shared with CI, so findings match.
+Tools that are not installed are reported and skipped.
+
 == License
 
 MIT, see LICENSE.

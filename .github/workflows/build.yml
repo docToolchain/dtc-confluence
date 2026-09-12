@@ -8,7 +8,8 @@ on:
 # Cancel superseded runs on the same ref (e.g. rapid pushes to a branch).
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # See lint.yml: superseding is fine on a pull request, not on main.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
