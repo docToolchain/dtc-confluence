@@ -7,6 +7,7 @@ import org.docToolchain.atlassian.confluence.image.EmbeddedImage
 import org.docToolchain.atlassian.confluence.image.ImageStore
 import org.docToolchain.util.ContentHash
 import org.docToolchain.atlassian.transformer.AdmonitionTransformer
+import org.docToolchain.atlassian.transformer.OpenApiTransformer
 import org.docToolchain.atlassian.transformer.DescriptionListTransformer
 import org.docToolchain.atlassian.transformer.HtmlTransformer
 import org.docToolchain.atlassian.transformer.MarkTransformer
@@ -196,61 +197,6 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
     }
 
 
-    def rewriteOpenAPI (Element body) {
-        if (config.confluence.useOpenapiMacro == true || config.confluence.useOpenapiMacro == 'confluence-open-api') {
-            body.select('div.openapi  pre > code').each { code ->
-                def parent=code.parent()
-                def rawYaml=code.wholeText()
-                code.parent()
-                    .wrap('<ac:structured-macro ac:name="confluence-open-api" ac:schema-version="1" ac:macro-id="1dfde21b-6111-4535-928a-470fa8ae3e7d"></ac:structured-macro>')
-                    .unwrap()
-                code.wrap("<ac:plain-text-body>${ConfluenceTags.CDATA_PLACEHOLDER_START}${ConfluenceTags.CDATA_PLACEHOLDER_END}</ac:plain-text-body>")
-                    .replaceWith(new TextNode(rawYaml))
-            }
-        } else if (config.confluence.useOpenapiMacro == 'swagger-open-api') {
-            body.select('div.openapi  pre > code').each { code ->
-                def parent=code.parent()
-                def rawYaml=code.wholeText()
-                code.parent()
-                    .wrap('<ac:structured-macro ac:name="swagger-open-api" ac:schema-version="1" ac:macro-id="f9deda8a-1375-4488-8ca5-3e10e2e4ee70"></ac:structured-macro>')
-                    .unwrap()
-                code.wrap("<ac:plain-text-body>${ConfluenceTags.CDATA_PLACEHOLDER_START}${ConfluenceTags.CDATA_PLACEHOLDER_END}</ac:plain-text-body>")
-                    .replaceWith(new TextNode(rawYaml))
-            }
-        } else if (config.confluence.useOpenapiMacro == 'open-api') {
-
-            def includeURL=null
-
-            for (Element e : body.select('div .listingblock.openapi')) {
-                for (String s : e.className().split(" ")) {
-                    if (s.startsWith("url")) {
-                        //include the link to the URL for the macro
-                        includeURL = s.replace('url:', '')
-                    }
-                }
-            }
-
-            body.select('div.openapi  pre > code').each { code ->
-                def parent=code.parent()
-                def rawYaml=code.wholeText()
-
-                code.parent()
-                    .wrap('<ac:structured-macro ac:name="open-api" ac:schema-version="1" data-layout="default" ac:macro-id="4302c9d8-fca4-4f14-99a9-9885128870fa"></ac:structured-macro>')
-                    .unwrap()
-
-                if (includeURL!=null)
-                {
-                    code.before('<ac:parameter ac:name="url">'+includeURL+'</ac:parameter>')
-                }
-                else {
-                    //default: show download button
-                    code.before('<ac:parameter ac:name="showDownloadButton">true</ac:parameter>')
-                    code.wrap("<ac:plain-text-body>${ConfluenceTags.CDATA_PLACEHOLDER_START}${ConfluenceTags.CDATA_PLACEHOLDER_END}</ac:plain-text-body>")
-                        .replaceWith(new TextNode(rawYaml))
-                }
-            }
-        }
-    }
 
 
 
@@ -261,7 +207,8 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
      */
     def parseBody(body, anchors, pageAnchors) {
         def uploads = []
-        rewriteOpenAPI body
+        new OpenApiTransformer(configService.getConfigProperty('confluence.useOpenapiMacro'))
+            .transformOpenApi(body)
 
         body.select('div.paragraph').unwrap()
         body.select('div.ulist').unwrap()
