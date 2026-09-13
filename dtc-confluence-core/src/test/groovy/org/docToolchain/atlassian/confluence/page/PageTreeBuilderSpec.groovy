@@ -151,4 +151,57 @@ class PageTreeBuilderSpec extends Specification {
             def alphaOne = tree.pages[0].children[0].children[0]
             alphaOne.body.select('h3').isEmpty()
     }
+
+    def 'a section without a body still yields a page rather than crashing'() {
+        given: 'a level-1 section that carries no div.sectionbody'
+            def html = '<h1>T</h1><div id="content">' +
+                '<div class="sect1"><h2 id="lonely">Lonely</h2><p>loose text</p></div></div>'
+
+        when:
+            def tree = new PageTreeBuilder().build(parse(html), null, 1)
+
+        then: """The Groovy this replaces would have thrown a NullPointerException here, one line
+                 later than the Java would have. Nobody relies on a crash, so the section is used
+                 as the body instead, with its heading removed."""
+            tree.pages*.title == ['Lonely']
+            tree.pages[0].body.text().contains('loose text')
+            tree.pages[0].body.select('h2').isEmpty()
+    }
+
+    def 'only the section own heading names the page, not headings deeper down'() {
+        given: 'a section containing another h2 further inside'
+            def html = '<h1>T</h1><div id="content"><div class="sect1">' +
+                '<h2 id="outer">Outer</h2><div class="sectionbody">' +
+                '<div class="openblock"><h2>Stray</h2></div></div></div></div>'
+
+        when:
+            def tree = new PageTreeBuilder().build(parse(html), null, 1)
+
+        then: 'the title is the section heading alone, not both concatenated'
+            tree.pages*.title == ['Outer']
+            tree.pageAnchors['outer'] == 'Outer'
+    }
+
+    def 'an anchor id is escaped on its way into the macro'() {
+        given:
+            def html = '<h1>T</h1><div id="content"><p id="a&amp;b">text</p></div>'
+
+        when:
+            def tree = new PageTreeBuilder().build(parse(html), null, 0)
+
+        then: 'the ampersand does not end up raw inside the parameter'
+            tree.pages[0].body.html().contains('a&amp;b')
+            !tree.pages[0].body.html().contains('ac:name=""&gt;a&b')
+    }
+
+    def 'the returned collections cannot be modified by a caller'() {
+        given:
+            def tree = new PageTreeBuilder().build(parse(TWO_SECTIONS), null, 1)
+
+        when:
+            tree.pages.clear()
+
+        then:
+            thrown(UnsupportedOperationException)
+    }
 }

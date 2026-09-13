@@ -1,0 +1,5 @@
+# Copilot's agentic review needs a runner, and gives up if none is available in
+# time. Reviews on this repository were arriving as summaries without findings,
+# with the warning "couldn't run its full agentic review because it didn't start
+# before the timeout".
+runs-on: ubuntu-latest
