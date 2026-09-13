@@ -107,6 +107,26 @@ class CollapsibleTransformerSpec extends Specification {
             body.select('details').isEmpty()
     }
 
+    def 'a block inside a block is transformed too'() {
+        given: 'arc42 guidance nested inside a collapsible section'
+            def body = bodyOf('<details><summary>Outer</summary><p>a</p>' +
+                '<details><summary>Inner</summary><p>b</p></details></details>')
+
+        when:
+            new CollapsibleTransformer().transformCollapsibles(body)
+
+        then: 'both became macros, and no raw details is left inside either'
+            body.select('ac|structured-macro').size() == 2
+            body.select('details').isEmpty()
+            body.select('summary').isEmpty()
+
+        and: 'each kept its own title and body'
+            body.html().contains('<ac:parameter ac:name="title">Outer</ac:parameter>')
+            body.html().contains('<ac:parameter ac:name="title">Inner</ac:parameter>')
+            body.text().contains('a')
+            body.text().contains('b')
+    }
+
     def 'a document without collapsible blocks is untouched'() {
         given:
             def body = bodyOf('<p>ordinary</p>')
