@@ -1,5 +1,6 @@
 package org.docToolchain.atlassian.confluence
 
+import org.docToolchain.atlassian.confluence.clients.ConfluenceClient
 import org.docToolchain.configuration.ConfigService
 import org.docToolchain.util.TestUtils
 import org.jsoup.nodes.Document
@@ -99,5 +100,42 @@ class ConfluenceServiceSpec extends Specification {
             keywords[2] == "baz"
             keywords[3] == "hello world"
             noExceptionThrown()
+    }
+
+    def "wipeConfluenceSpace deletes every page it finds in the space"() {
+        given:
+            ConfigObject config = new ConfigObject()
+            config.confluence = [spaceKey: 'SPACE']
+            def service = new ConfluenceService(new ConfigService(config))
+            def client = Mock(ConfluenceClient)
+
+        when:
+            service.wipeConfluenceSpace(client)
+
+        then: 'it asks for the pages of the configured space'
+            1 * client.fetchPagesBySpaceKey('SPACE', 100) >> [
+                'a': [title: 'Page A', id: '1'],
+                'b': [title: 'Page B', id: '2']
+            ]
+
+        and: 'and deletes each one by id'
+            1 * client.deletePage('1')
+            1 * client.deletePage('2')
+            0 * client._
+    }
+
+    def "wipeConfluenceSpace on an empty space deletes nothing"() {
+        given:
+            ConfigObject config = new ConfigObject()
+            config.confluence = [spaceKey: 'SPACE']
+            def service = new ConfluenceService(new ConfigService(config))
+            def client = Mock(ConfluenceClient)
+
+        when:
+            service.wipeConfluenceSpace(client)
+
+        then:
+            1 * client.fetchPagesBySpaceKey('SPACE', 100) >> [:]
+            0 * client.deletePage(_)
     }
 }
