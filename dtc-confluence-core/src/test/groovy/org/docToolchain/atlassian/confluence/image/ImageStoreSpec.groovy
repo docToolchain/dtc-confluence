@@ -24,8 +24,9 @@ class ImageStoreSpec extends Specification {
         when:
             def stored = new ImageStore(['./assets']).store(basePath, 'diagram.png', 'png', CONTENT)
 
-        then: 'nothing is written, the existing file is referenced'
-            stored.filePath() == basePath + '/assets' + 'diagram.png'
+        then: 'nothing is written, and the path points at the file that was found'
+            new File(stored.filePath()).exists()
+            new File(stored.filePath()).text == 'already here'
             stored.fileName() == 'diagram.png'
     }
 
@@ -39,6 +40,24 @@ class ImageStoreSpec extends Specification {
 
         then:
             stored.fileName() == 'diagram.png'
+            new File(stored.filePath()).exists()
+    }
+
+    def 'a directory written as #configured still yields a usable path'() {
+        given:
+            new File(basePath, 'images').mkdirs()
+            new File(basePath, 'images/diagram.png').text = 'already here'
+
+        when:
+            def stored = new ImageStore([configured]).store(basePath, 'diagram.png', 'png', CONTENT)
+
+        then: """Concatenation produced .../assetsdiagram.png without a trailing slash and
+                 .../images/.diagram.png for docToolchain's own default of 'images/.'. Neither
+                 existed, so the deferred upload opened a file that was not there."""
+            new File(stored.filePath()).exists()
+
+        where:
+            configured << ['./images', './images/', 'images/.', 'images']
     }
 
     def 'an image that is nowhere on disk is written out, named by its hash'() {
