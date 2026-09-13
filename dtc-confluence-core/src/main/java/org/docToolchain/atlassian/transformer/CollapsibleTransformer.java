@@ -2,6 +2,7 @@ package org.docToolchain.atlassian.transformer;
 
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Entities;
+import org.jsoup.select.Elements;
 
 /**
  * Turns a collapsible block into the Confluence expand macro.
@@ -18,7 +19,13 @@ public class CollapsibleTransformer {
     private static final String DEFAULT_TITLE = "Details";
 
     public void transformCollapsibles(Element body) {
-        for (Element details : body.select("details")) {
+        // Innermost first. The macro is built from details.html(), so a nested block has to be a
+        // macro already by the time its parent is read - otherwise it would be copied in as raw
+        // details markup and then skipped, because removing the parent detaches it. Reverse
+        // document order gives that for free: a descendant always starts after its ancestor.
+        Elements collapsibles = body.select("details");
+        for (int i = collapsibles.size() - 1; i >= 0; i--) {
+            Element details = collapsibles.get(i);
             Element summary = details.selectFirst("summary");
             String title = summary == null ? DEFAULT_TITLE : summary.text();
             if (summary != null) {
