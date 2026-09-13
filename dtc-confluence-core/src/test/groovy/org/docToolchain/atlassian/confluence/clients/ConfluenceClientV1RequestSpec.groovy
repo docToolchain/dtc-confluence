@@ -92,8 +92,14 @@ class ConfluenceClientV1RequestSpec extends Specification {
         when:
             client().updateAttachment('4711', 'att99', new ByteArrayInputStream('png'.bytes), 'd.png', 'note', 'abc123')
 
-        then:
+        then: 'replacing an attachment is a POST as well - Confluence has no PUT for this'
+            sent().method == 'POST'
             sent().uri == '/confluence/rest/api/content/4711/child/attachment/att99/data'
+
+        and: 'and it carries the same multipart payload as a fresh upload'
+            sent().body.contains('note')
+            sent().body.contains('#abc123#')
+            sent().body.contains('d.png')
     }
 
     def 'attachmentHasChanged compares the hash carried in the remote comment'() {
