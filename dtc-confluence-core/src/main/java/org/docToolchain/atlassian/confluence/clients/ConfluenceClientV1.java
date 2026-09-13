@@ -34,7 +34,10 @@ public class ConfluenceClientV1 extends ConfluenceClient {
         super(configService);
     }
 
-    ConfluenceClientV1(ConfigService configService, RestClient restClient) {
+    /**
+     * Takes the REST client from outside, for callers that need to supply their own.
+     */
+    public ConfluenceClientV1(ConfigService configService, RestClient restClient) {
         super(configService, restClient);
     }
 
