@@ -14,3 +14,10 @@ indent_size = 2
 [*.{md,adoc}]
 trim_trailing_whitespace = false
 
+
+# Recorded fixtures and golden files. Their content is a verbatim record of what
+# the code produced or of what a server answered, trailing whitespace included.
+# Normalising them would falsify the record they exist to keep.
+[dtc-confluence-core/src/test/resources/**]
+trim_trailing_whitespace = unset
+insert_final_newline = unset
