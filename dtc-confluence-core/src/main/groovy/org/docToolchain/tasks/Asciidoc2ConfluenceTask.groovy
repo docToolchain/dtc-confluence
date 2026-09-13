@@ -2,6 +2,9 @@ package org.docToolchain.tasks
 
 import org.docToolchain.atlassian.confluence.clients.ConfluenceClient
 import org.docToolchain.atlassian.confluence.page.PageTreeBuilder
+import org.docToolchain.atlassian.confluence.image.EmbeddedImage
+import org.docToolchain.atlassian.confluence.image.ImageStore
+import org.docToolchain.util.ContentHash
 import org.docToolchain.atlassian.transformer.AdmonitionTransformer
 import org.docToolchain.atlassian.transformer.DescriptionListTransformer
 import org.docToolchain.atlassian.transformer.HtmlTransformer
@@ -75,9 +78,6 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
     }
 
     // helper functions
-    static def MD5(String s) {
-        MessageDigest.getInstance("MD5").digest(s.bytes).encodeHex().toString()
-    }
 
 
     /**
@@ -115,11 +115,11 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
         if (url.startsWith('http')) {
             is = new URL(url).openStream()
             //build a hash of the attachment
-            localHash = MD5(new URL(url).openStream().text)
+            localHash = ContentHash.md5(new URL(url).openStream().text)
         } else {
             is = new File(url).newDataInputStream()
             //build a hash of the attachment
-            localHash = MD5(new File(url).newDataInputStream().text)
+            localHash = ContentHash.md5(new File(url).newDataInputStream().text)
         }
 
         def attachment = confluenceClient.getAttachment(pageId, fileName)
@@ -251,57 +251,7 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
         }
     }
 
-    static def getEmbeddedImageData(src){
-        def imageData = src.split("[;:,]")
-        def fileExtension = imageData[1].split("/")[1]
-        // treat svg+xml as svg to be able to create a file from the embedded image
-        // more MIME types: https://www.iana.org/assignments/media-types/media-types.xhtml#image
-        if(fileExtension == "svg+xml"){
-            fileExtension = "svg"
-        }
-        return Map.of(
-            "fileExtension", fileExtension,
-            "encoding", imageData[2],
-            "encodedContent", imageData[3]
-        )
-    }
 
-    def handleEmbeddedImage(basePath, fileName, fileExtension, encodedContent) {
-        def imageDir = "images/"
-        if(config.imageDirs.size() > 0){
-            def dir = config.imageDirs.find { it ->
-                def configureImagesDir = it.replace('./', '/')
-                Path.of(basePath, configureImagesDir, fileName).toFile().exists()
-            }
-            if(dir != null){
-                imageDir = dir.replace('./', '/')
-            }
-        }
-
-        if(!Path.of(basePath, imageDir, fileName).toFile().exists()){
-            println "Could not find embedded image at a known location"
-            def embeddedImagesLocation = "/confluence/images/"
-            new File(basePath + embeddedImagesLocation).mkdirs()
-            def imageHash = MD5(encodedContent)
-            println "Embedded Image Hash " + imageHash
-            def image = new File(basePath + embeddedImagesLocation + imageHash + ".${fileExtension}")
-            if(!image.exists()){
-                println "Creating image at " + basePath + embeddedImagesLocation
-                image.withOutputStream {output ->
-                    output.write(encodedContent.decodeBase64())}
-            }
-            fileName = imageHash + ".${fileExtension}"
-            return Map.of(
-                "filePath", image.canonicalPath,
-                "fileName", fileName
-            )
-        } else {
-            return Map.of(
-                "filePath", basePath + imageDir + fileName,
-                "fileName", fileName
-            )
-        }
-    }
 
     /**
      * modify local page in order to match the internal confluence storage representation a bit better
@@ -345,13 +295,13 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
                 def fileName
                 //it is an embedded image
                 if(src.startsWith("data:image")){
-                    def imageData = getEmbeddedImageData(src)
-                    def fileExtension = imageData.get("fileExtension")
-                    def encodedContent = imageData.get("encodedContent")
+                    def imageData = EmbeddedImage.parse(src)
+                    def fileExtension = imageData.fileExtension()
                     fileName = img.attr('alt').replaceAll(/\s+/,"_").concat(".${fileExtension}")
-                    def embeddedImage = handleEmbeddedImage(sanitizedBaseUrl, fileName, fileExtension, encodedContent)
-                    newUrl = embeddedImage.get("filePath")
-                    fileName = embeddedImage.get("fileName")
+                    def storedImage = new ImageStore(config.imageDirs as List)
+                        .store(sanitizedBaseUrl, fileName, fileExtension, imageData.content())
+                    newUrl = storedImage.filePath()
+                    fileName = storedImage.fileName()
                 }else {
                     newUrl = sanitizedBaseUrl + src
                     fileName = URLDecoder.decode((src.tokenize('/')[-1]),"UTF-8")
@@ -431,7 +381,7 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
             def default_children = '<p><ac:structured-macro ac:name="children"><ac:parameter ac:name="sort">creation</ac:parameter></ac:structured-macro></p>'
             content += (config.confluence.tableOfChildren?:default_children)
         }
-        def localHash = MD5(localPage)
+        def localHash = ContentHash.md5(localPage)
         content += '<ac:placeholder>hash: #'+localHash+'#</ac:placeholder>'
         return content
     }
@@ -451,7 +401,7 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
         def parsedBody = parseBody(pageBody, anchors, pageAnchors)
         def localPage = parsedBody.get("page")
         deferredUpload.addAll(parsedBody.get("uploads"))
-        def localHash = MD5(localPage)
+        def localHash = ContentHash.md5(localPage)
         localPage = generateAndAttachToC(localPage)
 
         // #938-mksiva: Changed the 3rd parameter from 'config.confluence.spaceKey' to 'confluenceSpaceKey' as it was always taking the default spaceKey
