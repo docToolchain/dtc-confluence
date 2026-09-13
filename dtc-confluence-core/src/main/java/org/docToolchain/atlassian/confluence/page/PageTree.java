@@ -1,5 +1,6 @@
 package org.docToolchain.atlassian.confluence.page;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -23,14 +24,14 @@ public class PageTree {
     }
 
     public List<Page> getPages() {
-        return pages;
+        return Collections.unmodifiableList(pages);
     }
 
     public Map<String, String> getAnchors() {
-        return anchors;
+        return Collections.unmodifiableMap(anchors);
     }
 
     public Map<String, String> getPageAnchors() {
-        return pageAnchors;
+        return Collections.unmodifiableMap(pageAnchors);
     }
 }

@@ -7,12 +7,12 @@ import java.util.Map;
 
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
+import org.jsoup.nodes.Entities;
 
 /**
  * Turns an AsciiDoctor HTML document into the tree of Confluence pages it should become.
  *
- * <p>AsciiDoctor nests sections as {@code div.sect1} inside {@code div.sect2} and so on.
+ * <p>AsciiDoctor nests sections as {@code div.sect2} inside {@code div.sect1}, and so on.
  * {@code maxLevel} decides how deep that nesting is turned into separate pages: zero puts
  * everything on one page, one gives a page per top-level section, two also splits sub-sections.
  * Sections deeper than that stay inline, with their headings promoted so the page reads as if it
@@ -61,19 +61,24 @@ public class PageTreeBuilder {
                                        Map<String, String> pageAnchors, int level, int maxLevel) {
         List<Page> pages = new ArrayList<>();
         for (Element section : element.select("div.sect" + level)) {
-            Elements heading = section.select("h" + (level + 1));
+            // The section's own heading, not every heading of that level below it: Elements.text()
+            // would concatenate them while attr("id") took only the first, which is inconsistent.
+            Element heading = section.selectFirst("h" + (level + 1));
             pageAnchors.putAll(recordPageAnchor(heading));
 
             Element pageBody;
-            if (level == 1) {
-                pageBody = section.selectFirst("div.sectionbody").clone();
+            Element sectionBody = level == 1 ? section.selectFirst("div.sectionbody") : null;
+            if (sectionBody != null) {
+                pageBody = sectionBody.clone();
             } else {
                 // Work on a clone, so the original document is left alone and whitespace survives.
+                // This also covers a level-1 section without a div.sectionbody, which would
+                // otherwise have no body at all.
                 pageBody = section.clone();
                 pageBody.select("h" + (level + 1)).remove();
             }
 
-            Page currentPage = new Page(heading.text(), pageBody, parentId);
+            Page currentPage = new Page(heading == null ? "" : heading.text(), pageBody, parentId);
             if (maxLevel > level) {
                 currentPage.getChildren()
                         .addAll(pagesOfSections(section, null, anchors, pageAnchors, level + 1, maxLevel));
@@ -101,8 +106,10 @@ public class PageTreeBuilder {
         for (Element anchor : page.getBody().select("[id]")) {
             String name = anchor.attr("id");
             anchors.put(name, page.getTitle());
+            // The id goes into markup, so it has to be escaped: a hand-written document may
+            // carry an id that AsciiDoctor would never generate.
             anchor.before("<ac:structured-macro ac:name=\"anchor\">"
-                    + "<ac:parameter ac:name=\"\">" + name + "</ac:parameter>"
+                    + "<ac:parameter ac:name=\"\">" + Entities.escape(name) + "</ac:parameter>"
                     + "</ac:structured-macro>");
         }
         return anchors;
@@ -112,7 +119,10 @@ public class PageTreeBuilder {
      * @return the id of the section heading mapped to its text, or nothing if the heading carries
      *         no id
      */
-    static Map<String, String> recordPageAnchor(Elements heading) {
+    static Map<String, String> recordPageAnchor(Element heading) {
+        if (heading == null) {
+            return Map.of();
+        }
         String id = heading.attr("id");
         return id.isEmpty() ? Map.of() : Map.of(id, heading.text());
     }
