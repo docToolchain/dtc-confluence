@@ -2,7 +2,10 @@ package org.docToolchain.tasks
 
 import org.docToolchain.atlassian.confluence.clients.ConfluenceClient
 import org.docToolchain.atlassian.confluence.page.PageTreeBuilder
+import org.docToolchain.atlassian.transformer.AdmonitionTransformer
+import org.docToolchain.atlassian.transformer.DescriptionListTransformer
 import org.docToolchain.atlassian.transformer.HtmlTransformer
+import org.docToolchain.atlassian.transformer.MarkTransformer
 import org.docToolchain.atlassian.constants.ConfluenceTags
 
 import org.jsoup.nodes.Document
@@ -76,17 +79,6 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
         MessageDigest.getInstance("MD5").digest(s.bytes).encodeHex().toString()
     }
 
-    static def parseAdmonitionBlock(block, String type) {
-        def content = block.select(".content").first()
-        def titleElement = content.select(".title")
-        def titleText = ''
-        if(titleElement != null) {
-            titleText = "<ac:parameter ac:name=\"title\">${titleElement.text()}</ac:parameter>"
-            titleElement.remove()
-        }
-        block.after("<ac:structured-macro ac:name=\"${type}\">${titleText}<ac:rich-text-body>${content}</ac:rich-text-body></ac:structured-macro>")
-        block.remove()
-    }
 
     /**
      *  #342-dierk42
@@ -147,10 +139,6 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
         confluencePagePrefix + pageTitle + confluencePageSuffix
     }
 
-    static def rewriteMarks (body) {
-        // Confluence strips out mark elements.  Replace them with default formatting.
-        body.select('mark').wrap('<span style="background:#ff0;color:#000"></style>').unwrap()
-    }
 
     /**
      * # 352-LuisMuniz: Helper methods
@@ -206,56 +194,6 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
         }
     }
 
-    static def rewriteDescriptionLists(body) {
-        def TAGS = [ dt: 'th', dd: 'td' ]
-        body.select('dl').each { dl ->
-            // WHATWG allows wrapping dt/dd in divs, simply unwrap them
-            dl.select('div').each { it.unwrap() }
-
-            // group dts and dds that belong together, usually it will be a 1:1 relation
-            // but HTML allows for different constellations
-            def rows = []
-            def current = [dt: [], dd: []]
-            rows << current
-            dl.select('dt, dd').each { child ->
-                def tagName = child.tagName()
-                if (tagName == 'dt' && current.dd.size() > 0) {
-                    // dt follows dd, start a new group
-                    current = [dt: [], dd: []]
-                    rows << current
-                }
-                current[tagName] << child.tagName(TAGS[tagName])
-                child.remove()
-            }
-
-            rows.each { row ->
-                def sizes = [dt: row.dt.size(), dd: row.dd.size()]
-                def rowspanIdx = [dt: -1, dd: sizes.dd - 1]
-                def rowspan = Math.abs(sizes.dt - sizes.dd) + 1
-                def max = sizes.dt
-                if (sizes.dt < sizes.dd) {
-                    max = sizes.dd
-                    rowspanIdx = [dt: sizes.dt - 1, dd: -1]
-                }
-                (0..<max).each { idx ->
-                    def tr = dl.appendElement('tr')
-                    ['dt', 'dd'].each { type ->
-                        if (sizes[type] > idx) {
-                            tr.appendChild(row[type][idx])
-                            if (idx == rowspanIdx[type] && rowspan > 1) {
-                                row[type][idx].attr('rowspan', "${rowspan}")
-                            }
-                        } else if (idx == 0) {
-                            tr.appendElement(TAGS[type]).attr('rowspan', "${rowspan}")
-                        }
-                    }
-                }
-            }
-
-            dl.wrap('<table></table>')
-                .unwrap()
-        }
-    }
 
     def rewriteOpenAPI (Element body) {
         if (config.confluence.useOpenapiMacro == true || config.confluence.useOpenapiMacro == 'confluence-open-api') {
@@ -377,15 +315,7 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
         body.select('div.paragraph').unwrap()
         body.select('div.ulist').unwrap()
         //body.select('div.sect3').unwrap()
-        [   'note':'info',
-            'warning':'warning',
-            'important':'warning',
-            'caution':'note',
-            'tip':'tip'            ].each { adType, cType ->
-            body.select('.admonitionblock.'+adType).each { block ->
-                parseAdmonitionBlock(block, cType)
-            }
-        }
+        new AdmonitionTransformer().transformAdmonitions(body)
         //special for the arc42-template
         body.select('div.arc42help').select('.content')
             .wrap('<ac:structured-macro ac:name="expand"></ac:structured-macro>')
@@ -464,8 +394,8 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
             }
         }
 
-        rewriteMarks body
-        rewriteDescriptionLists body
+        new MarkTransformer().transformMarks(body)
+        new DescriptionListTransformer().transformDescriptionLists(body)
         //not really sure if must check here the type
         String bodyString = body
         if(body instanceof Element){
