@@ -28,6 +28,9 @@ public class PageTreeBuilder {
         Map<String, String> pageAnchors = new LinkedHashMap<>();
         List<Page> pages = new ArrayList<>();
         String title = dom.select("h1").text();
+        // Has to happen before any page body is taken out of the document: the definitions sit
+        // outside div#content and would otherwise be dropped along with the rest of the document.
+        Footnotes footnotes = Footnotes.extractFrom(dom);
 
         if (maxLevel <= 0) {
             for (Element pageBody : dom.select("div#content")) {
@@ -36,6 +39,7 @@ public class PageTreeBuilder {
                 Page page = new Page(title, pageBody, parentId);
                 pages.add(page);
                 parentId = null;
+                footnotes.appendTo(pageBody);
                 anchors.putAll(parseAnchors(page));
             }
             return new PageTree(pages, anchors, pageAnchors);
@@ -47,18 +51,21 @@ public class PageTreeBuilder {
             Page preamble = new Page(title, pageBody, parentId);
             pages.add(preamble);
             parentId = null;
+            footnotes.appendTo(pageBody);
             anchors.putAll(parseAnchors(preamble));
-            preamble.getChildren().addAll(pagesOfSections(dom, parentId, anchors, pageAnchors, 1, maxLevel));
+            preamble.getChildren()
+                    .addAll(pagesOfSections(dom, parentId, anchors, pageAnchors, 1, maxLevel, footnotes));
         }
 
         if (pages.isEmpty()) {
-            pages.addAll(pagesOfSections(dom, parentId, anchors, pageAnchors, 1, maxLevel));
+            pages.addAll(pagesOfSections(dom, parentId, anchors, pageAnchors, 1, maxLevel, footnotes));
         }
         return new PageTree(pages, anchors, pageAnchors);
     }
 
     private List<Page> pagesOfSections(Element element, String parentId, Map<String, String> anchors,
-                                       Map<String, String> pageAnchors, int level, int maxLevel) {
+                                       Map<String, String> pageAnchors, int level, int maxLevel,
+                                       Footnotes footnotes) {
         List<Page> pages = new ArrayList<>();
         for (Element section : element.select("div.sect" + level)) {
             // The section's own heading, not every heading of that level below it: Elements.text()
@@ -81,7 +88,8 @@ public class PageTreeBuilder {
             Page currentPage = new Page(heading == null ? "" : heading.text(), pageBody, parentId);
             if (maxLevel > level) {
                 currentPage.getChildren()
-                        .addAll(pagesOfSections(section, null, anchors, pageAnchors, level + 1, maxLevel));
+                        .addAll(pagesOfSections(section, null, anchors, pageAnchors,
+                                level + 1, maxLevel, footnotes));
                 // the nested sections became pages of their own, so drop them from this body
                 pageBody.select("div.sect" + (level + 1)).remove();
             } else {
@@ -90,6 +98,9 @@ public class PageTreeBuilder {
             }
             promoteHeaders(pageBody, level + 2, level + 1);
             pages.add(currentPage);
+            // After the nested sections were taken out, so a footnote lands on the page that
+            // actually shows its reference rather than on the ancestor it was cut from.
+            footnotes.appendTo(pageBody);
             anchors.putAll(parseAnchors(currentPage));
         }
         return pages;

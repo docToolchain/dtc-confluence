@@ -11,7 +11,7 @@ CREATE page 'docToolchain Confluence Smoke Test' space=SPACE parent=99 comment='
     | <br /><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">_first_page</ac:parameter></ac:structured-macro><h1 id="_first_page">First Page</h1>
     | <div class="sectionbody">
     | 
-    | <p>A paragraph with <strong>bold</strong>, <em>italic</em> and <code>monospace</code>.</p>
+    | <p>A paragraph with <strong>bold</strong>, <em>italic</em> and <code>monospace</code>.<sup class="footnote">[<ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">_footnoteref_1</ac:parameter></ac:structured-macro><ac:link ac:anchor="_footnotedef_1"><ri:page ri:content-title="docToolchain Confluence Smoke Test" /><ac:plain-text-link-body><![CDATA[1]]></ac:plain-text-link-body></ac:link>]</sup></p>
     | 
     | 
     | <strong><br /><div><div class="title">A list</div></div></strong>
@@ -62,9 +62,18 @@ CREATE page 'docToolchain Confluence Smoke Test' space=SPACE parent=99 comment='
     | <tbody>
     | <tr>
     | <td class="tableblock halign-left valign-top"><p class="tableblock">Cell 1</p></td>
-    | <td class="tableblock halign-left valign-top"><p class="tableblock">Cell 2</p></td>
+    | <td class="tableblock halign-left valign-top"><p class="tableblock">Cell 2<sup class="footnote">[<ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">_footnoteref_2</ac:parameter></ac:structured-macro><ac:link ac:anchor="_footnotedef_2"><ri:page ri:content-title="docToolchain Confluence Smoke Test" /><ac:plain-text-link-body><![CDATA[2]]></ac:plain-text-link-body></ac:link>]</sup></p></td>
     | </tr>
     | </tbody>
     | </table>
+    | <div class="imageblock">
+    | <div class="content">
+    | <ac:image ac:align="center" ac:width="64"><ri:url ri:value="https://example.org/remote.png" /></ac:image></div>
     | </div>
-    | </div><p><ac:structured-macro ac:name="children"><ac:parameter ac:name="sort">creation</ac:parameter></ac:structured-macro></p><ac:placeholder>hash: #65fa3d6ffa816829e17c85206c8e3c84#</ac:placeholder>
+    | </div>
+    | </div>
+    | <div class="footnotes"><hr /><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">_footnotedef_1</ac:parameter></ac:structured-macro><div class="footnote" id="_footnotedef_1">
+    | <ac:link ac:anchor="_footnoteref_1"><ri:page ri:content-title="docToolchain Confluence Smoke Test" /><ac:plain-text-link-body><![CDATA[1]]></ac:plain-text-link-body></ac:link>. A note belonging to the first page.
+    | </div><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">_footnotedef_2</ac:parameter></ac:structured-macro><div class="footnote" id="_footnotedef_2">
+    | <ac:link ac:anchor="_footnoteref_2"><ri:page ri:content-title="docToolchain Confluence Smoke Test" /><ac:plain-text-link-body><![CDATA[2]]></ac:plain-text-link-body></ac:link>. A note belonging to the second page.
+    | </div></div><p><ac:structured-macro ac:name="children"><ac:parameter ac:name="sort">creation</ac:parameter></ac:structured-macro></p><ac:placeholder>hash: #12dbc98ea5f8a2522b82102262ed3e10#</ac:placeholder>
