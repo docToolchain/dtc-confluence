@@ -131,3 +131,15 @@ Two things make this harder than it looks:
 A useful distinction for scoping this: inline comments are *annotations on* generated content, whereas an edited paragraph or a ticked task box is an *edit of* it.
 For a publishing tool the generated source stays authoritative, so edits are meant to be overwritten.
 Annotations are not, and that is what makes comments worth the merge.
+
+== Content hashes keep the platform default charset
+
+`ContentHash.md5` hashes `text.getBytes()` without naming a charset, so the result depends on the platform default.
+That is inherited, not chosen: the Groovy it replaces used `s.bytes`, which does the same.
+
+It is worth knowing that this makes hashes machine-dependent.
+The same document hashed on a UTF-8 developer machine and on a CI runner with a different default produces different hashes, and every page and attachment would be rewritten once.
+Attachments are affected twice over, because their content is read as text before being hashed, which mangles binary files on the way.
+
+Changing it to UTF-8 would be correct and would cost one rewrite of everything ever published by docToolchain.
+That is a decision with a migration attached, not a detail to fix inside a port.
