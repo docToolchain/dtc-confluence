@@ -49,6 +49,7 @@ public class HtmlTransformer {
         return html
                 .replace("<br>", "<br />")
                 .replace("</br>", "<br />")
+                .replace("<hr>", "<hr />")
                 .replaceAll("<a([^>]*)></a>", "")
                 .replace(ConfluenceTags.CDATA_PLACEHOLDER_START, "<![CDATA[")
                 .replace(ConfluenceTags.CDATA_PLACEHOLDER_END, "]]>")

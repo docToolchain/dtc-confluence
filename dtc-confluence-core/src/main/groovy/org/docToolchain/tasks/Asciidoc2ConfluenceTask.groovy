@@ -286,7 +286,7 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
             }
             // it is an online image, so we have to use the ri:url tag
             else {
-                img.after("<ac:image ac:align=\"imgAlign\" ac:width=\"${imgWidth}\"><ri:url ri:value=\"${src}\"/></ac:image>")
+                img.after("<ac:image ac:align=\"${imgAlign}\" ac:width=\"${imgWidth}\"><ri:url ri:value=\"${src}\"/></ac:image>")
             }
             img.remove()
         }
