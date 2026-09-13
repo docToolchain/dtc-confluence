@@ -101,6 +101,13 @@ class ConfluenceClientV2RequestSpec extends Specification {
             requests[1].uri == '/wiki/rest/api/content/4711/label'
             requests[2].uri == '/wiki/rest/api/content/4711/child/attachment'
             requests[3].uri == '/wiki/rest/api/content/4711/child/attachment/att99/data'
+
+        and: 'all three are POSTs, and both uploads carry the hash in the multipart comment'
+            requests[1].method == 'POST'
+            requests[2].method == 'POST'
+            requests[3].method == 'POST'
+            requests[2].body.contains('#h#')
+            requests[3].body.contains('#h#')
     }
 
     def 'attachmentHasChanged reads the comment directly, unlike v1'() {
