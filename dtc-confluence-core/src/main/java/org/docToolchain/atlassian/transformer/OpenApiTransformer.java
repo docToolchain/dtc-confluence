@@ -48,16 +48,22 @@ public class OpenApiTransformer {
         if (macro == null) {
             return;
         }
-        String includeUrl = OPEN_API.equals(macro) ? includeUrlOf(body) : null;
         for (Element code : body.select(LISTING_SELECTOR)) {
+            // Resolved per listing. The Groovy computed one URL for the whole body and took the
+            // last it found, so a page with two API documents pointed both macros at the same
+            // one, and an inline listing beside a url: one was turned into a fetch of that URL.
+            String includeUrl = OPEN_API.equals(macro) ? includeUrlOf(code) : null;
             // The listing is read before the DOM is rearranged, and put back as raw text
             // afterwards, so Jsoup does not escape it a second time.
             String rawYaml = code.wholeText();
             code.parent().wrap(macroFor(macro)).unwrap();
 
             if (OPEN_API.equals(macro) && includeUrl != null) {
-                // The macro fetches the document itself, so the listing is not sent along.
                 code.before("<ac:parameter ac:name=\"url\">" + includeUrl + "</ac:parameter>");
+                // The listing element stays, as it did in the Groovy, so the macro receives the
+                // document as well as the URL. Whether the plugin ignores it or chokes on it is
+                // untested: the plugin is not installed on any instance available here. Removing
+                // it is a change to published output that should be verified first.
                 continue;
             }
             if (OPEN_API.equals(macro)) {
@@ -82,15 +88,18 @@ public class OpenApiTransformer {
     }
 
     /**
-     * @return the document URL carried in a {@code url:} class on the listing block, or null
+     * @return the document URL carried in a {@code url:} class on the listing block this code
+     *         belongs to, or null if it carries none
      */
-    private static String includeUrlOf(Element body) {
+    private static String includeUrlOf(Element code) {
+        Element block = code.closest(".listingblock.openapi");
+        if (block == null) {
+            return null;
+        }
         String includeUrl = null;
-        for (Element block : body.select("div .listingblock.openapi")) {
-            for (String className : block.className().split(" ")) {
-                if (className.startsWith("url")) {
-                    includeUrl = className.replace("url:", "");
-                }
+        for (String className : block.className().split(" ")) {
+            if (className.startsWith("url")) {
+                includeUrl = className.replace("url:", "");
             }
         }
         return includeUrl;

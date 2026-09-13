@@ -88,10 +88,59 @@ info:
         when:
             new OpenApiTransformer('open-api').transformOpenApi(body)
 
-        then: 'the macro fetches it itself, so the listing is not sent along'
+        then:
             body.html().contains('<ac:parameter ac:name="url">https://example.org/api.yaml</ac:parameter>')
             !body.html().contains('showDownloadButton')
             !body.html().contains('cdata-placeholder')
+
+        and: """The listing itself is still sent along with the URL, as it was in the Groovy.
+                 Whether the plugin ignores it is untested - it is installed on no instance
+                 available here - so this pins current behaviour rather than intent."""
+            body.html().contains('openapi: 3.0.0')
+    }
+
+    def 'each listing takes the url from its own block'() {
+        given: 'two API documents on one page, one with a url and one without'
+            def body = bodyOf('''
+                <div class="listingblock openapi url:https://example.org/first.yaml">
+                  <pre><code>openapi: first</code></pre>
+                </div>
+                <div class="listingblock openapi">
+                  <pre><code>openapi: second</code></pre>
+                </div>
+            ''')
+
+        when:
+            new OpenApiTransformer('open-api').transformOpenApi(body)
+
+        then: """The Groovy computed one URL for the whole body and kept the last it found, so
+                 both macros pointed at the same document and the inline listing was turned into a
+                 fetch of a URL that was never meant for it."""
+            body.html().contains('<ac:parameter ac:name="url">https://example.org/first.yaml</ac:parameter>')
+            body.html().count('ac:name="url"') == 1
+
+        and: 'the listing without a url keeps its download button and its content'
+            body.html().contains('showDownloadButton')
+            body.html().contains('openapi: second')
+    }
+
+    def 'two listings with different urls each keep their own'() {
+        given:
+            def body = bodyOf('''
+                <div class="listingblock openapi url:https://example.org/a.yaml">
+                  <pre><code>openapi: a</code></pre>
+                </div>
+                <div class="listingblock openapi url:https://example.org/b.yaml">
+                  <pre><code>openapi: b</code></pre>
+                </div>
+            ''')
+
+        when:
+            new OpenApiTransformer('open-api').transformOpenApi(body)
+
+        then:
+            body.html().contains('ac:name="url">https://example.org/a.yaml<')
+            body.html().contains('ac:name="url">https://example.org/b.yaml<')
     }
 
     def 'a document without an OpenAPI listing is untouched'() {
