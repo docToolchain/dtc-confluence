@@ -146,7 +146,7 @@ That is a decision with a migration attached, not a detail to fix inside a port.
 
 == Collapsible blocks lose their fold
 
-AsciiDoc marks a block collapsible with `[%collapsible]`, and AsciiDoctor renders that as `details` with a `summary`.
+AsciiDoc marks a block collapsible with `[%collapsible]`, and Asciidoctor renders that as `details` with a `summary`.
 Neither survives: the elements are unwrapped, the summary is left as bare text with no markup at all, and the content stands open on the page.
 
 arc42 templates lean on collapsible blocks for guidance text, so an arc42 document published today carries every hint it meant to hide.
@@ -169,7 +169,7 @@ Mapping `details` onto the `expand` macro is the fix: the `summary` becomes the 
 
 A callout marker inside a Confluence code macro cannot be both visible and absent from the clipboard.
 The macro holds plain text, where what is shown and what is copied are the same field.
-AsciiDoctor's HTML has no such constraint: it generates the marker with `::after` and hides the literal one, so a browser copies clean code.
+Asciidoctor's HTML has no such constraint: it generates the marker with `::after` and hides the literal one, so a browser copies clean code.
 
 This matters most with line continuations.
 In a shell, a continuation and a trailing comment are mutually exclusive - the backslash has to be the last character on the line - so a copied block with markers does not run.
