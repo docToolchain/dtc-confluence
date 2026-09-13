@@ -73,6 +73,31 @@ class ConfigurationOptionsSpec extends Specification {
 
         then:
             config.confluence.api == 'https://given.atlassian.net/wiki'
+
+        and: 'and the version follows the URL that will actually be used'
+            config.confluence.useV1Api == false
+    }
+
+    def 'an override the other way round picks v1'() {
+        when: 'a Cloud URL in the configuration, a Data Center one on the command line'
+            def config = optionsFor('https://example.atlassian.net/wiki',
+                '--api', 'https://cwiki.apache.org/confluence').load()
+
+        then:
+            config.confluence.useV1Api == true
+    }
+
+    def 'Cloud is recognised by host, not by substring'() {
+        expect:
+            optionsFor(api).load().confluence.useV1Api == v1
+
+        where:
+            api                                      || v1
+            'https://example.atlassian.net'          || false
+            'https://EXAMPLE.ATLASSIAN.NET/wiki'     || false
+            'https://example.atlassian.net.invalid/' || true
+            'https://self.hosted/x?q=.atlassian.net' || true
+            'not a url at all'                       || true
     }
 
     def 'the doc directory is reported as given'() {

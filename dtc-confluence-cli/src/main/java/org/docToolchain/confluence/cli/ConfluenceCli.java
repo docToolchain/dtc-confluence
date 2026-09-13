@@ -9,7 +9,7 @@ import picocli.CommandLine.Command;
 @Command(name = "dtc-confluence",
         description = "Publish documentation to Confluence, and check what is there.",
         mixinStandardHelpOptions = true,
-        version = "dtc-confluence 0.1.0-SNAPSHOT",
+        versionProvider = ManifestVersionProvider.class,
         subcommands = {PublishCommand.class, VerifyCommand.class, WipeCommand.class})
 public class ConfluenceCli implements Runnable {
 
