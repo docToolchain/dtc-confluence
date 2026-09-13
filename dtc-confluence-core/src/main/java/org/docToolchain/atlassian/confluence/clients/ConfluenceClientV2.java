@@ -39,7 +39,10 @@ public class ConfluenceClientV2 extends ConfluenceClient {
         this.spaceId = fetchSpaceIdByKey(String.valueOf(configService.getConfigProperty("confluence.spaceKey")));
     }
 
-    ConfluenceClientV2(ConfigService configService, RestClient restClient) {
+    /**
+     * Takes the REST client from outside, for callers that need to supply their own.
+     */
+    public ConfluenceClientV2(ConfigService configService, RestClient restClient) {
         super(configService, restClient);
         this.spaceId = fetchSpaceIdByKey(String.valueOf(configService.getConfigProperty("confluence.spaceKey")));
     }
