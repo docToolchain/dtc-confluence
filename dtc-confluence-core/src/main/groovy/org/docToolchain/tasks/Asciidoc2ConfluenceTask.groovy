@@ -7,6 +7,7 @@ import org.docToolchain.atlassian.confluence.image.EmbeddedImage
 import org.docToolchain.atlassian.confluence.image.ImageStore
 import org.docToolchain.util.ContentHash
 import org.docToolchain.atlassian.transformer.AdmonitionTransformer
+import org.docToolchain.atlassian.transformer.CollapsibleTransformer
 import org.docToolchain.atlassian.transformer.OpenApiTransformer
 import org.docToolchain.atlassian.transformer.DescriptionListTransformer
 import org.docToolchain.atlassian.transformer.HtmlTransformer
@@ -214,6 +215,7 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
         body.select('div.ulist').unwrap()
         //body.select('div.sect3').unwrap()
         new AdmonitionTransformer().transformAdmonitions(body)
+        new CollapsibleTransformer().transformCollapsibles(body)
         //special for the arc42-template
         body.select('div.arc42help').select('.content')
             .wrap('<ac:structured-macro ac:name="expand"></ac:structured-macro>')
