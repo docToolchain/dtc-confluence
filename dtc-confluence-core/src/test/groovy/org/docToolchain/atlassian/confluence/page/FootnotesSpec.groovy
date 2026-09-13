@@ -95,6 +95,34 @@ class FootnotesSpec extends Specification {
             tree.anchors['_footnotedef_1'] == 'Alpha'
     }
 
+    def 'a section keeps the footnote it shares with a sub-section of its own'() {
+        given: 'the parent refers to the note first, then a nested section that becomes a page too'
+            def html = """
+                <h1>The Document</h1>
+                <div id="content">
+                  <div class="sect1"><h2 id="alpha">Alpha</h2><div class="sectionbody">
+                    <p>parent text<sup><a id="_footnoteref_1" href="#_footnotedef_1">1</a></sup></p>
+                    <div class="sect2"><h3 id="alpha-one">Alpha One</h3>
+                      <p>child text<sup><a href="#_footnotedef_1">1</a></sup></p>
+                    </div>
+                  </div></div>
+                </div>
+                <div id="footnotes"><hr>
+                  <div class="footnote" id="_footnotedef_1"><a href="#_footnoteref_1">1</a>. Shared note.</div>
+                </div>
+            """
+
+        when: 'both levels become pages'
+            def tree = new PageTreeBuilder().build(parse(html), '99', 2)
+            def alpha = tree.pages[0]
+            def child = alpha.children[0]
+
+        then: 'the definition stays on the parent, which is published first'
+            alpha.body.text().contains('Shared note.')
+            !child.body.text().contains('Shared note.')
+            tree.anchors['_footnotedef_1'] == 'Alpha'
+    }
+
     def 'a document without footnotes is left untouched'() {
         given:
             def html = '''
