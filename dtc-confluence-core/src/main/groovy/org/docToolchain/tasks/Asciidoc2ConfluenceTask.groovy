@@ -1,6 +1,7 @@
 package org.docToolchain.tasks
 
 import org.docToolchain.atlassian.confluence.clients.ConfluenceClient
+import org.docToolchain.atlassian.confluence.page.PageTreeBuilder
 import org.docToolchain.atlassian.transformer.HtmlTransformer
 import org.docToolchain.atlassian.constants.ConfluenceTags
 
@@ -615,15 +616,6 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
         }
     }
 
-    static def parseAnchors(page) {
-        def anchors = [:]
-        page.body.select('[id]').each { anchor ->
-            def name = anchor.attr('id')
-            anchors[name] = page.title
-            anchor.before("<ac:structured-macro ac:name=\"anchor\"><ac:parameter ac:name=\"\">${name}</ac:parameter></ac:structured-macro>")
-        }
-        anchors
-    }
 
     def pushPages(pages, anchors, pageAnchors, labels) {
         pages.each { page ->
@@ -635,103 +627,14 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
         }
     }
 
-    static def recordPageAnchor(head) {
-        def a = [:]
-        if (head.attr('id')) {
-            a[head.attr('id')] = head.text()
-        }
-        a
-    }
 
-    static def promoteHeaders(tree, start, offset) {
-        (start..7).each { i ->
-            tree.select("h${i}").tagName("h${i-offset}").before('<br />')
-        }
-    }
 
     def retrievePageIdByName = { String name ->
         def data = confluenceClient.retrievePageIdByName(name, confluenceSpaceKey)
         return data?.results?.get(0)?.id
     }
 
-    def getPagesRecursive(Element element, String parentId, Map anchors, Map pageAnchors, int level, int maxLevel) {
-        def pages = []
-        element.select("div.sect${level}").each { sect ->
-            def title = sect.select("h${level + 1}").text()
-            pageAnchors.putAll(recordPageAnchor(sect.select("h${level + 1}")))
-            Element pageBody
-            if (level == 1) {
-                pageBody = sect.selectFirst('div.sectionbody')?.clone()
-            } else {
-                // Work on a clone to avoid mutating the original DOM and to preserve whitespace/newlines
-                pageBody = sect.clone()
-                pageBody.select("h${level + 1}").remove()
-            }
-            def currentPage = [
-                title: title,
-                body: pageBody,
-                children: [],
-                parent: parentId
-            ]
 
-            if (maxLevel > level) {
-                currentPage.children.addAll(getPagesRecursive(sect, null, anchors, pageAnchors, level + 1, maxLevel))
-                pageBody.select("div.sect${level + 1}").remove()
-            } else {
-                pageBody.select("div.sect${level + 1}").unwrap()
-            }
-            // Promote headers within the page content (clone), not the original section
-            promoteHeaders pageBody, level + 2, level + 1
-            pages << currentPage
-            anchors.putAll(parseAnchors(currentPage))
-        }
-        return pages
-    }
-
-    def getPages(Document dom, String parentId, int maxLevel) {
-        def anchors = [:]
-        def pageAnchors = [:]
-        def pages = []
-        def title = dom.select('h1').text()
-        if (maxLevel <= 0) {
-            dom.select('div#content').each { pageBody ->
-                pageBody.select('div.sect2').unwrap()
-                promoteHeaders pageBody, 2, 1
-                def page = [
-                    title: title,
-                    body: pageBody,
-                    children: [],
-                    parent: parentId
-                ]
-                pages << page
-                parentId = null
-                anchors.putAll(parseAnchors(page))
-            }
-        } else {
-            // let's try to select the "first page" and push it to confluence
-            dom.select('div#preamble div.sectionbody').each { pageBody ->
-                pageBody.select('div.sect2').unwrap()
-                def preamble = [
-                    title: title,
-                    body: pageBody,
-                    children: [],
-                    parent: parentId
-                ]
-                pages << preamble
-                parentId = null
-                anchors.putAll(parseAnchors(preamble))
-
-                // Direkte Manipulation der children-Liste
-                preamble.children.addAll(getPagesRecursive(dom, parentId, anchors, pageAnchors, 1, maxLevel))
-            }
-
-            // If no preamble was found, add pages to pages directly
-            if (pages.isEmpty()) {
-                pages.addAll(getPagesRecursive(dom, parentId, anchors, pageAnchors, 1, maxLevel))
-            }
-        }
-        return [pages, anchors, pageAnchors]
-    }
     void execute() {
         if(config.confluence.inputHtmlFolder) {
             def htmlFolder = "${docDir}/${config.confluence.inputHtmlFolder}"
@@ -802,7 +705,10 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
                 // #342-dierk42: get the keywords from the meta tags
                 def keywords = confluenceService.getKeywords(dom)
 
-                def (pages, anchors, pageAnchors) = getPages(dom, parentId, confluenceSubpagesForSections)
+                def tree = new PageTreeBuilder().build(dom, parentId, confluenceSubpagesForSections)
+                def pages = tree.pages
+                def anchors = tree.anchors
+                def pageAnchors = tree.pageAnchors
                 //println "Pages: ${pages.size()}"
                 //pages.each { page ->
                 //    println "$page"
