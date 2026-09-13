@@ -2,6 +2,7 @@ package org.docToolchain.tasks
 
 import org.docToolchain.atlassian.confluence.clients.ConfluenceClient
 import org.docToolchain.atlassian.confluence.page.PageTreeBuilder
+import org.docToolchain.atlassian.confluence.page.PageDecorator
 import org.docToolchain.atlassian.confluence.image.EmbeddedImage
 import org.docToolchain.atlassian.confluence.image.ImageStore
 import org.docToolchain.util.ContentHash
@@ -369,22 +370,6 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
         )
     }
 
-    def generateAndAttachToC(localPage) {
-        def content
-        if(config.confluence.disableToC){
-            def prefix = (config.confluence.extraPageContent?:'')
-            content  = prefix+localPage
-        }else{
-            def default_toc = '<p><ac:structured-macro ac:name="toc"/></p>'
-            def prefix = (config.confluence.tableOfContents?:default_toc)+(config.confluence.extraPageContent?:'')
-            content  = prefix+localPage
-            def default_children = '<p><ac:structured-macro ac:name="children"><ac:parameter ac:name="sort">creation</ac:parameter></ac:structured-macro></p>'
-            content += (config.confluence.tableOfChildren?:default_children)
-        }
-        def localHash = ContentHash.md5(localPage)
-        content += '<ac:placeholder>hash: #'+localHash+'#</ac:placeholder>'
-        return content
-    }
 
     /**
      * the create-or-update functionality for confluence pages
@@ -402,7 +387,13 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
         def localPage = parsedBody.get("page")
         deferredUpload.addAll(parsedBody.get("uploads"))
         def localHash = ContentHash.md5(localPage)
-        localPage = generateAndAttachToC(localPage)
+        // Read through configService: an unset ConfigObject entry coerced with "as String"
+        // becomes the literal "[:]", which would be published as page content.
+        localPage = new PageDecorator(
+            configService.getConfigProperty('confluence.disableToC') != null,
+            configService.getConfigProperty('confluence.extraPageContent') as String,
+            configService.getConfigProperty('confluence.tableOfContents') as String,
+            configService.getConfigProperty('confluence.tableOfChildren') as String).decorate(localPage)
 
         // #938-mksiva: Changed the 3rd parameter from 'config.confluence.spaceKey' to 'confluenceSpaceKey' as it was always taking the default spaceKey
         // instead of the one passed in the input for each row.
