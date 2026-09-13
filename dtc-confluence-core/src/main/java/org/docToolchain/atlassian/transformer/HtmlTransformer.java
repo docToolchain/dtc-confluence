@@ -45,15 +45,18 @@ public class HtmlTransformer {
     }
 
     private static String sanitizeBody(Element body) {
-        String html = unescapeInsidePlaceholders(body.html().trim());
-        return html
+        // Normalising the markup first, while everything Jsoup serialised is still escaped: a code
+        // sample containing the literal text <br> or <hr> is only unescaped afterwards and so is
+        // published as it was written, instead of being rewritten into XHTML.
+        String html = body.html().trim()
                 .replace("<br>", "<br />")
                 .replace("</br>", "<br />")
                 .replace("<hr>", "<hr />")
                 .replaceAll("<a([^>]*)></a>", "")
-                .replace(ConfluenceTags.CDATA_PLACEHOLDER_START, "<![CDATA[")
-                .replace(ConfluenceTags.CDATA_PLACEHOLDER_END, "]]>")
                 .replaceAll(PADDED_LANGUAGE_PARAMETER, "$1$3$5");
+        return unescapeInsidePlaceholders(html)
+                .replace(ConfluenceTags.CDATA_PLACEHOLDER_START, "<![CDATA[")
+                .replace(ConfluenceTags.CDATA_PLACEHOLDER_END, "]]>");
     }
 
     /**

@@ -86,11 +86,9 @@ public class PageTreeBuilder {
             }
 
             Page currentPage = new Page(heading == null ? "" : heading.text(), pageBody, parentId);
-            if (maxLevel > level) {
-                currentPage.getChildren()
-                        .addAll(pagesOfSections(section, null, anchors, pageAnchors,
-                                level + 1, maxLevel, footnotes));
-                // the nested sections became pages of their own, so drop them from this body
+            boolean splitDeeper = maxLevel > level;
+            if (splitDeeper) {
+                // the nested sections become pages of their own, so drop them from this body
                 pageBody.select("div.sect" + (level + 1)).remove();
             } else {
                 // they stay here, but without the wrapper
@@ -98,10 +96,16 @@ public class PageTreeBuilder {
             }
             promoteHeaders(pageBody, level + 2, level + 1);
             pages.add(currentPage);
-            // After the nested sections were taken out, so a footnote lands on the page that
-            // actually shows its reference rather than on the ancestor it was cut from.
+            // Before recursing, and after the nested sections were taken out: this page comes
+            // first in publish order, so a footnote it refers to has to be settled here rather
+            // than claimed by a child that happens to refer to the same one.
             footnotes.appendTo(pageBody);
             anchors.putAll(parseAnchors(currentPage));
+            if (splitDeeper) {
+                currentPage.getChildren()
+                        .addAll(pagesOfSections(section, null, anchors, pageAnchors,
+                                level + 1, maxLevel, footnotes));
+            }
         }
         return pages;
     }
