@@ -60,6 +60,8 @@
           <archive>
             <manifest>
               <mainClass>org.docToolchain.confluence.cli.ConfluenceCli</mainClass>
+              <!-- The version option reads Implementation-Version off the package, so it cannot drift. -->
+              <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
             </manifest>
           </archive>
           <descriptorRefs>

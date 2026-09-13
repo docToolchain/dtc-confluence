@@ -2,6 +2,8 @@ package org.docToolchain.confluence.cli;
 
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.net.URI;
+import java.util.Locale;
 
 import groovy.util.ConfigObject;
 import org.docToolchain.configuration.ConfigBuilder;
@@ -18,6 +20,9 @@ public class ConfigurationOptions {
     private static final String BEARER_TOKEN_VARIABLE = "CONFLUENCE_BEARER_TOKEN";
     private static final String CREDENTIALS_VARIABLE = "CONFLUENCE_CREDENTIALS";
     private static final String API_VARIABLE = "CONFLUENCE_API";
+
+    /** Confluence Cloud is reachable only under this host suffix, and REST v2 only on Cloud. */
+    private static final String CLOUD_HOST_SUFFIX = ".atlassian.net";
 
     @Option(names = {"-c", "--config"}, defaultValue = "docToolchainConfig.groovy",
             description = "Configuration file, relative to the document directory. "
@@ -38,11 +43,13 @@ public class ConfigurationOptions {
     public ConfigObject load() throws FileNotFoundException {
         ConfigObject config = new ConfigBuilder(docDir, configFile).build();
         applyCredentials(config);
-        applyApiVersion(config);
+        // The override first: the API version is derived from the URL, so it has to be derived
+        // from the URL that will actually be used.
         String apiUrl = api != null ? api : System.getenv(API_VARIABLE);
         if (apiUrl != null && !apiUrl.isEmpty()) {
             nested(config, "confluence").put("api", apiUrl);
         }
+        applyApiVersion(config);
         return config;
     }
 
@@ -63,12 +70,28 @@ public class ConfigurationOptions {
         if (confluence.get("useV1Api") instanceof Boolean) {
             return;
         }
-        String apiUrl = String.valueOf(confluence.get("api"));
-        boolean cloud = apiUrl.contains(".atlassian.net");
+        boolean cloud = isCloud(String.valueOf(confluence.get("api")));
         confluence.put("useV1Api", !cloud);
         System.out.println("confluence.useV1Api is not set; assuming "
                 + (cloud ? "Cloud, using API v2" : "Server or Data Center, using API v1")
                 + " from the API URL.");
+    }
+
+    /**
+     * Recognises Cloud by host, not by substring: {@code https://example.atlassian.net.invalid/}
+     * is not Cloud however much it reads like it, and a host is case insensitive.
+     *
+     * @return whether the URL names a Confluence Cloud instance
+     */
+    private static boolean isCloud(String apiUrl) {
+        try {
+            String host = URI.create(apiUrl).getHost();
+            return host != null && host.toLowerCase(Locale.ROOT).endsWith(CLOUD_HOST_SUFFIX);
+        } catch (IllegalArgumentException notAUri) {
+            // Nothing to read a host from; Server and Data Center is the safer guess, because a
+            // v1 endpoint exists on Cloud too while v2 does not exist anywhere else.
+            return false;
+        }
     }
 
     private static void applyCredentials(ConfigObject config) {
