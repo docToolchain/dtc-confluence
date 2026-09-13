@@ -24,6 +24,9 @@ public class OpenApiTransformer {
 
     private static final String LISTING_SELECTOR = "div.openapi pre > code";
 
+    /** The listing block carries the document location as a class, spelled {@code url:...}. */
+    private static final String URL_CLASS_PREFIX = "url:";
+
     private final String macro;
 
     /**
@@ -35,13 +38,17 @@ public class OpenApiTransformer {
     }
 
     private static String macroNameOf(Object configured) {
-        if (Boolean.TRUE.equals(configured) || CONFLUENCE_OPEN_API.equals(configured)) {
+        if (Boolean.TRUE.equals(configured)) {
             return CONFLUENCE_OPEN_API;
         }
-        if (SWAGGER_OPEN_API.equals(configured) || OPEN_API.equals(configured)) {
-            return String.valueOf(configured);
-        }
-        return null;
+        // The value comes from an executable Groovy configuration, so an interpolated setting
+        // arrives as a GString rather than a String. String.equals would answer false for it and
+        // silently switch the transformation off.
+        String name = configured == null ? "" : String.valueOf(configured);
+        return switch (name) {
+            case CONFLUENCE_OPEN_API, SWAGGER_OPEN_API, OPEN_API -> name;
+            default -> null;
+        };
     }
 
     public void transformOpenApi(Element body) {
@@ -55,7 +62,7 @@ public class OpenApiTransformer {
             String includeUrl = OPEN_API.equals(macro) ? includeUrlOf(code) : null;
             // The listing is read before the DOM is rearranged, and put back as raw text
             // afterwards, so Jsoup does not escape it a second time.
-            String rawYaml = code.wholeText();
+            String rawYaml = escapeCdataTerminator(code.wholeText());
             code.parent().wrap(macroFor(macro)).unwrap();
 
             if (OPEN_API.equals(macro) && includeUrl != null) {
@@ -74,6 +81,15 @@ public class OpenApiTransformer {
                             + "</ac:plain-text-body>")
                     .replaceWith(new TextNode(rawYaml));
         }
+    }
+
+    /**
+     * Splits a CDATA terminator that appears inside the document, which would otherwise close the
+     * section early and produce malformed storage format. A valid OpenAPI document may carry
+     * {@code ]]>} in a description or an example.
+     */
+    private static String escapeCdataTerminator(String document) {
+        return document.replace("]]>", "]]]]><![CDATA[>");
     }
 
     private static String macroFor(String macroName) {
@@ -98,8 +114,11 @@ public class OpenApiTransformer {
         }
         String includeUrl = null;
         for (String className : block.className().split(" ")) {
-            if (className.startsWith("url")) {
-                includeUrl = className.replace("url:", "");
+            // "url:" exactly, not every class starting with "url" - a role such as url-button
+            // would otherwise be read as a document location. And only the prefix is removed,
+            // so a URL containing "url:" later on survives.
+            if (className.startsWith(URL_CLASS_PREFIX)) {
+                includeUrl = className.substring(URL_CLASS_PREFIX.length());
             }
         }
         return includeUrl;

@@ -154,4 +154,58 @@ info:
         then:
             body.html() == before
     }
+    def 'an interpolated setting is recognised, not silently ignored'() {
+        given: 'the setting comes from an executable Groovy configuration'
+            def interpolated = "${'open-api'}"
+            def body = bodyOf(LISTING)
+
+        expect: 'an interpolated value is a GString, and String.equals answers false for one'
+            !(interpolated instanceof String)
+
+        when:
+            new OpenApiTransformer(interpolated).transformOpenApi(body)
+
+        then: 'it is matched by value, so the transformation is not silently switched off'
+            body.html().contains('ac:name="open-api"')
+    }
+
+    def 'a CDATA terminator inside the document does not close the section early'() {
+        given: 'a description carrying the terminator, which a valid OpenAPI document may'
+            def body = bodyOf('<div class="openapi listingblock"><pre><code>' +
+                'info:\n  description: "ends with ]]&gt; in the middle"\n' +
+                '</code></pre></div>')
+
+        when:
+            new OpenApiTransformer('confluence-open-api').transformOpenApi(body)
+
+        then: '''the terminator is split, so the storage format stays well formed. Asserted on the
+                  text rather than the markup: the document is inserted as a text node, so Jsoup
+                  escapes it here and HtmlTransformer unescapes it again inside the placeholder.'''
+            body.text().contains(']]]]><![CDATA[>')
+    }
+
+    def 'only a url: class names a document, not every class starting with url'() {
+        given: 'a role that merely begins with the same letters'
+            def body = bodyOf('<div class="listingblock openapi url-button">' +
+                '<pre><code>openapi: 3.0.0</code></pre></div>')
+
+        when:
+            new OpenApiTransformer('open-api').transformOpenApi(body)
+
+        then: 'it is not mistaken for a document location'
+            !body.html().contains('ac:name="url"')
+            body.html().contains('showDownloadButton')
+    }
+
+    def 'a url containing the prefix again keeps it'() {
+        given:
+            def body = bodyOf('<div class="listingblock openapi url:https://example.org/url:x/api.yaml">' +
+                '<pre><code>openapi: 3.0.0</code></pre></div>')
+
+        when:
+            new OpenApiTransformer('open-api').transformOpenApi(body)
+
+        then: 'only the leading prefix is removed'
+            body.html().contains('ac:name="url">https://example.org/url:x/api.yaml<')
+    }
 }
