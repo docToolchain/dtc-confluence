@@ -64,7 +64,10 @@ else
 fi
 
 if have gitleaks; then
-  gitleaks detect --no-banner --redact
+  # "dir", not "detect": CI scans the files in the workspace, while detect scans committed
+  # history. Checking history means a finding in an uncommitted file goes unseen, which is
+  # exactly backwards for something meant to run before a commit.
+  gitleaks dir . --no-banner --redact --config .github/linters/.gitleaks.toml
   report $? gitleaks
 else
   skipped+=("gitleaks (brew install gitleaks)")

@@ -1,0 +1,15 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+    [rules.allowlist]
+    description = """
+    Confluence macro identifiers. A structured macro is rejected without one, and the value is
+    fixed per plugin rather than per site, so these are published identifiers rather than
+    credentials. gitleaks sees a UUID assigned to a constant and calls it a key.
+    """
+    regexTarget = "line"
+    regexes = [
+      '''_MACRO_ID = "[0-9a-f-]{36}"''',
+    ]
