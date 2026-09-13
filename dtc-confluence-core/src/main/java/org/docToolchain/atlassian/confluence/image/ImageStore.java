@@ -31,9 +31,13 @@ public class ImageStore {
      * @return where the image lives and under which name it should be attached
      */
     public StoredImage store(String basePath, String fileName, String fileExtension, String encodedContent) {
-        String imageDir = imageDirContaining(basePath, fileName);
-        if (Path.of(basePath, imageDir, fileName).toFile().exists()) {
-            return new StoredImage(basePath + imageDir + fileName, fileName);
+        Path existing = Path.of(basePath, imageDirContaining(basePath, fileName), fileName);
+        if (existing.toFile().exists()) {
+            // Composed with Path.of rather than by concatenation, the same way the lookup above
+            // finds it. Concatenating produced .../assetsdiagram.png for a directory written
+            // without a trailing slash, and .../images/.diagram.png for docToolchain's own
+            // default of 'images/.', neither of which exists.
+            return new StoredImage(existing.toString(), fileName);
         }
 
         System.out.println("Could not find embedded image at a known location");
