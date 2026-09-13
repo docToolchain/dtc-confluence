@@ -1,0 +1,33 @@
+= Rendering examples
+:toc: macro
+
+Documents for looking at how this project renders AsciiDoc in Confluence.
+
+They are not test fixtures.
+The golden transcripts under `dtc-confluence-core/src/test/resources/publisher` serve that purpose and are compared automatically.
+These are for the case that automation cannot settle: whether the result looks right.
+
+== What is here
+
+`showcase.adoc`:: The source.
+It exercises one family of constructs per section: tables with and without a column specification, all five admonition kinds, lists with titles, description lists, eight source languages including one Confluence does not know, links, cross-references, and text that has to survive escaping.
+`showcase.html`:: The same document rendered by AsciiDoctor.
+
+The HTML is checked in so that the example can be published without an AsciiDoctor installation, and so that a change in rendering shows up as a diff rather than as a surprise.
+Regenerating it needs AsciiDoctor; the file is not produced by this build.
+
+== Where the structures come from
+
+The content is fictional.
+The structures are taken from real project documentation: compatibility matrices with a column specification and inline code inside cells, build output in several languages, and admonitions carrying titles.
+Those are the shapes that render differently than expected often enough to be worth looking at.
+
+== Publishing them
+
+Point the configuration at `examples/showcase.html` and publish into a space you are willing to have overwritten.
+
+[WARNING]
+====
+Publishing writes pages.
+Use a space meant for it, never one holding documentation anyone relies on.
+====

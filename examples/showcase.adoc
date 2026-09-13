@@ -1,0 +1,188 @@
+= Confluence Rendering Showcase
+:toc: left
+:sectnums:
+:example-tool: build-tool
+:basedir: /path/to/project
+
+This document exists to inspect how docToolchain renders AsciiDoc in Confluence.
+Every section exercises one family of constructs.
+The content is fictional; the structures are taken from real project documentation.
+
+== Tables
+
+Tables are the construct that most often renders differently than expected.
+
+=== A compatibility matrix
+
+The shape below is the one that motivated this document: a header row, a column
+specification, and inline code inside cells.
+
+[cols="2,1,1"]
+|===
+|Test family |release 5 |main
+
+|`ISSUE-170` (parallel build, concurrent modification)
+|FAIL
+|PASS
+
+|`ISSUE-503/391/203` (annotation processor source path)
+|FAIL (5)
+|PASS
+
+|`default-fork` / `ISSUE-321_pathexceptions` (script suffix)
+|FAIL (3)
+|PASS
+|===
+
+=== A table with a wide first column
+
+[cols="3,2,4"]
+|===
+|Setting |Default |Effect
+
+|`parallel.threads`
+|`1`
+|Number of workers. Values above the core count rarely help.
+
+|`fail.fast`
+|`true`
+|Stop at the first failing module instead of collecting all failures.
+|===
+
+=== A table without a column specification
+
+|===
+|Key |Value
+
+|`{example-tool}.home`
+|`{basedir}/tools`
+
+|`{example-tool}.offline`
+|`false`
+|===
+
+== Admonitions
+
+NOTE: A single-sentence note, written as a paragraph.
+
+[WARNING]
+====
+A warning that spans several sentences.
+Each sentence sits on its own line in the source.
+Confluence renders this as a warning macro.
+====
+
+[TIP]
+====
+Tips and notes use different Confluence macros.
+Whether that mapping is the one you want is worth checking here.
+====
+
+IMPORTANT: Important and caution map to their own macros as well.
+
+CAUTION: This is the fifth and last admonition kind.
+
+== Lists
+
+.A list with a title
+* First item
+* Second item
+** A nested item
+*** And a third level
+* Back to the top level
+
+The block title above is worth looking at closely: it is a known defect.
+
+. First step
+. Second step
+.. A nested step
+. Third step
+
+Term:: A description list entry.
+Another term:: With its own definition, which may run longer than one line and
+still belongs to the same term.
+
+== Source code
+
+[source,java]
+----
+public record Coordinate(String groupId, String artifactId, String version) {
+    public String toString() {
+        return groupId + ":" + artifactId + ":" + version;
+    }
+}
+----
+
+[source,xml]
+----
+<plugin>
+  <groupId>org.example</groupId>
+  <artifactId>example-plugin</artifactId>
+  <configuration>
+    <descriptor><![CDATA[a nested CDATA section]]></descriptor>
+  </configuration>
+</plugin>
+----
+
+[source,bash]
+----
+./build --offline \
+  --threads 4 \
+  --fail-fast
+----
+
+[source,yaml]
+----
+pipeline:
+  steps:
+    - name: build
+      run: ./build verify
+----
+
+[source,properties]
+----
+example.home=/opt/example
+example.offline=false
+----
+
+[source,groovy]
+----
+def coordinates = ['org.example', 'example-plugin', '1.0.0']
+println coordinates.join(':')
+----
+
+[source,text]
+----
+plain text, no highlighting requested
+----
+
+[source,rustlang]
+----
+// a language Confluence does not know; it should fall back to plain text
+fn main() { println!("hello"); }
+----
+
+== Links and references
+
+An external link with text: https://example.org/docs[the documentation].
+
+A bare URL: https://example.org/docs
+
+An internal cross-reference: see <<Tables>> above.
+
+An anchor target follows.
+
+[#a-named-anchor]
+=== A section with an explicit id
+
+Referring to <<a-named-anchor,this section by id>> exercises anchor rewriting.
+
+== Text formatting
+
+This paragraph mixes *bold*, _italic_, `monospace`, and a combination of *_bold italic_*.
+
+Special characters that have to survive escaping: `<` `>` `&` `"` and a literal
+`${placeholder}`.
+
+A line with a hard break +
+continues on the next line.
