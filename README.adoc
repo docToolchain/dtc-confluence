@@ -53,13 +53,23 @@ Running it needs a Java runtime of version 17 or newer, which the launcher looks
 
 == Using the command line tool
 
+Start with a configuration:
+
+[source,bash]
+----
+dtc-confluence init --api https://confluence.example.com --space SPACEKEY
+----
+
+That writes `.dtc-confluence.yaml` - hidden, because it configures the tool rather than describing the documentation.
+It is also the first name looked for when no `--config` is given; `.dtc-confluence.yml`, `dtc-confluence.yaml`, `dtc-confluence.yml` and finally docToolchain's `docToolchainConfig.groovy` follow, so an existing docToolchain project keeps working unconverted.
+
 [source,bash]
 ----
 # Read the token from wherever you keep it, rather than typing it:
 export CONFLUENCE_BEARER_TOKEN=$(pass show confluence/token)   # or op, gopass, security...
 
-dtc-confluence verify  -d docs -c myConfig.groovy   # check URL and credentials
-dtc-confluence publish -d docs -c myConfig.groovy   # publish the configured inputs
+dtc-confluence verify  -d docs   # check URL and credentials
+dtc-confluence publish -d docs   # publish the configured inputs
 ----
 
 `CONFLUENCE_CREDENTIALS=user:token` is the alternative where the instance wants basic authentication.

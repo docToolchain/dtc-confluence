@@ -22,9 +22,11 @@ public class ConfigurationOptions {
     private static final String CREDENTIALS_VARIABLE = "CONFLUENCE_CREDENTIALS";
     private static final String API_VARIABLE = "CONFLUENCE_API";
 
-    @Option(names = {"-c", "--config"}, defaultValue = "docToolchainConfig.groovy",
-            description = "Configuration file, relative to the document directory. "
-                    + "Default: ${DEFAULT-VALUE}")
+    @Option(names = {"-c", "--config"},
+            description = "Configuration file, relative to the document directory. Without it, "
+                    + "the first of these that exists is used: .dtc-confluence.yaml, "
+                    + ".dtc-confluence.yml, dtc-confluence.yaml, dtc-confluence.yml, "
+                    + "docToolchainConfig.groovy")
     private String configFile;
 
     @Option(names = {"-d", "--doc-dir"}, defaultValue = ".",
@@ -39,7 +41,8 @@ public class ConfigurationOptions {
      * @return the configuration, with credentials and any overrides folded in
      */
     public ConfigObject load() throws FileNotFoundException {
-        ConfigObject config = new ConfigBuilder(docDir, configFile).build();
+        String file = configFile != null ? configFile : ConfigurationFile.find(docDir);
+        ConfigObject config = new ConfigBuilder(docDir, file).build();
         // ConfigBuilder records the configuration file's own parent. With -d docs -c sub/x.groovy
         // that is docs/sub, while everything else here means docs, so paths in the configuration
         // would resolve against two different roots. --doc-dir wins.
