@@ -215,5 +215,5 @@ Carrying such a footnote into the page body was considered and rejected for now:
 Everywhere the question is only "is this switched on?" that is harmless.
 It stops being harmless where a default is applied only when nothing was configured - `confluence.useV1Api = false` then reads as "nobody said", and the derived value silently overrides what the author wrote.
 
-`getRawConfigProperty` answers without applying Groovy truth and is what such a decision has to use.
+A lookup that does not apply Groovy truth is what such a decision has to use; `ConfigService` gains one where the first such decision needs it.
 The distinction is worth keeping in mind for the typed configuration: it disappears there, which is one more reason to want it.

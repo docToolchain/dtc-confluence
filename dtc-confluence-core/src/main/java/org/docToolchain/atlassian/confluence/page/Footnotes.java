@@ -26,6 +26,9 @@ class Footnotes {
     /** The id AsciiDoctor gives a footnote definition, and what a reference links to. */
     private static final String DEFINITION_ID_PREFIX = "_footnotedef_";
 
+    /** The id AsciiDoctor gives a footnote reference, and what a definition links back to. */
+    private static final String REFERENCE_ID_PREFIX = "_footnoteref_";
+
     private final Map<String, Element> definitions;
     private final Set<String> placed = new LinkedHashSet<>();
 
@@ -78,9 +81,18 @@ class Footnotes {
      * page reaches this: the heading became a plain page title, so the reference it carried is
      * nowhere, and the back-link would be published pointing at an anchor that does not exist. The
      * number stays as text; only the link goes.</p>
+     *
+     * <p>Only the generated back-link is considered. A footnote's own text may hold a
+     * cross-reference to an anchor on another page, which is not on this page either but which
+     * {@link org.docToolchain.atlassian.transformer.HtmlTransformer} resolves through the anchor
+     * map covering every page.</p>
+     *
+     * <p>Looking only at this page is enough: a definition is placed on the first page that refers
+     * to it, so its reference is there by construction. The one exception is the reference that was
+     * stripped with a heading, and that one is on no page at all.</p>
      */
     private static void dropBacklinksWithoutTarget(Element definition, Element pageBody) {
-        for (Element backlink : definition.select("a[href^=#]")) {
+        for (Element backlink : definition.select("a[href^=#" + REFERENCE_ID_PREFIX + "]")) {
             String target = backlink.attr("href").substring(1);
             if (pageBody.getElementById(target) == null) {
                 backlink.unwrap();
