@@ -190,3 +190,30 @@ The code stays copyable character for character; the markers no longer sit besid
 A warning is worth emitting regardless of the setting: a callout directly after a line continuation in a shell-like language produces a block that cannot be run, and the author is unlikely to notice from the source.
 
 All three need the same building block as the collapsible fix above, which is a reason to do that one first.
+
+== Footnotes follow their reference; one in a heading is lost
+
+Asciidoctor collects footnote definitions in a `div#footnotes` at the end of the document.
+That div is a sibling of `div#content`, not a child, so page splitting never read it and the published references pointed at definitions that had been left behind.
+
+A definition now travels to the first page that refers to it.
+References on later pages resolve through the anchor map and link across, so a definition is written once and Asciidoctor's document-wide numbering keeps its meaning: numbers do not restart per page.
+
+A footnote in a *section heading* cannot be carried over.
+The heading becomes the Confluence page title, and a page title is plain text - there is no body for a reference to point into.
+The reference is dropped, and because nothing on any page then refers to that definition, it is not published either.
+The page stays self-consistent; the footnote is simply gone.
+
+The number is stripped from the title rather than left in it, because it would otherwise turn `Architecture` into `Architecture1` - and since the title also decides page identity, adding a footnote to a heading would rename the page and orphan the old one.
+
+Carrying such a footnote into the page body was considered and rejected for now: it would have to appear somewhere the author did not write it, and no placement is obviously right.
+
+== An explicit `false` is not the same as an unset value
+
+`ConfigService.getConfigProperty` mirrors Groovy truth, which the original implementation relied on: an empty map, an empty string, a zero and a `false` all answer `null`.
+
+Everywhere the question is only "is this switched on?" that is harmless.
+It stops being harmless where a default is applied only when nothing was configured - `confluence.useV1Api = false` then reads as "nobody said", and the derived value silently overrides what the author wrote.
+
+`getRawConfigProperty` answers without applying Groovy truth and is what such a decision has to use.
+The distinction is worth keeping in mind for the typed configuration: it disappears there, which is one more reason to want it.

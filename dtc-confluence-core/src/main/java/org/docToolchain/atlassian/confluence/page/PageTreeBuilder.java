@@ -23,11 +23,14 @@ public class PageTreeBuilder {
     /** AsciiDoctor emits headings up to h7. */
     private static final int DEEPEST_HEADING = 7;
 
+    /** What a footnote reference links to; see {@link Footnotes}. */
+    private static final String FOOTNOTE_DEFINITION_PREFIX = "_footnotedef_";
+
     public PageTree build(Document dom, String parentId, int maxLevel) {
         Map<String, String> anchors = new LinkedHashMap<>();
         Map<String, String> pageAnchors = new LinkedHashMap<>();
         List<Page> pages = new ArrayList<>();
-        String title = dom.select("h1").text();
+        String title = titleOf(dom.selectFirst("h1"));
         // Has to happen before any page body is taken out of the document: the definitions sit
         // outside div#content and would otherwise be dropped along with the rest of the document.
         Footnotes footnotes = Footnotes.extractFrom(dom);
@@ -85,7 +88,7 @@ public class PageTreeBuilder {
                 pageBody.select("h" + (level + 1)).remove();
             }
 
-            Page currentPage = new Page(heading == null ? "" : heading.text(), pageBody, parentId);
+            Page currentPage = new Page(titleOf(heading), pageBody, parentId);
             boolean splitDeeper = maxLevel > level;
             if (splitDeeper) {
                 // the nested sections become pages of their own, so drop them from this body
@@ -139,7 +142,26 @@ public class PageTreeBuilder {
             return Map.of();
         }
         String id = heading.attr("id");
-        return id.isEmpty() ? Map.of() : Map.of(id, heading.text());
+        return id.isEmpty() ? Map.of() : Map.of(id, titleOf(heading));
+    }
+
+    /**
+     * Reads a heading as the plain text a Confluence page title has to be.
+     *
+     * <p>A footnote reference cannot survive that - there is no page body for it to point into -
+     * and left in it would contribute nothing but its own number, turning "Architecture" into
+     * "Architecture1". Since the title also decides page identity, adding a footnote to a heading
+     * would otherwise rename the page and orphan the old one.</p>
+     *
+     * @return the heading's text without footnote references, or the empty string for no heading
+     */
+    static String titleOf(Element heading) {
+        if (heading == null) {
+            return "";
+        }
+        Element withoutFootnotes = heading.clone();
+        withoutFootnotes.select("sup:has(a[href^=#" + FOOTNOTE_DEFINITION_PREFIX + "])").remove();
+        return withoutFootnotes.text();
     }
 
     /**
