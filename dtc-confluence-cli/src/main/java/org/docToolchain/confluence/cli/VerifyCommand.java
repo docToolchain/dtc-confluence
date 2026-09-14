@@ -6,7 +6,8 @@ import org.docToolchain.tasks.VerifyConfluenceApiAccessTask;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
 
-@Command(name = "verify", description = "Check that the API URL and the credentials work.")
+@Command(name = "verify", description = "Check that the API URL and the credentials work.",
+        mixinStandardHelpOptions = true)
 public class VerifyCommand implements Callable<Integer> {
 
     @Mixin

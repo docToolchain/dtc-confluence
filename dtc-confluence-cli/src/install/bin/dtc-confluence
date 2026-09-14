@@ -1,0 +1,57 @@
+#!/bin/sh
+# Launcher for the dtc-confluence command line tool.
+#
+# Finds a Java runtime new enough to run it, then hands over. Kept POSIX sh so it works
+# wherever the tool does, and deliberately small: everything else lives in the jar.
+set -eu
+
+MINIMUM_JAVA=17
+
+fail() {
+    echo "dtc-confluence: $1" >&2
+    exit 1
+}
+
+# The jar lives beside this script, one level up. Two layouts are possible: the assembled
+# target/install, where lib/ holds only this jar, and an installation under a shared prefix,
+# where it gets a directory of its own so as not to litter lib/. DTC_CONFLUENCE_JAR overrides both.
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+jar="${DTC_CONFLUENCE_JAR:-}"
+if [ -z "${jar}" ]; then
+    for candidate in \
+        "${script_dir}/../lib/dtc-confluence/dtc-confluence.jar" \
+        "${script_dir}/../lib/dtc-confluence.jar"
+    do
+        if [ -f "${candidate}" ]; then
+            jar="${candidate}"
+            break
+        fi
+    done
+fi
+[ -n "${jar}" ] && [ -f "${jar}" ] || \
+    fail "cannot find dtc-confluence.jar below ${script_dir}/.. - is the installation complete?"
+
+# "17.0.9" and "21" both mean 17 or 21; "1.8.0_352" means 8.
+java_major() {
+    version=$("$1" -version 2>&1 | head -1 | sed -n 's/.*version "\([^"]*\)".*/\1/p')
+    case "${version}" in
+        1.*) echo "${version#1.}" | cut -d. -f1 ;;
+        '')  echo 0 ;;
+        *)   echo "${version}" | cut -d. -f1 ;;
+    esac
+}
+
+if [ -n "${JAVA_HOME:-}" ] && [ -x "${JAVA_HOME}/bin/java" ]; then
+    java_cmd="${JAVA_HOME}/bin/java"
+elif command -v java > /dev/null 2>&1; then
+    java_cmd=$(command -v java)
+else
+    fail "no Java runtime found. Install Java ${MINIMUM_JAVA} or newer, or set JAVA_HOME."
+fi
+
+major=$(java_major "${java_cmd}")
+if [ "${major}" -lt "${MINIMUM_JAVA}" ]; then
+    fail "${java_cmd} is Java ${major}, but ${MINIMUM_JAVA} or newer is required. Set JAVA_HOME to one."
+fi
+
+exec "${java_cmd}" -jar "${jar}" "$@"

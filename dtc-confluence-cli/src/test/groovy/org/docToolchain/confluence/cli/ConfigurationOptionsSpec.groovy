@@ -73,4 +73,54 @@ class ConfigurationOptionsSpec extends Specification {
         then:
             thrown(FileNotFoundException)
     }
+
+    def 'a section written as a map literal survives'() {
+        given: """ConfigSlurper leaves this a plain LinkedHashMap rather than a ConfigObject, and
+                  the core reads it just as well, so the CLI must not throw it away."""
+            docDir.resolve('literal.groovy').toFile().text = """
+                confluence = [api: 'https://cwiki.apache.org/confluence',
+                              spaceKey: 'SPACE', pageSuffix: ' (copy)', input: []]
+            """
+            def options = new ConfigurationOptions()
+            new CommandLine(options).parseArgs('-d', docDir.toString(), '-c', 'literal.groovy')
+
+        when:
+            def config = options.load()
+
+        then: 'everything the file said is still there'
+            config.confluence.api == 'https://cwiki.apache.org/confluence'
+            config.confluence.spaceKey == 'SPACE'
+            config.confluence.pageSuffix == ' (copy)'
+    }
+
+    def 'an override reaches a section written as a map literal'() {
+        given:
+            docDir.resolve('literal.groovy').toFile().text = """
+                confluence = [api: 'https://configured.example.org', spaceKey: 'SPACE', input: []]
+            """
+            def options = new ConfigurationOptions()
+            new CommandLine(options).parseArgs('-d', docDir.toString(), '-c', 'literal.groovy',
+                '--api', 'https://given.example.org')
+
+        when:
+            def config = options.load()
+
+        then: 'the override lands, and the rest of the section is untouched'
+            config.confluence.api == 'https://given.example.org'
+            config.confluence.spaceKey == 'SPACE'
+    }
+
+    def 'a configuration without a confluence section at all is accepted'() {
+        given:
+            docDir.resolve('bare.groovy').toFile().text = 'outputPath = "build"'
+            def options = new ConfigurationOptions()
+            new CommandLine(options).parseArgs('-d', docDir.toString(), '-c', 'bare.groovy',
+                '--api', 'https://given.example.org')
+
+        when:
+            def config = options.load()
+
+        then: 'the section is created rather than the load failing'
+            config.confluence.api == 'https://given.example.org'
+    }
 }
