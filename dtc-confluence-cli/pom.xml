@@ -78,6 +78,22 @@
               <goal>single</goal>
             </goals>
           </execution>
+          <execution>
+            <!-- Runs after runnable-jar, which is the jar it lays out. -->
+            <id>install-layout</id>
+            <phase>package</phase>
+            <goals>
+              <goal>single</goal>
+            </goals>
+            <configuration>
+              <descriptors>
+                <descriptor>src/assembly/install.xml</descriptor>
+              </descriptors>
+              <finalName>install</finalName>
+              <appendAssemblyId>false</appendAssemblyId>
+              <attach>false</attach>
+            </configuration>
+          </execution>
         </executions>
       </plugin>
     </plugins>

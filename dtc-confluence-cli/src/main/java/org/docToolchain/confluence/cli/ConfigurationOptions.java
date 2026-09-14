@@ -2,6 +2,7 @@ package org.docToolchain.confluence.cli;
 
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.util.Map;
 
 import groovy.util.ConfigObject;
 import org.docToolchain.configuration.ConfigBuilder;
@@ -56,7 +57,7 @@ public class ConfigurationOptions {
     }
 
     private static void applyCredentials(ConfigObject config) {
-        ConfigObject confluence = nested(config, "confluence");
+        Map<Object, Object> confluence = nested(config, "confluence");
         String bearerToken = System.getenv(BEARER_TOKEN_VARIABLE);
         if (bearerToken != null && !bearerToken.isEmpty()) {
             confluence.put("bearerToken", bearerToken);
@@ -71,10 +72,20 @@ public class ConfigurationOptions {
         }
     }
 
-    private static ConfigObject nested(ConfigObject config, String key) {
+    /**
+     * @return the section at {@code key}, creating it if it is not there yet
+     */
+    private static Map<Object, Object> nested(ConfigObject config, String key) {
         Object existing = config.get(key);
-        if (existing instanceof ConfigObject nested) {
-            return nested;
+        if (existing instanceof Map<?, ?> section) {
+            // Any map, not only a ConfigObject: ConfigSlurper leaves a section written as
+            // "confluence = [api: ..., spaceKey: ...]" a plain LinkedHashMap, and replacing that
+            // with a fresh ConfigObject would throw the whole configuration away.
+            @SuppressWarnings("unchecked")
+            Map<Object, Object> typed = (Map<Object, Object>) section;
+            // ConfigObject.get creates a missing section without attaching it, so put it back.
+            config.put(key, typed);
+            return typed;
         }
         ConfigObject created = new ConfigObject();
         config.put(key, created);

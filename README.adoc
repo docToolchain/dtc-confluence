@@ -10,13 +10,14 @@ It is usable as a plain library and, on top of that, through a CLI and a Maven p
 == Status
 
 Early.
-The only module today is `dtc-confluence-core`, a move of the Confluence code from docToolchain 3.4.2.
+`dtc-confluence-core` is a move of the Confluence code from docToolchain 3.4.2.
 That code is Groovy and is being ported to Java class by class; the Spock test suite stays in place throughout to verify each step.
+`dtc-confluence-cli` runs the publisher without a build tool and is usable today, against Confluence Data Center.
 
 == Modules
 
 `dtc-confluence-core`:: The library, with no binding to any build tool.
-`dtc-confluence-cli`:: Command line tool (planned).
+`dtc-confluence-cli`:: Command line tool.
 `dtc-confluence-maven-plugin`:: Maven integration (planned).
 
 == Supported Confluence versions
@@ -31,6 +32,39 @@ Present, but not yet verified against a real instance.
 REST API v2 exists in Cloud only.
 On Data Center `/api/v2` answers with 404, and v1 is the single, undeprecated option there.
 ====
+
+== Installing the command line tool
+
+Build it, then install from the directory the build lays out:
+
+[source,bash]
+----
+./mvnw package
+./dtc-confluence-cli/target/install/install.sh
+----
+
+That copies the launcher to `$HOME/.local/bin/dtc-confluence` and the jar below `$HOME/.local/lib`.
+Pass `--prefix DIR` to install elsewhere, `--force` to replace an existing installation.
+Nothing outside the prefix is touched, so removing those two paths uninstalls it.
+
+`dtc-confluence-cli/target/install.zip` holds the same layout for copying to another machine; the launcher runs from the unpacked directory without installing.
+
+Running it needs a Java runtime of version 17 or newer, which the launcher looks for in `JAVA_HOME` and then on the `PATH`.
+
+== Using the command line tool
+
+[source,bash]
+----
+export CONFLUENCE_BEARER_TOKEN="..."      # or CONFLUENCE_CREDENTIALS=user:token
+
+dtc-confluence verify  -d docs -c myConfig.groovy   # check URL and credentials
+dtc-confluence publish -d docs -c myConfig.groovy   # publish the configured inputs
+----
+
+Credentials are read from the environment rather than taken as options, so they stay out of the shell history and out of `ps`.
+`--api` overrides the configured URL.
+
+The third command, `wipe`, deletes every page in the configured space and refuses to run without `--yes-delete-every-page`.
 
 == Design decisions
 

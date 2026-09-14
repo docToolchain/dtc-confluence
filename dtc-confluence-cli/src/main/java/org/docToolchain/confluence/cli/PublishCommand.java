@@ -7,7 +7,8 @@ import org.docToolchain.tasks.Asciidoc2ConfluenceTask;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
 
-@Command(name = "publish", description = "Publish the configured HTML files to Confluence.")
+@Command(name = "publish", description = "Publish the configured HTML files to Confluence.",
+        mixinStandardHelpOptions = true)
 public class PublishCommand implements Callable<Integer> {
 
     @Mixin

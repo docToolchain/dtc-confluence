@@ -9,9 +9,14 @@ import picocli.CommandLine.IVersionProvider;
  * classes directory there is no manifest, and then the version is simply unknown rather than a
  * number that might be wrong.</p>
  */
-class ManifestVersionProvider implements IVersionProvider {
+public class ManifestVersionProvider implements IVersionProvider {
 
     private static final String UNKNOWN = "unknown";
+
+    // picocli instantiates this from its own package, so both the class and its constructor have
+    // to be reachable from outside this one.
+    public ManifestVersionProvider() {
+    }
 
     @Override
     public String[] getVersion() {
