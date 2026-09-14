@@ -270,3 +270,42 @@ The premise is therefore wrong for Data Center, and the title-keyed map holds ev
 Two things follow.
 It is the reason page identity in this project is the title at all - and the reason renaming a heading creates a page rather than moving one.
 And it is a Data Center guarantee: Cloud has not been verified here, and if it ever allows two pages of one title, the wipe path needs a listing keyed by id rather than a rewrite of the one publishing shares.
+
+== A manifest of what was published (idea, not decided)
+
+The publisher already fingerprints a page: it writes `hash: #...#` into an `ac:placeholder` and compares it on the next run, which is what "page hasn't changed!" means.
+That fingerprint lives *in Confluence*, so answering "what would this publish change?" requires asking Confluence first.
+
+The idea is a file in the repository recording, per source file, what was published from it: the page id, the content hash, and which revision produced it.
+
+=== What it would be worth
+
+The strongest argument is not change tracking.
+It is *page identity*.
+
+Today a page is identified by its title, because Confluence keeps titles unique per space - measured, see above.
+That makes renaming a heading indistinguishable from writing a new section: the publisher creates a second page and orphans the first, and the author usually notices weeks later.
+A manifest mapping a source file to the page id it produced would end that: a renamed heading becomes an update, not a stranger.
+
+Two smaller gains follow.
+Drift becomes visible - a page edited by hand in Confluence has a hash that no longer matches the recorded one, which today nothing reports.
+And a dry run becomes possible offline: what this revision would change can be answered without credentials.
+
+=== What it would cost
+
+A committed manifest is shared mutable state that every branch writes to, so every publish from a branch is a merge conflict waiting for the next one.
+One line per page, sorted, keeps those conflicts small and mechanical, but they do not go away.
+
+It also introduces a second source of truth beside the hash already in Confluence, and the two can disagree - after a restore from backup, after a space copy, after publishing from a second machine.
+Whichever is believed has to be stated, and the honest answer is that Confluence wins: it is where the page actually is.
+The manifest is then a cache, and saying so avoids pretending it is a ledger.
+
+Per-branch publishing complicates it further, because `pagePrefix` and `pageSuffix` already exist so that one document can be published several times into one space.
+A manifest would have to be keyed by those too, or be per-target rather than per-source.
+
+=== Where that leaves it
+
+Worth building for page identity, which is a real defect with no other fix in sight.
+Not worth building for change tracking alone, which the hash in the page already does.
+
+If it is built: written always, committed by choice, keyed by target rather than by source file, and documented as a cache that Confluence overrules.
