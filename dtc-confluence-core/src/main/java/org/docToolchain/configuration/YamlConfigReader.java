@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -36,6 +37,17 @@ public class YamlConfigReader {
     /** A configuration is small; anything larger is a mistake worth reporting as one. */
     private static final int MAX_ALIASES = 100;
 
+    /**
+     * How large a configuration may become once every alias is written out.
+     *
+     * <p>Converting an alias graph is cheap, because each node is converted once. Reading from it
+     * is not: {@code ConfigService} falls back to {@link ConfigObject#flatten}, which walks the
+     * graph as a tree and so writes every alias out. A file of ten lines can describe billions of
+     * nodes that way - measured, the conversion took 39 milliseconds and the first dotted lookup
+     * ended in an OutOfMemoryError two seconds later. No real configuration comes near this.</p>
+     */
+    private static final long MAX_EXPANDED_NODES = 200_000L;
+
     public ConfigObject read(Path file) {
         try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             return read(reader);
@@ -53,6 +65,7 @@ public class YamlConfigReader {
             return new ConfigObject();
         }
         Object loaded = newYaml().load(text);
+        refuseIfItExpands(loaded);
         if (!(loaded instanceof Map<?, ?> map)) {
             throw new IllegalArgumentException(
                     "A configuration has to be a mapping at the top level, not a "
@@ -61,6 +74,50 @@ public class YamlConfigReader {
         }
         return (ConfigObject) toConfigObject(map,
                 Collections.newSetFromMap(new IdentityHashMap<>()), new IdentityHashMap<>(), false);
+    }
+
+    /**
+     * Refuses a configuration that would grow beyond {@link #MAX_EXPANDED_NODES} once flattened.
+     */
+    private static void refuseIfItExpands(Object root) {
+        long total = expandedSize(root, new IdentityHashMap<>());
+        if (total > MAX_EXPANDED_NODES) {
+            throw new IllegalArgumentException(
+                    "This configuration expands to more than " + MAX_EXPANDED_NODES
+                            + " entries once its aliases are written out, which reading it would "
+                            + "do. A configuration describing that much is a mistake.");
+        }
+    }
+
+    /**
+     * @return how many nodes this one becomes when every alias is written out, counted at most to
+     *         {@link #MAX_EXPANDED_NODES} + 1 so that a graph describing more does not have to be
+     *         walked to the end
+     */
+    private static long expandedSize(Object value, Map<Object, Long> sizes) {
+        if (!(value instanceof Map<?, ?>) && !(value instanceof List<?>)) {
+            return 1L;
+        }
+        Long known = sizes.get(value);
+        if (known != null) {
+            if (known < 0) {
+                throw new IllegalArgumentException(
+                        "This configuration refers to itself; an anchor points at a node containing it.");
+            }
+            return known;
+        }
+        sizes.put(value, -1L);
+        Collection<?> children = value instanceof Map<?, ?> map ? map.values() : (List<?>) value;
+        long total = 1L;
+        for (Object child : children) {
+            total += expandedSize(child, sizes);
+            if (total > MAX_EXPANDED_NODES) {
+                total = MAX_EXPANDED_NODES + 1;
+                break;
+            }
+        }
+        sizes.put(value, total);
+        return total;
     }
 
     private static String readFully(Reader reader) {
