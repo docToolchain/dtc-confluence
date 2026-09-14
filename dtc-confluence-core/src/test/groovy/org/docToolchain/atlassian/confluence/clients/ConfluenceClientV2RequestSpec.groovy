@@ -7,8 +7,11 @@ import spock.lang.Shared
 import spock.lang.Specification
 
 /**
- * Pins the requests the V2 client puts on the wire. Responses are served from a queue, because the
- * constructor already issues one request to resolve the space id.
+ * Pins the requests the V2 client puts on the wire. Responses are served from a queue, in the order
+ * the calls under test make them.
+ *
+ * <p>Only some calls address the space, and those resolve the configured key to an id first -
+ * {@link #spaceAddressingClient} queues that lookup, {@link #client} does not.</p>
  */
 class ConfluenceClientV2RequestSpec extends Specification {
 
@@ -48,37 +51,87 @@ class ConfluenceClientV2RequestSpec extends Specification {
     }
 
     private ConfluenceClientV2 client(List<String> laterResponses = []) {
+        responses.addAll(laterResponses)
+        return clientFor('SPACE')
+    }
+
+    /** For calls that address the space: the key is resolved to an id before the call itself. */
+    private ConfluenceClientV2 spaceAddressingClient(List<String> laterResponses = []) {
         responses.addAll([SPACE_LOOKUP] + laterResponses)
+        return clientFor('SPACE')
+    }
+
+    private ConfluenceClientV2 clientFor(String spaceKey) {
         ConfigObject config = new ConfigObject()
         config.confluence = [api: "http://127.0.0.1:${server.address.port}/wiki",
-                             credentials: 'x', spaceKey: 'SPACE']
+                             credentials: 'x', spaceKey: spaceKey]
         return new ConfluenceClientV2(new ConfigService(config))
     }
 
-    /** The first request is always the space lookup from the constructor. */
-    private Map sent() { requests.get(1) }
+    /** The call under test is the last one made. */
+    private Map sent() { requests.last() }
 
     private Object sentJson() { new JsonSlurper().parseText(sent().body) }
 
-    def 'the constructor resolves the space key to a space id'() {
+    def 'building the client asks Confluence nothing'() {
         when:
-            def c = client()
+            clientFor('SPACE')
+
+        then: """A client is also built to check credentials. Resolving the space here would let a
+                 missing or forbidden space fail before that check ever ran."""
+            requests.isEmpty()
+    }
+
+    def 'the space key is resolved when a call first needs the id'() {
+        given:
+            responses.add(SPACE_LOOKUP)
+            def c = clientFor('SPACE')
+
+        when:
+            def id = c.spaceId
 
         then:
+            id == 'SPACE-1'
+            requests.size() == 1
             requests.first().uri == '/wiki/api/v2/spaces?keys=SPACE&status=current&limit=1'
-            c.spaceId == 'SPACE-1'
+    }
+
+    def 'the space is resolved once, not on every call'() {
+        given:
+            responses.addAll([SPACE_LOOKUP, '{}', '{}'])
+            def c = clientFor('SPACE')
+
+        when:
+            c.fetchPageIdByName('One', 'IGNORED')
+            c.fetchPageIdByName('Two', 'IGNORED')
+
+        then: 'one lookup, then one request per call'
+            requests.size() == 3
+            requests.first().uri.startsWith('/wiki/api/v2/spaces?keys=SPACE')
     }
 
     def 'a space key that resolves to nothing leaves the space id unset'() {
-        when:
+        given:
             responses.add('{"results":[]}')
-            ConfigObject config = new ConfigObject()
-            config.confluence = [api: "http://127.0.0.1:${server.address.port}/wiki",
-                                 credentials: 'x', spaceKey: 'NOPE']
-            def c = new ConfluenceClientV2(new ConfigService(config))
+
+        when:
+            def c = clientFor('NOPE')
 
         then: 'no exception; the id is simply absent'
             c.spaceId == null
+    }
+
+    def 'a space that resolves to nothing is not looked up again and again'() {
+        given: 'only one response is queued, so a second lookup would read the wrong one'
+            responses.add('{"results":[]}')
+            def c = clientFor('NOPE')
+
+        when:
+            c.spaceId
+            c.spaceId
+
+        then:
+            requests.size() == 1
     }
 
     def 'getAttachment uses the v2 attachment collection'() {
@@ -98,16 +151,16 @@ class ConfluenceClientV2RequestSpec extends Specification {
 
         then: """Pins current behaviour. v2 has no equivalent for these, so the v2 client falls back
                  to v1 paths - which is why a Cloud instance that dropped v1 would break here."""
-            requests[1].uri == '/wiki/rest/api/content/4711/label'
-            requests[2].uri == '/wiki/rest/api/content/4711/child/attachment'
-            requests[3].uri == '/wiki/rest/api/content/4711/child/attachment/att99/data'
+            requests[0].uri == '/wiki/rest/api/content/4711/label'
+            requests[1].uri == '/wiki/rest/api/content/4711/child/attachment'
+            requests[2].uri == '/wiki/rest/api/content/4711/child/attachment/att99/data'
 
         and: 'all three are POSTs, and both uploads carry the hash in the multipart comment'
+            requests[0].method == 'POST'
             requests[1].method == 'POST'
             requests[2].method == 'POST'
-            requests[3].method == 'POST'
+            requests[1].body.contains('#h#')
             requests[2].body.contains('#h#')
-            requests[3].body.contains('#h#')
     }
 
     def 'attachmentHasChanged reads the comment directly, unlike v1'() {
@@ -138,7 +191,7 @@ class ConfluenceClientV2RequestSpec extends Specification {
 
     def 'fetchPageIdByName searches within the resolved space'() {
         when:
-            client().fetchPageIdByName('Some Page', 'IGNORED')
+            spaceAddressingClient().fetchPageIdByName('Some Page', 'IGNORED')
 
         then: 'the space key argument is unused: v2 addresses the space by id'
             sent().uri == '/wiki/api/v2/spaces/SPACE-1/pages?title=Some%20Page&status=current'
@@ -146,7 +199,7 @@ class ConfluenceClientV2RequestSpec extends Specification {
 
     def 'createPage posts a page addressed by space id'() {
         when:
-            client().createPage('Some Page', 'IGNORED', '<p>body</p>', 'a comment', '99')
+            spaceAddressingClient().createPage('Some Page', 'IGNORED', '<p>body</p>', 'a comment', '99')
 
         then:
             sent().method == 'POST'
@@ -166,7 +219,7 @@ class ConfluenceClientV2RequestSpec extends Specification {
 
     def 'a page without a parent sends an empty parent id rather than null'() {
         when:
-            client().createPage('T', 'IGNORED', '<p/>', '', null)
+            spaceAddressingClient().createPage('T', 'IGNORED', '<p/>', '', null)
 
         then:
             sentJson().parentId == ''
@@ -194,7 +247,7 @@ class ConfluenceClientV2RequestSpec extends Specification {
             def second = '{"results":[{"id":"2","title":"Beta","parentId":"1"}]}'
 
         when:
-            def pages = client([first, second]).fetchPagesBySpaceKey('SPACE', 25)
+            def pages = spaceAddressingClient([first, second]).fetchPagesBySpaceKey('SPACE', 25)
 
         then: 'the cursor from the next link is carried into the following request'
             requests[1].uri == '/wiki/api/v2/spaces/SPACE-1/pages?depth=all&limit=25'
@@ -216,8 +269,8 @@ class ConfluenceClientV2RequestSpec extends Specification {
             def pages = client([parent, child, empty, empty]).fetchPagesByAncestorId(['1'], 25)
 
         then:
-            requests[1].uri.startsWith('/wiki/api/v2/pages/1/children')
-            requests[2].uri.startsWith('/wiki/api/v2/pages/10/children')
+            requests[0].uri.startsWith('/wiki/api/v2/pages/1/children')
+            requests[1].uri.startsWith('/wiki/api/v2/pages/10/children')
 
         and: 'each page records the parent it was found under'
             pages.child == [title: 'Child', id: '10', parentId: '1']
