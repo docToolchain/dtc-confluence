@@ -249,4 +249,30 @@ class CalloutStyleSpec extends Specification {
         then:
             result.contains('ac:name="expand"')
     }
+
+    def 'highlighting around the code does not spoil the copy'() {
+        given: 'Asciidoctor wraps highlighted tokens in spans, and the marker sits after one'
+            def code = "<span class=\"nb\">echo one \\ </span>${calloutOf(1)}"
+
+        when:
+            def copy = transform('bash', code, CalloutStyle.COMMENT).split('ac:name="expand"')[1]
+
+        then: 'the continuation is still the last character on its line'
+            !copy.contains('\\ ')
+            copy.contains('echo one \\')
+    }
+
+    def 'an XML block with a CDATA section keeps its callouts'() {
+        given: """Escaping the inner CDATA terminator used to replace every child of the block,
+                  and the markers are children - so they vanished while the callout list below
+                  the block stayed behind."""
+            def code = '&lt;a&gt;&lt;![CDATA[x]]&gt;&lt;/a&gt; ' + calloutOf(1)
+
+        when:
+            def result = transform('xml', code, CalloutStyle.COMMENT)
+
+        then: 'the marker is there, and the inner terminator is still split'
+            result.contains('<!-- (1) -->')
+            result.contains(']]]]><![CDATA[>')
+    }
 }

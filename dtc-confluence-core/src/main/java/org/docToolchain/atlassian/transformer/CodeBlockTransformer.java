@@ -1,5 +1,7 @@
 package org.docToolchain.atlassian.transformer;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -95,10 +97,30 @@ class CodeBlockTransformer {
      * sits in, so the inner terminator is split. See docToolchain issue #1265.
      */
     private static void escapeNestedCdata(Element code) {
-        String xmlDocument = code.wholeOwnText();
-        if (xmlDocument.contains("<![CDATA[") && xmlDocument.contains("]]>")) {
-            code.text(xmlDocument.replace("]]>", "]]]]><![CDATA[>"));
+        String xmlDocument = code.wholeText();
+        if (!xmlDocument.contains("<![CDATA[") || !xmlDocument.contains("]]>")) {
+            return;
         }
+        // Written back into the text nodes rather than through code.text(), which replaces every
+        // child - including the callout markers, so an XML block carrying both a CDATA section
+        // and a callout used to lose the marker while its callout list stayed behind.
+        for (TextNode text : textNodesUnder(code)) {
+            String content = text.getWholeText();
+            if (content.contains("]]>")) {
+                text.text(content.replace("]]>", "]]]]><![CDATA[>"));
+            }
+        }
+    }
+
+    /**
+     * @return every text node below this element, at any depth
+     */
+    private static List<TextNode> textNodesUnder(Element element) {
+        List<TextNode> found = new ArrayList<>(element.textNodes());
+        for (Element child : element.children()) {
+            found.addAll(textNodesUnder(child));
+        }
+        return found;
     }
 
     /**
@@ -173,8 +195,11 @@ class CodeBlockTransformer {
      */
     private static String withoutCallouts(Element code) {
         Element copy = code.clone();
-        copy.select(CALLOUT_SELECTOR).forEach(CodeBlockTransformer::removeCallout);
+        // The highlighting first: with a span still in the way, the text before a marker is an
+        // element rather than a text node, and the space after a continuation would survive into
+        // the copy - which is the one thing this copy exists to avoid.
         copy.select("span[class]").forEach(Element::unwrap);
+        copy.select(CALLOUT_SELECTOR).forEach(CodeBlockTransformer::removeCallout);
         copy.select("i[class]").forEach(Element::unwrap);
         copy.select("b").forEach(Element::unwrap);
         return copy.wholeText();
