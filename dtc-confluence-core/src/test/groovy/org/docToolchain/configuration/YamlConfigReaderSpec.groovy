@@ -119,4 +119,78 @@ class YamlConfigReaderSpec extends Specification {
         then:
             config.confluence.pagePrefix == 'Größe – '
     }
+
+    def 'a configuration that refers to itself is refused, not walked'() {
+        when: 'an anchor pointing at the node that contains it - legal YAML, endless to walk'
+            read('a: &x\n  b: *x\n')
+
+        then:
+            def e = thrown(IllegalArgumentException)
+            e.message.contains('refers to itself')
+    }
+
+    def 'a list that refers to itself is refused too'() {
+        when:
+            read('a: &x\n  - *x\n')
+
+        then:
+            thrown(IllegalArgumentException)
+    }
+
+    def 'an alias that is not a cycle is still perfectly good'() {
+        given:
+            def config = read("""
+                defaults: &defaults
+                  spaceKey: SPACE
+                confluence:
+                  <<: *defaults
+                  api: https://cwiki.apache.org/confluence
+            """)
+
+        expect: 'sharing a fragment is why anchors exist'
+            config.confluence.spaceKey == 'SPACE'
+            config.confluence.api == 'https://cwiki.apache.org/confluence'
+    }
+
+    def 'the input list can be added to'() {
+        given: """Publishing appends the files it discovers to confluence.input when
+                  inputHtmlFolder is set, and ConfigSlurper hands out a list that allows it."""
+            def config = read('confluence:\n  input:\n    - file: a.html\n')
+
+        when:
+            config.confluence.input << [file: 'b.html']
+
+        then:
+            noExceptionThrown()
+            config.confluence.input.size() == 2
+    }
+
+    def 'a nested list can be added to as well'() {
+        given:
+            def config = read('confluence:\n  imageDirs:\n    - images/.\n')
+
+        when:
+            config.confluence.imageDirs << 'more/.'
+
+        then:
+            config.confluence.imageDirs.size() == 2
+    }
+
+    def 'two keys that read the same are refused rather than one winning'() {
+        when: 'YAML tells an integer key from a string key; a configuration path cannot'
+            read('1: one\n"1": also one\n')
+
+        then:
+            def e = thrown(IllegalArgumentException)
+            e.message.contains("read as '1'")
+    }
+
+    def 'keys that are not strings still work as long as they do not collide'() {
+        given:
+            def config = read('confluence:\n  1: first\n  two: second\n')
+
+        expect:
+            config.confluence['1'] == 'first'
+            config.confluence.two == 'second'
+    }
 }
