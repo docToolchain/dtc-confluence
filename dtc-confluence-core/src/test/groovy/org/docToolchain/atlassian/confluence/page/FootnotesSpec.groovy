@@ -1,5 +1,6 @@
 package org.docToolchain.atlassian.confluence.page
 
+import org.docToolchain.atlassian.transformer.HtmlTransformer
 import org.jsoup.Jsoup
 import org.jsoup.parser.Parser
 import spock.lang.Specification
@@ -215,6 +216,28 @@ class FootnotesSpec extends Specification {
                  the transformer resolves through the anchor map covering all of them."""
             !alpha.body.select('div.footnotes a[href=#beta]').isEmpty()
             tree.pageAnchors['beta'] == 'Beta'
+    }
+
+    def 'a reference on a later page becomes a link to the page holding the definition'() {
+        given: 'both sections refer to the same footnote'
+            def html = WITH_FOOTNOTES.replace('href="#_footnotedef_2">2', 'href="#_footnotedef_1">1')
+            def tree = new PageTreeBuilder().build(parse(html), '99', 1)
+            def alpha = tree.pages[0].children[0]
+            def beta = tree.pages[0].children[1]
+
+        when: 'the page without the definition is converted the way the publisher converts it'
+            def converted = new HtmlTransformer().transformToConfluenceFormat(
+                beta.body, tree.anchors, tree.pageAnchors, '', '')
+
+        then: """This is what the split costs if it goes wrong: the reference has to leave its own
+                 page and point at the one that kept the definition."""
+            converted.contains('<ac:link ac:anchor="_footnotedef_1">')
+            converted.contains('<ri:page ri:content-title="Alpha" />')
+
+        and: 'while on the page that has it, the same anchor is local'
+            new HtmlTransformer().transformToConfluenceFormat(
+                alpha.body, tree.anchors, tree.pageAnchors, '', '')
+                .contains('<ac:parameter ac:name="">_footnotedef_1</ac:parameter>')
     }
 
     def 'a document without footnotes is left untouched'() {
