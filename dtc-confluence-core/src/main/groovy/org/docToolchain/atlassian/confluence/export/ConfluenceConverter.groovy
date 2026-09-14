@@ -2,6 +2,7 @@ package org.docToolchain.atlassian.confluence.export
 
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
+import org.jsoup.nodes.Entities
 import org.jsoup.parser.Parser
 
 /**
@@ -415,7 +416,8 @@ class ConfluenceConverter {
                             case ["view-file"]:
                                 def filename = element.select("ri|attachment").attr("ri:filename")
                                 def version = element.select("ri|attachment").attr("ri:version-at-save")
-                                def height = element.select("ac|parameter[ac:name=height]") ?: '400'
+                                // .text(), or the whole parameter element lands in the attribute
+                                def height = element.select("ac|parameter[ac:name=height]").text() ?: '400'
                                 def filepath = "images/" + getFolderStructure(pages, pageId).join("/")
                                 filepath = "../" * getFolderStructure(pages, pageId).size() + filepath
                                 if (filename.toLowerCase().endsWith('.pdf')) {
@@ -474,7 +476,7 @@ User:: ${users[userkey].name}%%CRLF%%
 image::${folderStructure.join("/")}/${documentId}.png[]%%CRLF%%
 %%CRLF%%
 """
-                                    lucidInfoFile.append("""\
+                                    lucidInfoFile?.append("""\
 images/${folderStructure.join("/")}/${documentId}.png
 """.toString())
                                 }
@@ -571,7 +573,17 @@ ${lucidInfos.replaceAll("\n", "%%CRLF%%")}
                                 break
                             case ['code', 'paste-code-macro']:
                                 def language = element.select("ac|parameter[ac:name=language]").text()
-                                def code = element.select("ac|plain-text-body").text()
+                                // Escaped, because this is interpolated into element.html():
+                                // a sample containing markup - an <af:button/>, say - was parsed
+                                // as markup and disappeared from the exported document.
+                                //
+                                // wholeText rather than text is the honest spelling of what is
+                                // wanted here. A review reported that text() would collapse the
+                                // line breaks; measured, it does not for the CDATA bodies
+                                // Confluence writes, where the two are identical. It would for a
+                                // body without one.
+                                def codeBody = element.select("ac|plain-text-body").first()
+                                def code = Entities.escape(codeBody ? codeBody.wholeText() : '')
                                 element.html("""
     <div class="code-wrapper">
     [source, $language]%%CRLF%%
