@@ -75,7 +75,17 @@ class CalloutStyleSpec extends Specification {
             'java'   || 'a line // (1)'
             'groovy' || 'a line // (1)'
             'xml'    || 'a line <!-- (1) -->'
-            'css'    || 'a line /* (1) */'
+            'css'        || 'a line /* (1) */'
+            'coldfusion' || 'a line <!--- (1) --->'
+    }
+
+    def 'a comment that has to be closed is closed'() {
+        expect: 'an unterminated comment would swallow the rest of the block'
+            transform(language, "first ${calloutOf(1)}\nsecond", CalloutStyle.COMMENT)
+                .contains('second')
+
+        where:
+            language << ['xml', 'css', 'sass', 'coldfusion']
     }
 
     def 'linenumbers leaves the code exactly as written'() {
