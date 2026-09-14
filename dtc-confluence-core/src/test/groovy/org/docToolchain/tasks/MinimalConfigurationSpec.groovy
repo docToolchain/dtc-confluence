@@ -16,6 +16,16 @@ class MinimalConfigurationSpec extends Specification {
 
     private List<String> titles = []
 
+    /** A one-pixel PNG as a data URI, which is the path that reaches the image store. */
+    private static final String EMBEDDED_IMAGE_DOCUMENT = '''<!DOCTYPE html>
+<html lang=""><head><meta charset="UTF-8"><title>Embedded</title></head><body class="article">
+<div id="header"><h1>Embedded</h1></div>
+<div id="content"><div class="sect1"><h2 id="_s">S</h2><div class="sectionbody">
+<div class="imageblock"><div class="content">
+<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==" alt="Dot">
+</div></div>
+</div></div></div></body></html>'''
+
     private Asciidoc2ConfluenceTask taskWithoutPrefixOrSuffix() {
         ConfigObject config = new ConfigObject()
         config.docDir = RESOURCES
@@ -25,7 +35,7 @@ class MinimalConfigurationSpec extends Specification {
         config.confluence.spaceKey = 'SPACE'
         config.confluence.subpagesForSections = 1
         config.confluence.input = [[file: 'smoke-input.html', ancestorId: '99']]
-        // No pagePrefix, no pageSuffix: both are optional, and a minimal file omits them.
+        // No pagePrefix, no pageSuffix, no imageDirs: all optional, and a minimal file omits them.
 
         def task = Asciidoc2ConfluenceTask.From(config, RESOURCES)
         ConfluenceClient recorder = Mock(ConfluenceClient)
@@ -41,6 +51,24 @@ class MinimalConfigurationSpec extends Specification {
         recorder.addLabel(_, _) >> [:]
         task.confluenceClient = recorder
         return task
+    }
+
+    def 'a configuration without imageDirs publishes an embedded image'() {
+        given: """Coercing an empty ConfigObject with 'as List' builds a proxy whose iterator
+                  throws, which surfaces far from the cause - in the image store."""
+            def task = taskWithoutPrefixOrSuffix()
+            new File("${RESOURCES}/embedded-input.html").text = EMBEDDED_IMAGE_DOCUMENT
+            task.configService.@config.confluence.input = [[file: 'embedded-input.html', ancestorId: '99']]
+
+        when:
+            task.execute()
+
+        then:
+            noExceptionThrown()
+
+        cleanup:
+            new File("${RESOURCES}/embedded-input.html").delete()
+            new File("${RESOURCES}/images").deleteDir()
     }
 
     def 'a configuration without a page prefix or suffix publishes'() {
