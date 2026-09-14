@@ -36,8 +36,14 @@ final class CommentSyntax {
             // ColdFusion's comment is <!--- ---> - three dashes, and it has to be closed.
             "coldfusion", new String[] {"<!---", "--->"});
 
-    /** Where a trailing backslash continues the line, a comment after it breaks the command. */
-    private static final Set<String> CONTINUES_WITH_BACKSLASH = Set.of("bash", "powershell");
+    /**
+     * Where a trailing backslash continues the line, a comment after it breaks the command.
+     *
+     * <p>PowerShell is not one of them: it continues a line with a backtick, and a trailing
+     * backslash there is an ordinary path separator. Treating it as a continuation would move a
+     * PowerShell block off the configured style for no reason.</p>
+     */
+    private static final Set<String> CONTINUES_WITH_BACKSLASH = Set.of("bash");
 
     private CommentSyntax() {
     }
