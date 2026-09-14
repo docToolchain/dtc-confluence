@@ -216,14 +216,15 @@ class CodeBlockTransformer {
      * comments; they still get them, plus something that can be pasted.</p>
      */
     private CalloutStyle styleFor(Element code, String language, boolean hadCallouts) {
-        if (!hadCallouts || calloutStyle != CalloutStyle.COMMENT
+        // linenumbers already leaves the block runnable, so it has nothing to be warned about.
+        if (!hadCallouts || calloutStyle == CalloutStyle.LINENUMBERS
                 || !followsLineContinuation(code, language)) {
             return calloutStyle;
         }
         System.out.println(">>> WARN: a callout follows a line continuation in a " + language
-                + " block, which no comment character survives. Publishing a copy without markers "
-                + "underneath it; set confluence.callouts = 'linenumbers' to leave them out "
-                + "entirely.");
+                + " block, which no comment character survives. The block as written cannot be "
+                + "run; a copy without markers is published underneath it. Set "
+                + "confluence.callouts = 'linenumbers' to leave the markers out entirely.");
         return CalloutStyle.EXPAND;
     }
 

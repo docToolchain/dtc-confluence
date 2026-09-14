@@ -204,4 +204,28 @@ class CalloutStyleSpec extends Specification {
             !result.contains('ac:name="expand"')
             result.contains('<ac:parameter ac:name="linenumbers">true</ac:parameter>')
     }
+
+    def 'PowerShell is not a backslash-continuation language'() {
+        given: """It continues a line with a backtick; a trailing backslash there is a path
+                  separator. Treating it as a continuation would move the block off the configured
+                  style for no reason."""
+            def code = "Get-Item C:\\\\ ${calloutOf(1)}"
+
+        when:
+            def result = transform('powershell', code, CalloutStyle.COMMENT)
+
+        then: 'plain comments, and no second macro'
+            result.contains('# (1)')
+            !result.contains('ac:name="expand"')
+    }
+
+    def 'expand keeps its copy for a continuation, as comment does'() {
+        when:
+            def result = transform('bash', "./build verify \\${calloutOf(1)}",
+                CalloutStyle.EXPAND)
+
+        then:
+            result.contains('<ac:structured-macro ac:name="expand">')
+            result.count('ac:name="code"') == 2
+    }
 }
