@@ -6,8 +6,13 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import groovy.util.ConfigObject;
 import org.yaml.snakeyaml.LoaderOptions;
@@ -46,9 +51,9 @@ public class YamlConfigReader {
         if (!(loaded instanceof Map<?, ?> map)) {
             throw new IllegalArgumentException(
                     "A configuration has to be a mapping at the top level, not a "
-                            + loaded.getClass().getSimpleName().toLowerCase(java.util.Locale.ROOT));
+                            + loaded.getClass().getSimpleName().toLowerCase(Locale.ROOT));
         }
-        return toConfigObject(map);
+        return toConfigObject(map, Collections.newSetFromMap(new IdentityHashMap<>()));
     }
 
     private static Yaml newYaml() {
@@ -62,20 +67,57 @@ public class YamlConfigReader {
     /**
      * Nested mappings become nested ConfigObjects rather than plain maps, so that a dotted lookup
      * finds them: {@link ConfigObject#flatten} only walks its own kind.
+     *
+     * <p>Keys are read as text, because a configuration path is text. A file whose keys only differ
+     * in type - {@code 1:} beside {@code "1":} - would otherwise lose one of them silently, so it
+     * is refused instead.</p>
      */
-    private static ConfigObject toConfigObject(Map<?, ?> map) {
+    private static ConfigObject toConfigObject(Map<?, ?> map, Set<Object> enclosing) {
         ConfigObject config = new ConfigObject();
-        map.forEach((key, value) -> config.put(String.valueOf(key), convert(value)));
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            String key = String.valueOf(entry.getKey());
+            if (config.containsKey(key)) {
+                throw new IllegalArgumentException(
+                        "Two keys read as '" + key + "' in the same mapping. YAML tells them apart "
+                                + "by type; a configuration path cannot.");
+            }
+            config.put(key, convert(entry.getValue(), enclosing));
+        }
         return config;
     }
 
-    private static Object convert(Object value) {
-        if (value instanceof Map<?, ?> map) {
-            return toConfigObject(map);
+    /**
+     * Converts one value, refusing a container that contains itself.
+     *
+     * <p>A YAML anchor may refer to the node it is declared on, and such a document is legal for
+     * the parser. Walking it here would not stop, so it is reported as the malformed configuration
+     * it is rather than as a StackOverflowError. The alias limit does not help: one alias is
+     * enough to tie the knot.</p>
+     *
+     * @param enclosing the containers currently being walked, by identity
+     */
+    private static Object convert(Object value, Set<Object> enclosing) {
+        if (!(value instanceof Map<?, ?>) && !(value instanceof List<?>)) {
+            return value;
         }
-        if (value instanceof List<?> list) {
-            return list.stream().map(YamlConfigReader::convert).toList();
+        if (!enclosing.add(value)) {
+            throw new IllegalArgumentException(
+                    "This configuration refers to itself; an anchor points at a node containing it.");
         }
-        return value;
+        try {
+            if (value instanceof Map<?, ?> map) {
+                return toConfigObject(map, enclosing);
+            }
+            List<?> list = (List<?>) value;
+            // A mutable list: publishing appends discovered files to confluence.input when
+            // inputHtmlFolder is set, and ConfigSlurper hands out a list that allows it.
+            List<Object> converted = new ArrayList<>(list.size());
+            for (Object element : list) {
+                converted.add(convert(element, enclosing));
+            }
+            return converted;
+        } finally {
+            enclosing.remove(value);
+        }
     }
 }

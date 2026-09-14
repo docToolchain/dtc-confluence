@@ -12,10 +12,12 @@ import groovy.util.ConfigObject;
 import groovy.util.ConfigSlurper;
 
 /**
- * Parses the Groovy configuration file into a {@link ConfigObject}.
+ * Parses a configuration file into a {@link ConfigObject}.
  *
- * <p>The configuration format stays Groovy for compatibility with docToolchain. New consumers are
- * meant to use the typed configuration instead; see {@code docs/decisions.adoc}.</p>
+ * <p>A {@code .yaml} or {@code .yml} file is read as YAML, which is the format this project is
+ * meant to be configured in. Anything else goes through {@code ConfigSlurper}, so a docToolchain
+ * project keeps working unconverted. Either way the result is the same object, and nothing
+ * downstream needs to know which was on disk. See {@code docs/decisions.adoc}.</p>
  */
 public class ConfigBuilder {
 
