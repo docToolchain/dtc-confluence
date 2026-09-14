@@ -55,14 +55,17 @@ Running it needs a Java runtime of version 17 or newer, which the launcher looks
 
 [source,bash]
 ----
-export CONFLUENCE_BEARER_TOKEN="..."      # or CONFLUENCE_CREDENTIALS=user:token
+# Read the token from wherever you keep it, rather than typing it:
+export CONFLUENCE_BEARER_TOKEN=$(pass show confluence/token)   # or op, gopass, security...
 
 dtc-confluence verify  -d docs -c myConfig.groovy   # check URL and credentials
 dtc-confluence publish -d docs -c myConfig.groovy   # publish the configured inputs
 ----
 
-Credentials are read from the environment rather than taken as options, so they stay out of the shell history and out of `ps`.
-`--api` overrides the configured URL.
+`CONFLUENCE_CREDENTIALS=user:token` is the alternative where the instance wants basic authentication.
+
+Credentials are read from the environment rather than taken as options, which keeps them out of the process arguments - `ps` shows a command line to every user on the machine.
+It does not keep them out of your shell history: a token typed into an interactive `export` is recorded there like anything else, which is why the example reads it from a secret store instead.
 
 The third command, `wipe`, deletes every page in the configured space and refuses to run without `--yes-delete-every-page`.
 

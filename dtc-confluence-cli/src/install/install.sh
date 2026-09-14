@@ -45,10 +45,14 @@ if [ -z "${HOME:-}" ] && [ "${prefix}" = "/.local" ]; then
 fi
 
 here=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
-[ -f "${here}/lib/dtc-confluence.jar" ] || {
-    echo "install.sh: no lib/dtc-confluence.jar next to this script - run 'mvn package' first" >&2
-    exit 1
-}
+# Both of them, before anything is removed: --force deletes the destination first, and finding
+# out afterwards that a source file is missing would leave no installation at all.
+for source in lib/dtc-confluence.jar bin/dtc-confluence; do
+    [ -f "${here}/${source}" ] || {
+        echo "install.sh: no ${source} next to this script - run 'mvn package' first" >&2
+        exit 1
+    }
+done
 
 bin_dir="${prefix}/bin"
 lib_dir="${prefix}/lib/dtc-confluence"
