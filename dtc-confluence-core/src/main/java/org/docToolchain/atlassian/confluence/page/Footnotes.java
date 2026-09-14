@@ -64,8 +64,27 @@ class Footnotes {
         Element block = pageBody.appendElement("div").addClass("footnotes");
         block.appendElement("hr");
         for (String id : wanted) {
-            block.appendChild(definitions.get(id).clone());
+            Element definition = definitions.get(id).clone();
+            dropBacklinksWithoutTarget(definition, pageBody);
+            block.appendChild(definition);
             placed.add(id);
+        }
+    }
+
+    /**
+     * Removes a definition's link back to its reference where that reference is not on this page.
+     *
+     * <p>A footnote first used in a section heading and referred to again in the body of another
+     * page reaches this: the heading became a plain page title, so the reference it carried is
+     * nowhere, and the back-link would be published pointing at an anchor that does not exist. The
+     * number stays as text; only the link goes.</p>
+     */
+    private static void dropBacklinksWithoutTarget(Element definition, Element pageBody) {
+        for (Element backlink : definition.select("a[href^=#]")) {
+            String target = backlink.attr("href").substring(1);
+            if (pageBody.getElementById(target) == null) {
+                backlink.unwrap();
+            }
         }
     }
 }
