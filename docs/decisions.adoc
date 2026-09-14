@@ -212,3 +212,21 @@ The page stays self-consistent; the footnote is simply gone.
 The number is stripped from the title rather than left in it, because it would otherwise turn `Architecture` into `Architecture1` - and since the title also decides page identity, adding a footnote to a heading would rename the page and orphan the old one.
 
 Carrying such a footnote into the page body was considered and rejected for now: it would have to appear somewhere the author did not write it, and no placement is obviously right.
+== The export needs pandoc; the publisher does not
+
+The conversion from Confluence storage format back to AsciiDoc does not do the conversion itself.
+It prepares the XHTML, hands it to `pandoc`, and post-processes what comes back.
+
+That is inherited from docToolchain and is worth stating plainly, because it makes the two directions unequal:
+
+* publishing is a jar and a Java runtime, nothing else
+* exporting additionally requires pandoc on the `PATH`
+
+Porting the converter to Java does not change this - it would replace the code around pandoc, not pandoc.
+Writing a storage-format-to-AsciiDoc converter from scratch is a different project, and a large one.
+
+Keeping pandoc is the decision for now.
+The export is the smaller half of what people ask this tool for, the dependency is well-known and packaged everywhere, and docToolchain has required it for years.
+What changes is that it is now documented rather than discovered when a build fails.
+
+The alternative remains open: should the export become as important as publishing, the pandoc step is one method, and a Java implementation can replace it behind the same interface.
