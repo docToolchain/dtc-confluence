@@ -5,6 +5,8 @@ import java.util.Set;
 
 import org.docToolchain.atlassian.constants.ConfluenceTags;
 import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.TextNode;
 import org.jsoup.select.Elements;
 
 /**
@@ -117,7 +119,11 @@ class CodeBlockTransformer {
                 String before = textBefore(marker);
                 String separator = before.isEmpty() || Character.isWhitespace(
                         before.charAt(before.length() - 1)) ? "" : " ";
-                marker.before(separator + opening + " " + markerTextOf(marker) + closing);
+                // A text node, not markup: this is code, and "<!---" as markup is a comment
+                // declaration that Jsoup swallows. As text it is escaped on the way out and
+                // unescaped again inside the CDATA section it lands in.
+                marker.before(new TextNode(
+                        separator + opening + " " + markerTextOf(marker) + closing));
                 removeCallout(marker);
             }
         } else {
@@ -209,11 +215,11 @@ class CodeBlockTransformer {
 
     private static String textBefore(Element marker) {
         StringBuilder text = new StringBuilder();
-        for (org.jsoup.nodes.Node node : marker.parent().childNodes()) {
+        for (Node node : marker.parent().childNodes()) {
             if (node == marker) {
                 break;
             }
-            text.append(node instanceof org.jsoup.nodes.TextNode textNode
+            text.append(node instanceof TextNode textNode
                     ? textNode.getWholeText() : ((Element) node).wholeText());
         }
         int lastBreak = text.lastIndexOf("\n");

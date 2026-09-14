@@ -22,7 +22,6 @@ final class CommentSyntax {
             Map.entry("ruby", "#"),
             Map.entry("perl", "#"),
             Map.entry("yml", "#"),
-            Map.entry("coldfusion", "<!---"),
             Map.entry("sql", "--"),
             Map.entry("erl", "%"),
             Map.entry("vb", "'"),
@@ -32,7 +31,9 @@ final class CommentSyntax {
     private static final Map<String, String[]> BLOCK = Map.of(
             "xml", new String[] {"<!--", "-->"},
             "css", new String[] {"/*", "*/"},
-            "sass", new String[] {"/*", "*/"});
+            "sass", new String[] {"/*", "*/"},
+            // ColdFusion's comment is <!--- ---> - three dashes, and it has to be closed.
+            "coldfusion", new String[] {"<!---", "--->"});
 
     /** Where a trailing backslash continues the line, a comment after it breaks the command. */
     private static final Set<String> CONTINUES_WITH_BACKSLASH = Set.of("bash", "powershell");
