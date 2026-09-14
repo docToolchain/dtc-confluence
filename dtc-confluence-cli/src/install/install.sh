@@ -39,9 +39,15 @@ bin_dir="${prefix}/bin"
 lib_dir="${prefix}/lib/dtc-confluence"
 launcher="${bin_dir}/dtc-confluence"
 
-if { [ -e "${launcher}" ] || [ -L "${launcher}" ]; } && [ "${force}" = no ]; then
-    echo "install.sh: ${launcher} exists already; pass --force to replace it" >&2
-    exit 1
+# Either half of an installation counts as one: a launcher that was removed by hand must not let
+# the jar beneath it be replaced unasked.
+if [ "${force}" = no ]; then
+    for path in "${launcher}" "${lib_dir}/dtc-confluence.jar"; do
+        if [ -e "${path}" ] || [ -L "${path}" ]; then
+            echo "install.sh: ${path} exists already; pass --force to replace it" >&2
+            exit 1
+        fi
+    done
 fi
 
 # Nothing outside the prefix may be written. Copying onto a symlink writes through it, so a
