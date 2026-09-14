@@ -133,11 +133,17 @@ public class YamlConfigReader {
             throw new IllegalArgumentException(
                     "This configuration refers to itself; an anchor points at a node containing it.");
         }
-        // An alias refers to a node the parser already built, so converting it again would rebuild
-        // the whole subtree. A file can chain that: nine levels of nine references each is 81
-        // aliases - under any sane alias limit - and three billion leaves. Measured before this:
-        // OutOfMemoryError in a second. Converting each node once keeps the shape the parser gave.
-        Object already = converted.get(value);
+        // Lists are converted once and shared. An alias refers to a node the parser already built,
+        // and rebuilding the subtree behind every reference multiplies: nine levels of nine
+        // references each is 81 aliases - under any sane alias limit - and three billion leaves.
+        // Measured before this: OutOfMemoryError in a second.
+        //
+        // A mapping inside a list is copied instead, because such an entry is a record the
+        // publisher writes back into - it canonicalises input.file in place. Two aliases of one
+        // mapping would then see each other's path and publish the same page twice. Copying them
+        // is cheap: whatever they contain still comes from the cache.
+        boolean shareable = !(value instanceof Map<?, ?>) || !insideList;
+        Object already = shareable ? converted.get(value) : null;
         if (already != null) {
             return already;
         }
@@ -145,7 +151,9 @@ public class YamlConfigReader {
         try {
             if (value instanceof Map<?, ?> map) {
                 Object result = toConfigObject(map, enclosing, converted, insideList);
-                converted.put(value, result);
+                if (shareable) {
+                    converted.put(value, result);
+                }
                 return result;
             }
             List<?> list = (List<?>) value;
