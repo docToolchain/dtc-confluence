@@ -7,6 +7,7 @@ import java.util.Set;
 
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.jsoup.nodes.TextNode;
 
 /**
  * The footnote definitions of a document, moved to the pages that refer to them.
@@ -31,22 +32,24 @@ class Footnotes {
 
     private final Map<String, Element> definitions;
     private final Set<String> placed = new LinkedHashSet<>();
+    private final String label;
 
-    private Footnotes(Map<String, Element> definitions) {
+    private Footnotes(Map<String, Element> definitions, String label) {
         this.definitions = definitions;
+        this.label = label;
     }
 
     /**
      * Takes the definitions out of the document, so that page splitting cannot pick them up a
      * second time as part of some section's body.
      */
-    static Footnotes extractFrom(Document dom) {
+    static Footnotes extractFrom(Document dom, String label) {
         Map<String, Element> definitions = new LinkedHashMap<>();
         for (Element definition : dom.select("div#footnotes div.footnote[id]")) {
             definitions.put(definition.attr("id"), definition);
         }
         dom.select("div#footnotes").remove();
-        return new Footnotes(definitions);
+        return new Footnotes(definitions, label);
     }
 
     /**
@@ -69,6 +72,12 @@ class Footnotes {
         for (String id : wanted) {
             Element definition = definitions.get(id).clone();
             dropBacklinksWithoutTarget(definition, pageBody);
+            if (!label.isEmpty()) {
+                // Asciidoctor's own rendering carries the heading of the footnote section above
+                // the list; here the definitions sit at the end of a page that says nothing about
+                // them, so each one says what it is.
+                definition.prependChild(new TextNode(label + " "));
+            }
             block.appendChild(definition);
             placed.add(id);
         }

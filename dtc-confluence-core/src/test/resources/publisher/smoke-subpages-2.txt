@@ -23,9 +23,9 @@ CREATE page 'First Page' space=SPACE parent=1000 comment=''
     | </ul>
     | 
     | 
-    | <div class="footnotes"><hr /><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">_footnotedef_1</ac:parameter></ac:structured-macro><div class="footnote" id="_footnotedef_1">
+    | <div class="footnotes"><hr /><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">_footnotedef_1</ac:parameter></ac:structured-macro><div class="footnote" id="_footnotedef_1">Footnote 
     | <ac:link ac:anchor="_footnoteref_1"><ri:page ri:content-title="First Page" /><ac:plain-text-link-body><![CDATA[1]]></ac:plain-text-link-body></ac:link>. A note belonging to the first page.
-    | </div></div><p><ac:structured-macro ac:name="children"><ac:parameter ac:name="sort">creation</ac:parameter></ac:structured-macro></p><ac:placeholder>hash: #47da9e0a15d74232839c454e2adf0963#</ac:placeholder>
+    | </div></div><p><ac:structured-macro ac:name="children"><ac:parameter ac:name="sort">creation</ac:parameter></ac:structured-macro></p><ac:placeholder>hash: #81a46b92e257f07faa25513d5f4e0b09#</ac:placeholder>
 CREATE page 'Subsection' space=SPACE parent=1001 comment=''
     | <p><ac:structured-macro ac:name="toc"/></p><p>
     | </p><div class="content">
@@ -59,6 +59,6 @@ CREATE page 'Second Page' space=SPACE parent=1000 comment=''
     | <div class="content">
     | <ac:image ac:align="center" ac:width="64"><ri:url ri:value="https://example.org/remote.png" /></ac:image></div>
     | </div>
-    | <div class="footnotes"><hr /><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">_footnotedef_2</ac:parameter></ac:structured-macro><div class="footnote" id="_footnotedef_2">
+    | <div class="footnotes"><hr /><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">_footnotedef_2</ac:parameter></ac:structured-macro><div class="footnote" id="_footnotedef_2">Footnote 
     | <ac:link ac:anchor="_footnoteref_2"><ri:page ri:content-title="Second Page" /><ac:plain-text-link-body><![CDATA[2]]></ac:plain-text-link-body></ac:link>. A note belonging to the second page.
-    | </div></div><p><ac:structured-macro ac:name="children"><ac:parameter ac:name="sort">creation</ac:parameter></ac:structured-macro></p><ac:placeholder>hash: #acfe68deb1b9c67ccd271594783d6185#</ac:placeholder>
+    | </div></div><p><ac:structured-macro ac:name="children"><ac:parameter ac:name="sort">creation</ac:parameter></ac:structured-macro></p><ac:placeholder>hash: #d921cf73eddf45c2b2ab6058d88a4914#</ac:placeholder>

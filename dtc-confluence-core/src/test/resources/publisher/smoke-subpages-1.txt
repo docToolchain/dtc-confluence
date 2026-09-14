@@ -34,9 +34,9 @@ CREATE page 'First Page' space=SPACE parent=1000 comment=''
     | An admonition block, to check the storage format conversion.
     | </ac:rich-text-body></ac:structured-macro>
     | 
-    | <div class="footnotes"><hr /><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">_footnotedef_1</ac:parameter></ac:structured-macro><div class="footnote" id="_footnotedef_1">
+    | <div class="footnotes"><hr /><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">_footnotedef_1</ac:parameter></ac:structured-macro><div class="footnote" id="_footnotedef_1">Footnote 
     | <ac:link ac:anchor="_footnoteref_1"><ri:page ri:content-title="First Page" /><ac:plain-text-link-body><![CDATA[1]]></ac:plain-text-link-body></ac:link>. A note belonging to the first page.
-    | </div></div><p><ac:structured-macro ac:name="children"><ac:parameter ac:name="sort">creation</ac:parameter></ac:structured-macro></p><ac:placeholder>hash: #413fcc89a6fe38e7b645b22a800c9ca4#</ac:placeholder>
+    | </div></div><p><ac:structured-macro ac:name="children"><ac:parameter ac:name="sort">creation</ac:parameter></ac:structured-macro></p><ac:placeholder>hash: #5923f89a93ea61f98ad394f7b7ad386b#</ac:placeholder>
 CREATE page 'Second Page' space=SPACE parent=1000 comment=''
     | <p><ac:structured-macro ac:name="toc"/></p><table class="tableblock frame-all grid-all stretch">
     | <colgroup>
@@ -60,6 +60,6 @@ CREATE page 'Second Page' space=SPACE parent=1000 comment=''
     | <div class="content">
     | <ac:image ac:align="center" ac:width="64"><ri:url ri:value="https://example.org/remote.png" /></ac:image></div>
     | </div>
-    | <div class="footnotes"><hr /><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">_footnotedef_2</ac:parameter></ac:structured-macro><div class="footnote" id="_footnotedef_2">
+    | <div class="footnotes"><hr /><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">_footnotedef_2</ac:parameter></ac:structured-macro><div class="footnote" id="_footnotedef_2">Footnote 
     | <ac:link ac:anchor="_footnoteref_2"><ri:page ri:content-title="Second Page" /><ac:plain-text-link-body><![CDATA[2]]></ac:plain-text-link-body></ac:link>. A note belonging to the second page.
-    | </div></div><p><ac:structured-macro ac:name="children"><ac:parameter ac:name="sort">creation</ac:parameter></ac:structured-macro></p><ac:placeholder>hash: #acfe68deb1b9c67ccd271594783d6185#</ac:placeholder>
+    | </div></div><p><ac:structured-macro ac:name="children"><ac:parameter ac:name="sort">creation</ac:parameter></ac:structured-macro></p><ac:placeholder>hash: #d921cf73eddf45c2b2ab6058d88a4914#</ac:placeholder>
