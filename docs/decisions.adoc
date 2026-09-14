@@ -230,3 +230,15 @@ The export is the smaller half of what people ask this tool for, the dependency 
 What changes is that it is now documented rather than discovered when a build fails.
 
 The alternative remains open: should the export become as important as publishing, the pandoc step is one method, and a Java implementation can replace it behind the same interface.
+
+== The export drivers carry a second HTTP stack
+
+`confluenceApiToAsciiDoc.groovy` talks to Confluence through `HttpURLConnection`, opened and configured by hand: authentication, redirects, paging and attachment downloads are all re-implemented there.
+
+This project already has `RestClient`, built on Apache HttpClient 5, which does the same things for publishing - bearer and basic authentication, the rate limit, the proxy, JSON parsing, and the error handling that says what went wrong.
+
+Carrying both would mean two places to fix every authentication or proxy problem, and two behaviours for the same configuration.
+The driver is therefore to be rewritten onto the existing client rather than moved across as it stands.
+
+That is a rewrite, not a move, so it does not share the safety of the converter port: there the closures became methods with the behaviour untouched, and the characterisation tests mean something.
+Here the tests have to be written against what the driver produces - the pages, attachments and space maps the converter expects - before the fetching underneath them changes.
