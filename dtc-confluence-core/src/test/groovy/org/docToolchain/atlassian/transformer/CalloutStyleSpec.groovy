@@ -77,6 +77,7 @@ class CalloutStyleSpec extends Specification {
             'xml'    || 'a line <!-- (1) -->'
             'css'        || 'a line /* (1) */'
             'coldfusion' || 'a line <!--- (1) --->'
+            'applescript'|| 'a line -- (1)'
     }
 
     def 'a comment that has to be closed is closed'() {
@@ -140,11 +141,10 @@ class CalloutStyleSpec extends Specification {
     }
 
     def 'a shell continuation gets a copyable copy even under comment'() {
-        given: """The AsciiDoc convention writes \\#<1> so the marker is a shell comment, but
-                  Asciidoctor strips that # while rendering - the HTML carries the bare marker, and
-                  a backslash followed by a space escapes the space instead of continuing the line.
-                  No comment character can save the block, so a copy without markers is added."""
-            def code = "./build verify \\ ${calloutOf(1)}\n  --offline \\ ${calloutOf(2)}"
+        given: """Measured against the generated showcase: Asciidoctor strips the # of the
+                  \\#<1> convention while rendering, so the marker sits straight after the
+                  backslash with no space between them."""
+            def code = "./build verify \\${calloutOf(1)}" + "\n  --offline \\${calloutOf(2)}"
 
         when:
             def result = transform('bash', code, CalloutStyle.COMMENT)
@@ -152,12 +152,29 @@ class CalloutStyleSpec extends Specification {
         then: 'the block as written, with its markers'
             result.contains('./build verify \\ # (1)')
 
-        and: 'and a folded copy that can be pasted'
+        and: 'and a folded copy underneath'
             result.contains('<ac:structured-macro ac:name="expand">')
             result.count('ac:name="code"') == 2
+
+        and: """The backslash has to be the last character on its line. A copy ending in
+                 backslash-space escapes the space instead of continuing the command, and would
+                 not run any better than the annotated block does."""
             def copy = result.split('ac:name="expand"')[1]
-            copy.contains('./build verify \\')
             !copy.contains('(1)')
+            !copy.contains('\\ ')
+            copy.contains('./build verify \\' + '\n')
+    }
+
+    def 'a marker written behind a space takes that space with it'() {
+        given: 'the spelling without a comment character, which a document may still use'
+            def code = "./build verify \\ ${calloutOf(1)}" + "\n  --offline"
+
+        when:
+            def copy = transform('bash', code, CalloutStyle.COMMENT).split('ac:name="expand"')[1]
+
+        then: 'otherwise the copy ends in backslash-space and does not run either'
+            !copy.contains('\\ ')
+            copy.contains('./build verify \\')
     }
 
     def 'a shell block whose callouts are not behind a continuation is left as comments'() {

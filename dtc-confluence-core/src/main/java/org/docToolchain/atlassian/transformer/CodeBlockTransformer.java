@@ -146,11 +146,24 @@ class CodeBlockTransformer {
 
     /**
      * Removes both halves of a callout: the empty marker and the sibling holding its text.
+     *
+     * <p>Where the marker sat behind a line continuation, the space in front of it goes too. A
+     * document may write the marker as {@code \\ <1>}, and leaving that space would hand out a
+     * block ending in backslash-space - which escapes the space instead of continuing the line, so
+     * the copy would not run either.</p>
      */
     private static void removeCallout(Element marker) {
         Element shown = marker.nextElementSibling();
         if (shown != null && "b".equals(shown.tagName())) {
             shown.remove();
+        }
+        Node previous = marker.previousSibling();
+        if (previous instanceof TextNode text) {
+            String before = text.getWholeText();
+            String trimmed = before.stripTrailing();
+            if (trimmed.endsWith("\\") && !trimmed.equals(before)) {
+                text.text(trimmed);
+            }
         }
         marker.remove();
     }
@@ -207,7 +220,7 @@ class CodeBlockTransformer {
                 || !followsLineContinuation(code, language)) {
             return calloutStyle;
         }
-        System.out.println(">>> INFO: a callout follows a line continuation in a " + language
+        System.out.println(">>> WARN: a callout follows a line continuation in a " + language
                 + " block, which no comment character survives. Publishing a copy without markers "
                 + "underneath it; set confluence.callouts = 'linenumbers' to leave them out "
                 + "entirely.");

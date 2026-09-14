@@ -23,6 +23,7 @@ final class CommentSyntax {
             Map.entry("perl", "#"),
             Map.entry("yml", "#"),
             Map.entry("sql", "--"),
+            Map.entry("applescript", "--"),
             Map.entry("erl", "%"),
             Map.entry("vb", "'"),
             Map.entry("text", "#"));
