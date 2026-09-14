@@ -548,7 +548,10 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
                 // #342-dierk42: get the keywords from the meta tags
                 def keywords = confluenceService.getKeywords(dom)
 
-                def tree = new PageTreeBuilder().build(dom, parentId, confluenceSubpagesForSections)
+                def footnoteLabel = configService.getConfigProperty('confluence.footnoteLabel')
+                def tree = new PageTreeBuilder(
+                    footnoteLabel == null ? PageTreeBuilder.DEFAULT_FOOTNOTE_LABEL : footnoteLabel as String)
+                    .build(dom, parentId, confluenceSubpagesForSections)
                 def pages = tree.pages
                 def anchors = tree.anchors
                 def pageAnchors = tree.pageAnchors

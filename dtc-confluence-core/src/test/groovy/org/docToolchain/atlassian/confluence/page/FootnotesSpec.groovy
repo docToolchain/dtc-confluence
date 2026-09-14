@@ -240,6 +240,43 @@ class FootnotesSpec extends Specification {
                 .contains('<ac:parameter ac:name="">_footnotedef_1</ac:parameter>')
     }
 
+    def 'each definition says what it is'() {
+        when:
+            def tree = new PageTreeBuilder().build(parse(WITH_FOOTNOTES), '99', 0)
+
+        then: """They sit at the end of a page that says nothing about them, so without a label
+                 they read as a stray numbered list."""
+            tree.pages[0].body.text().contains('Footnote 1. First note.')
+            tree.pages[0].body.text().contains('Footnote 2. Second note.')
+    }
+
+    def 'the label can be changed, because it is published'() {
+        when: 'a document that is not in English wants its own word'
+            def tree = new PageTreeBuilder('Fussnote').build(parse(WITH_FOOTNOTES), '99', 0)
+
+        then:
+            tree.pages[0].body.text().contains('Fussnote 1. First note.')
+    }
+
+    def 'an empty label leaves the definitions bare'() {
+        when:
+            def tree = new PageTreeBuilder('').build(parse(WITH_FOOTNOTES), '99', 0)
+
+        then:
+            !tree.pages[0].body.text().contains('Footnote')
+            tree.pages[0].body.text().contains('1. First note.')
+    }
+
+    def 'the label does not swallow the link back to the reference'() {
+        when:
+            def tree = new PageTreeBuilder().build(parse(WITH_FOOTNOTES), '99', 1)
+            def alpha = tree.pages[0].children[0]
+
+        then: 'the number is still the link; the label is only text in front of it'
+            !alpha.body.select('div.footnotes a[href=#_footnoteref_1]').isEmpty()
+            alpha.body.select('div.footnotes a[href=#_footnoteref_1]').text() == '1'
+    }
+
     def 'a document without footnotes is left untouched'() {
         given:
             def html = '''

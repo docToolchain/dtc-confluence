@@ -26,6 +26,24 @@ public class PageTreeBuilder {
     /** What a footnote reference links to; see {@link Footnotes}. */
     private static final String FOOTNOTE_DEFINITION_PREFIX = "_footnotedef_";
 
+    /** What each footnote definition is labelled with, unless the configuration says otherwise. */
+    public static final String DEFAULT_FOOTNOTE_LABEL = "Footnote";
+
+    private final String footnoteLabel;
+
+    public PageTreeBuilder() {
+        this(DEFAULT_FOOTNOTE_LABEL);
+    }
+
+    /**
+     * @param footnoteLabel what to write in front of each footnote definition, empty for none.
+     *                      It appears in the published document, so a document that is not in
+     *                      English will want its own word - see {@code confluence.footnoteLabel}.
+     */
+    public PageTreeBuilder(String footnoteLabel) {
+        this.footnoteLabel = footnoteLabel == null ? "" : footnoteLabel.trim();
+    }
+
     public PageTree build(Document dom, String parentId, int maxLevel) {
         Map<String, String> anchors = new LinkedHashMap<>();
         Map<String, String> pageAnchors = new LinkedHashMap<>();
@@ -33,7 +51,7 @@ public class PageTreeBuilder {
         String title = titleOf(dom.selectFirst("h1"));
         // Has to happen before any page body is taken out of the document: the definitions sit
         // outside div#content and would otherwise be dropped along with the rest of the document.
-        Footnotes footnotes = Footnotes.extractFrom(dom);
+        Footnotes footnotes = Footnotes.extractFrom(dom, footnoteLabel);
 
         if (maxLevel <= 0) {
             for (Element pageBody : dom.select("div#content")) {
