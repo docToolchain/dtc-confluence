@@ -107,7 +107,11 @@ public class YamlConfigReader {
                         "Two keys read as '" + key + "' in the same mapping. YAML tells them apart "
                                 + "by type; a configuration path cannot.");
             }
-            config.put(key, convert(entry.getValue(), enclosing, converted, insideList));
+            // Not insideList: only the entry itself is the record the publisher writes into.
+            // Passing it down would make every mapping below it non-shareable too, and a chain of
+            // those multiplies - nine levels of nine references is 82 aliases and an
+            // OutOfMemoryError, which is the whole thing this cache exists to prevent.
+            config.put(key, convert(entry.getValue(), enclosing, converted, false));
         }
         return config;
     }
@@ -138,10 +142,10 @@ public class YamlConfigReader {
         // references each is 81 aliases - under any sane alias limit - and three billion leaves.
         // Measured before this: OutOfMemoryError in a second.
         //
-        // A mapping inside a list is copied instead, because such an entry is a record the
-        // publisher writes back into - it canonicalises input.file in place. Two aliases of one
-        // mapping would then see each other's path and publish the same page twice. Copying them
-        // is cheap: whatever they contain still comes from the cache.
+        // A mapping that *is* a list entry is copied instead, because such an entry is a record
+        // the publisher writes back into - it canonicalises input.file in place. Two aliases of
+        // one mapping would then see each other's path and publish the same page twice. Only that
+        // entry is copied, never what it contains, so copying stays cheap.
         boolean shareable = !(value instanceof Map<?, ?>) || !insideList;
         Object already = shareable ? converted.get(value) : null;
         if (already != null) {
