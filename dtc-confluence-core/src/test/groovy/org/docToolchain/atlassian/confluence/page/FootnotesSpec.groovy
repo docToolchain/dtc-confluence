@@ -152,6 +152,45 @@ class FootnotesSpec extends Specification {
             tree.anchors['_footnotedef_1'] == null
     }
 
+    def 'a definition whose reference was stripped from a heading keeps no dangling link'() {
+        given: 'the same footnote used first in a heading, then in the body of another section'
+            def html = """
+                <h1>The Document</h1>
+                <div id="content">
+                  <div class="sect1">
+                    <h2 id="alpha">Alpha<sup class="footnote"><a id="_footnoteref_1" href="#_footnotedef_1">1</a></sup></h2>
+                    <div class="sectionbody"><p>alpha body</p></div>
+                  </div>
+                  <div class="sect1"><h2 id="beta">Beta</h2><div class="sectionbody">
+                    <p>beta body<sup class="footnoteref"><a href="#_footnotedef_1">1</a></sup></p>
+                  </div></div>
+                </div>
+                <div id="footnotes"><hr>
+                  <div class="footnote" id="_footnotedef_1"><a href="#_footnoteref_1">1</a>. Shared note.</div>
+                </div>
+            """
+
+        when:
+            def tree = new PageTreeBuilder().build(parse(html), '99', 1)
+            def beta = tree.pages[1]
+
+        then: 'the definition lands on the page that can actually show a reference'
+            beta.body.text().contains('Shared note.')
+
+        and: 'its number is plain text, because the reference it pointed back to is nowhere'
+            beta.body.select('div.footnotes a[href=#_footnoteref_1]').isEmpty()
+            beta.body.text().contains('1. Shared note.')
+    }
+
+    def 'a back-link whose reference is on the page is kept'() {
+        when:
+            def tree = new PageTreeBuilder().build(parse(WITH_FOOTNOTES), '99', 1)
+            def alpha = tree.pages[0].children[0]
+
+        then:
+            !alpha.body.select('div.footnotes a[href=#_footnoteref_1]').isEmpty()
+    }
+
     def 'a document without footnotes is left untouched'() {
         given:
             def html = '''
