@@ -227,15 +227,21 @@ class ConfluenceClientV2RequestSpec extends Specification {
 
     def 'updatePage puts the new version under the page id'() {
         when:
-            client().updatePage('4711', 'Some Page', 'IGNORED', '<p>body</p>', 7, 'why', '99')
+            spaceAddressingClient().updatePage('4711', 'Some Page', 'IGNORED', '<p>body</p>', 7, 'why', '99')
 
         then:
             sent().method == 'PUT'
             sent().uri == '/wiki/api/v2/pages/4711'
 
+        and: """An update carries the space id too: createPage and updatePage share one request
+                 body builder, so the key is resolved for both."""
+            requests.size() == 2
+            requests.first().uri.startsWith('/wiki/api/v2/spaces?keys=SPACE')
+
         and:
             def body = sentJson()
             body.id == '4711'
+            body.spaceId == 'SPACE-1'
             body.version.number == 7
             body.version.message == 'why'
     }
