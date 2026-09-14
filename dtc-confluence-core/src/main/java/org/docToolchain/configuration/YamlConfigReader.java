@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -53,7 +54,8 @@ public class YamlConfigReader {
                     "A configuration has to be a mapping at the top level, not a "
                             + loaded.getClass().getSimpleName().toLowerCase(Locale.ROOT));
         }
-        return toConfigObject(map, Collections.newSetFromMap(new IdentityHashMap<>()));
+        return (ConfigObject) toConfigObject(map,
+                Collections.newSetFromMap(new IdentityHashMap<>()), false);
     }
 
     private static Yaml newYaml() {
@@ -72,8 +74,13 @@ public class YamlConfigReader {
      * in type - {@code 1:} beside {@code "1":} - would otherwise lose one of them silently, so it
      * is refused instead.</p>
      */
-    private static ConfigObject toConfigObject(Map<?, ?> map, Set<Object> enclosing) {
-        ConfigObject config = new ConfigObject();
+    private static Map<String, Object> toConfigObject(Map<?, ?> map, Set<Object> enclosing,
+                                                      boolean insideList) {
+        // Inside a list, a plain map: that is what ConfigSlurper leaves for an entry of
+        // confluence.input, and the publisher asks such an entry for keys it may not have.
+        // A ConfigObject answers those with an empty ConfigObject instead of null, which reads as
+        // "configured" and overrides the global setting with nothing.
+        Map<String, Object> config = insideList ? new LinkedHashMap<>() : new ConfigObject();
         for (Map.Entry<?, ?> entry : map.entrySet()) {
             String key = String.valueOf(entry.getKey());
             if (config.containsKey(key)) {
@@ -81,7 +88,7 @@ public class YamlConfigReader {
                         "Two keys read as '" + key + "' in the same mapping. YAML tells them apart "
                                 + "by type; a configuration path cannot.");
             }
-            config.put(key, convert(entry.getValue(), enclosing));
+            config.put(key, convert(entry.getValue(), enclosing, insideList));
         }
         return config;
     }
@@ -96,7 +103,7 @@ public class YamlConfigReader {
      *
      * @param enclosing the containers currently being walked, by identity
      */
-    private static Object convert(Object value, Set<Object> enclosing) {
+    private static Object convert(Object value, Set<Object> enclosing, boolean insideList) {
         if (!(value instanceof Map<?, ?>) && !(value instanceof List<?>)) {
             return value;
         }
@@ -106,14 +113,14 @@ public class YamlConfigReader {
         }
         try {
             if (value instanceof Map<?, ?> map) {
-                return toConfigObject(map, enclosing);
+                return toConfigObject(map, enclosing, insideList);
             }
             List<?> list = (List<?>) value;
             // A mutable list: publishing appends discovered files to confluence.input when
             // inputHtmlFolder is set, and ConfigSlurper hands out a list that allows it.
             List<Object> converted = new ArrayList<>(list.size());
             for (Object element : list) {
-                converted.add(convert(element, enclosing));
+                converted.add(convert(element, enclosing, true));
             }
             return converted;
         } finally {
