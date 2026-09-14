@@ -161,4 +161,50 @@ class ConfluenceConverterSpec extends Specification {
             noExceptionThrown()
             html.contains('diagram.png')
     }
+
+    def 'a code block keeps its line breaks'() {
+        given: """A review reported that text() collapses these. Measured, it does not:
+                  for a CDATA body - which is what Confluence writes - text() and wholeText()
+                  are identical. This states the behaviour rather than a fix."""
+            def storage = '<ac:structured-macro ac:name="code">' +
+                '<ac:parameter ac:name="language">groovy</ac:parameter>' +
+                '<ac:plain-text-body><![CDATA[def a = 1\ndef b = 2\ndef c = 3]]></ac:plain-text-body>' +
+                '</ac:structured-macro>'
+
+        when:
+            def html = convert(storage)
+
+        then: 'two breaks between the three lines, marked for the step after pandoc'
+            html.count('%%CRLF%%') >= 5
+            html.contains('def a = 1%%CRLF%%def b = 2%%CRLF%%def c = 3')
+    }
+
+    def 'a code sample containing markup stays a code sample'() {
+        given: 'the body is interpolated into element.html(), which parses what it is given'
+            def storage = '<ac:structured-macro ac:name="code">' +
+                '<ac:parameter ac:name="language">xml</ac:parameter>' +
+                '<ac:plain-text-body><![CDATA[<af:button id="x"/>]]></ac:plain-text-body>' +
+                '</ac:structured-macro>'
+
+        when:
+            def html = convert(storage)
+
+        then: 'it survives as text rather than being reparsed as a tag'
+            html.contains('&lt;af:button')
+            !html.contains('<af:button')
+    }
+
+    def 'a Lucidchart macro converts without a log file to write to'() {
+        given: 'lucidInfoFile is documented as null to log nothing'
+            def storage = '<ac:structured-macro ac:name="lucidchart">' +
+                '<ac:parameter ac:name="documentId">abc-123</ac:parameter>' +
+                '</ac:structured-macro>'
+
+        when:
+            def html = convert(storage)
+
+        then:
+            noExceptionThrown()
+            html != null
+    }
 }
