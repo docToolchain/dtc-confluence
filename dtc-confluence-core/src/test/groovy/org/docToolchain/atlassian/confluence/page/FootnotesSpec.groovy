@@ -123,6 +123,35 @@ class FootnotesSpec extends Specification {
             tree.anchors['_footnotedef_1'] == 'Alpha'
     }
 
+    def 'a footnote in a heading leaves the page title alone'() {
+        given:
+            def html = """
+                <h1>The Document</h1>
+                <div id="content">
+                  <div class="sect1">
+                    <h2 id="alpha">Alpha<sup class="footnote"><a id="_footnoteref_1" href="#_footnotedef_1">1</a></sup></h2>
+                    <div class="sectionbody"><p>body</p></div>
+                  </div>
+                </div>
+                <div id="footnotes"><hr>
+                  <div class="footnote" id="_footnotedef_1"><a href="#_footnoteref_1">1</a>. Heading note.</div>
+                </div>
+            """
+
+        when:
+            def tree = new PageTreeBuilder().build(parse(html), '99', 1)
+            def alpha = tree.pages[0]
+
+        then: 'the number does not become part of the name, which also decides page identity'
+            alpha.title == 'Alpha'
+
+        and: """A page title is plain text, so the reference cannot survive it. The definition is
+                then attached nowhere rather than sitting on a page with nothing pointing at it -
+                a known loss, recorded in docs/decisions.adoc."""
+            !alpha.body.text().contains('Heading note.')
+            tree.anchors['_footnotedef_1'] == null
+    }
+
     def 'a document without footnotes is left untouched'() {
         given:
             def html = '''
