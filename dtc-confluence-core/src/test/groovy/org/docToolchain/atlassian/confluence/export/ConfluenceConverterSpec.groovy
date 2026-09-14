@@ -146,4 +146,19 @@ class ConfluenceConverterSpec extends Specification {
             html.contains('B.html')
             !html.contains('PROJ_B.html')
     }
+
+    def 'an image macro resolves its attachment'() {
+        given: 'what the publisher writes for a local image'
+            def attachments = ['9': [filename: 'diagram.png', originalFilename: 'diagram.png',
+                                     id: '9', pageId: '1', version: '1']]
+            def storage = '<ac:image ac:align="center" ac:width="360">' +
+                '<ri:attachment ri:filename="diagram.png" /></ac:image>'
+
+        when: "select takes a query string; a list literal would not even dispatch"
+            def html = converter.fixBody('1', storage, NO_USERS, PAGES, attachments, SPACE)[0] as String
+
+        then:
+            noExceptionThrown()
+            html.contains('diagram.png')
+    }
 }

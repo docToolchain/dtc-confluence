@@ -229,8 +229,8 @@ class ConfluenceConverter {
                     case "ac:image":
                         def alignment = element.attr("ac:align")
                         def width = element.attr("ac:width")
-                        def riFilename = element.select(["ri|attachment"]).attr("ri:filename")
-                        def riVersion = element.select(["ri|attachment"]).attr("ri:version-at-save")
+                        def riFilename = element.select("ri|attachment").attr("ri:filename")
+                        def riVersion = element.select("ri|attachment").attr("ri:version-at-save")
                         // Resolve against the attachments map so drawio-merged PNGs
                         // (where filename was rewritten to "<base>.drawio.png" but
                         // the XHTML still references the original name) point at the
@@ -413,8 +413,8 @@ class ConfluenceConverter {
                                 element.remove()
                                 break
                             case ["view-file"]:
-                                def filename = element.select(["ri|attachment"]).attr("ri:filename")
-                                def version = element.select(["ri|attachment"]).attr("ri:version-at-save")
+                                def filename = element.select("ri|attachment").attr("ri:filename")
+                                def version = element.select("ri|attachment").attr("ri:version-at-save")
                                 def height = element.select("ac|parameter[ac:name=height]") ?: '400'
                                 def filepath = "images/" + getFolderStructure(pages, pageId).join("/")
                                 filepath = "../" * getFolderStructure(pages, pageId).size() + filepath
