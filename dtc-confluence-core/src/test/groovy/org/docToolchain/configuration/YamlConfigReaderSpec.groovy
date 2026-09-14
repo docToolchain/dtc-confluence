@@ -352,4 +352,27 @@ class YamlConfigReaderSpec extends Specification {
             noExceptionThrown()
             config.a9.size() == 9
     }
+
+    def 'a mapping chain aliased into a list does not explode'() {
+        given: """The list entry itself is copied rather than shared. Passing that down would make
+                  every mapping below it non-shareable too - nine levels of nine references is 82
+                  aliases, under the limit, and measured before the fix an OutOfMemoryError."""
+            def yaml = new StringBuilder('m0: &m0 {k: v}\n')
+            (1..9).each { level ->
+                def refs = (0..8).collect { "k${it}: *m${level - 1}" }.join(', ')
+                yaml << "m${level}: &m${level} {${refs}}\n"
+            }
+            yaml << 'confluence:\n  input:\n    - *m9\n'
+
+        when:
+            def config = read(yaml.toString())
+
+        then:
+            noExceptionThrown()
+            config.confluence.input[0].size() == 9
+
+        and: 'the entry is still its own object, and what it contains is still shared'
+            !(config.confluence.input[0] instanceof ConfigObject)
+            config.confluence.input[0].k0.is(config.m9.k0)
+    }
 }
