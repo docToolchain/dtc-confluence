@@ -2,6 +2,7 @@ package org.docToolchain.configuration;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.io.StringReader;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -44,18 +45,35 @@ public class YamlConfigReader {
     }
 
     ConfigObject read(Reader reader) {
-        Object loaded = newYaml().load(reader);
-        if (loaded == null) {
-            // An empty file is a configuration that says nothing, not an error.
+        String text = readFully(reader);
+        // load() answers null for an empty document and for an explicit null alike. Composing
+        // first tells them apart: no node at all is a file that says nothing, while "null" or "~"
+        // is a document, and one that is not the mapping a configuration has to be.
+        if (newYaml().compose(new StringReader(text)) == null) {
             return new ConfigObject();
         }
+        Object loaded = newYaml().load(text);
         if (!(loaded instanceof Map<?, ?> map)) {
             throw new IllegalArgumentException(
                     "A configuration has to be a mapping at the top level, not a "
-                            + loaded.getClass().getSimpleName().toLowerCase(Locale.ROOT));
+                            + (loaded == null ? "null"
+                                    : loaded.getClass().getSimpleName().toLowerCase(Locale.ROOT)));
         }
         return (ConfigObject) toConfigObject(map,
-                Collections.newSetFromMap(new IdentityHashMap<>()), false);
+                Collections.newSetFromMap(new IdentityHashMap<>()), new IdentityHashMap<>(), false);
+    }
+
+    private static String readFully(Reader reader) {
+        StringBuilder text = new StringBuilder();
+        char[] buffer = new char[8192];
+        try {
+            for (int read = reader.read(buffer); read > -1; read = reader.read(buffer)) {
+                text.append(buffer, 0, read);
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("Cannot read the configuration", e);
+        }
+        return text.toString();
     }
 
     private static Yaml newYaml() {
@@ -75,6 +93,7 @@ public class YamlConfigReader {
      * is refused instead.</p>
      */
     private static Map<String, Object> toConfigObject(Map<?, ?> map, Set<Object> enclosing,
+                                                      Map<Object, Object> converted,
                                                       boolean insideList) {
         // Inside a list, a plain map: that is what ConfigSlurper leaves for an entry of
         // confluence.input, and the publisher asks such an entry for keys it may not have.
@@ -88,7 +107,7 @@ public class YamlConfigReader {
                         "Two keys read as '" + key + "' in the same mapping. YAML tells them apart "
                                 + "by type; a configuration path cannot.");
             }
-            config.put(key, convert(entry.getValue(), enclosing, insideList));
+            config.put(key, convert(entry.getValue(), enclosing, converted, insideList));
         }
         return config;
     }
@@ -103,26 +122,41 @@ public class YamlConfigReader {
      *
      * @param enclosing the containers currently being walked, by identity
      */
-    private static Object convert(Object value, Set<Object> enclosing, boolean insideList) {
+    private static Object convert(Object value, Set<Object> enclosing,
+                                  Map<Object, Object> converted, boolean insideList) {
         if (!(value instanceof Map<?, ?>) && !(value instanceof List<?>)) {
             return value;
         }
-        if (!enclosing.add(value)) {
+        // A node still being walked means the document contains itself. Asked before the
+        // memoisation below, because a node that is not finished cannot be handed out.
+        if (enclosing.contains(value)) {
             throw new IllegalArgumentException(
                     "This configuration refers to itself; an anchor points at a node containing it.");
         }
+        // An alias refers to a node the parser already built, so converting it again would rebuild
+        // the whole subtree. A file can chain that: nine levels of nine references each is 81
+        // aliases - under any sane alias limit - and three billion leaves. Measured before this:
+        // OutOfMemoryError in a second. Converting each node once keeps the shape the parser gave.
+        Object already = converted.get(value);
+        if (already != null) {
+            return already;
+        }
+        enclosing.add(value);
         try {
             if (value instanceof Map<?, ?> map) {
-                return toConfigObject(map, enclosing, insideList);
+                Object result = toConfigObject(map, enclosing, converted, insideList);
+                converted.put(value, result);
+                return result;
             }
             List<?> list = (List<?>) value;
             // A mutable list: publishing appends discovered files to confluence.input when
             // inputHtmlFolder is set, and ConfigSlurper hands out a list that allows it.
-            List<Object> converted = new ArrayList<>(list.size());
+            List<Object> elements = new ArrayList<>(list.size());
             for (Object element : list) {
-                converted.add(convert(element, enclosing, true));
+                elements.add(convert(element, enclosing, converted, true));
             }
-            return converted;
+            converted.put(value, elements);
+            return elements;
         } finally {
             enclosing.remove(value);
         }
