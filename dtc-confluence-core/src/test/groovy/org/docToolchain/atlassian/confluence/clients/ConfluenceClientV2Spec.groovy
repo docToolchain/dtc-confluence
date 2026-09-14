@@ -34,8 +34,9 @@ class ConfluenceClientV2Spec extends ConfluenceClientSpec {
     ConfluenceClient setupConfluenceClientToFetchPagesByAncestorIdKey(ConfigService configService) {
         def mock = Spy(new RestClient(configService))
         JsonSlurper jsonSlurper = new JsonSlurper()
-        mock.doRequestAndFailIfNot20x(_) >> confluenceClientMockResponse
-            >> jsonSlurper.parse(new File("${TestUtils.TEST_RESOURCES_DIR}/asciidoc2confluence/json/apiV2/ancestorId.json"))
+        // No space lookup in front: walking down from an ancestor id never addresses the space,
+        // so the client does not resolve the key for it.
+        mock.doRequestAndFailIfNot20x(_) >> jsonSlurper.parse(new File("${TestUtils.TEST_RESOURCES_DIR}/asciidoc2confluence/json/apiV2/ancestorId.json"))
             >> [results: []]
             >> jsonSlurper.parse(new File("${TestUtils.TEST_RESOURCES_DIR}/asciidoc2confluence/json/apiV2/ancestorId_child.json"))
             >> [results: []]

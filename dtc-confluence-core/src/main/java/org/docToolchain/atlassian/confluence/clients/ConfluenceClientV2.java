@@ -32,11 +32,15 @@ public class ConfluenceClientV2 extends ConfluenceClient {
     /** The attachment comment carries the content hash between two hash marks. */
     private static final String HASH_IN_COMMENT = "(?sm).*#([^#]+)#.*";
 
-    private final String spaceId;
+    private final String spaceKey;
+
+    private String spaceId;
+
+    private boolean spaceResolved;
 
     public ConfluenceClientV2(ConfigService configService) {
         super(configService);
-        this.spaceId = fetchSpaceIdByKey(String.valueOf(configService.getConfigProperty("confluence.spaceKey")));
+        this.spaceKey = String.valueOf(configService.getConfigProperty("confluence.spaceKey"));
     }
 
     /**
@@ -44,10 +48,22 @@ public class ConfluenceClientV2 extends ConfluenceClient {
      */
     public ConfluenceClientV2(ConfigService configService, RestClient restClient) {
         super(configService, restClient);
-        this.spaceId = fetchSpaceIdByKey(String.valueOf(configService.getConfigProperty("confluence.spaceKey")));
+        this.spaceKey = String.valueOf(configService.getConfigProperty("confluence.spaceKey"));
     }
 
+    /**
+     * Resolves the configured space key the first time something needs the id, and not before.
+     *
+     * <p>This used to happen while the client was being built, which made every use of the client
+     * depend on the space - including checking credentials, where a missing or forbidden space
+     * would fail first and the check never ran. A space key that resolves to nothing still yields
+     * {@code null} rather than an error, as it did before.</p>
+     */
     public String getSpaceId() {
+        if (!spaceResolved) {
+            spaceId = fetchSpaceIdByKey(spaceKey);
+            spaceResolved = true;
+        }
         return spaceId;
     }
 
@@ -112,7 +128,7 @@ public class ConfluenceClientV2 extends ConfluenceClient {
         boolean morePages = true;
         while (morePages) {
             Object response = callApiAndFailIfNot20x(new HttpGet(
-                    pagedUri(API_V2_PATH + "/spaces/" + spaceId + "/pages", pageLimit, cursor)));
+                    pagedUri(API_V2_PATH + "/spaces/" + getSpaceId() + "/pages", pageLimit, cursor)));
             List<?> results = listAt(response, "results");
             String next = nextCursor(response);
             if (results.isEmpty() || next == null) {
@@ -181,11 +197,11 @@ public class ConfluenceClientV2 extends ConfluenceClient {
     }
 
     /**
-     * @param spaceKey unused: v2 addresses the space by the id resolved while constructing
+     * @param spaceKey unused: v2 addresses the space by the id resolved from the configured key
      */
     @Override
     protected Object fetchPageIdByName(String name, String spaceKey) {
-        URI uri = uri(API_V2_PATH + "/spaces/" + spaceId + "/pages",
+        URI uri = uri(API_V2_PATH + "/spaces/" + getSpaceId() + "/pages",
                 Map.of("title", name, "status", "current"), List.of("title", "status"));
         return callApiAndReturnOrNull(new HttpGet(uri));
     }
@@ -228,7 +244,7 @@ public class ConfluenceClientV2 extends ConfluenceClient {
                 "content-appearance-draft", Map.of("value", "full-width"),
                 "content-appearance-published", Map.of("value", "full-width"))));
         requestBody.put("status", "current");
-        requestBody.put("spaceId", spaceId);
+        requestBody.put("spaceId", getSpaceId());
         requestBody.put("parentId", parentId == null || parentId.isEmpty() ? "" : parentId);
         requestBody.put("body", Map.of("value", localPage, "representation", "storage"));
         return requestBody;
