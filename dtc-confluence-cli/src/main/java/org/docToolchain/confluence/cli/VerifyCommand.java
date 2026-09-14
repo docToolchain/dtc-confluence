@@ -14,9 +14,16 @@ public class VerifyCommand implements Callable<Integer> {
     @Mixin
     private ConfigurationOptions options;
 
+    private TaskFactory taskFactory = (config, docDir) -> new VerifyConfluenceApiAccessTask(config);
+
+    /** Visible for testing; see {@link TaskFactory}. */
+    void useTaskFactory(TaskFactory taskFactory) {
+        this.taskFactory = taskFactory;
+    }
+
     @Override
     public Integer call() throws Exception {
-        new VerifyConfluenceApiAccessTask(options.load()).execute();
+        taskFactory.create(options.load(), options.docDir()).execute();
         return 0;
     }
 }

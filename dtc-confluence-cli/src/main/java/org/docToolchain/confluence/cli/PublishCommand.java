@@ -2,7 +2,6 @@ package org.docToolchain.confluence.cli;
 
 import java.util.concurrent.Callable;
 
-import groovy.util.ConfigObject;
 import org.docToolchain.tasks.Asciidoc2ConfluenceTask;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
@@ -15,10 +14,16 @@ public class PublishCommand implements Callable<Integer> {
     @Mixin
     private ConfigurationOptions options;
 
+    private TaskFactory taskFactory = Asciidoc2ConfluenceTask::From;
+
+    /** Visible for testing; see {@link TaskFactory}. */
+    void useTaskFactory(TaskFactory taskFactory) {
+        this.taskFactory = taskFactory;
+    }
+
     @Override
     public Integer call() throws Exception {
-        ConfigObject config = options.load();
-        Asciidoc2ConfluenceTask.From(config, options.docDir()).execute();
+        taskFactory.create(options.load(), options.docDir()).execute();
         return 0;
     }
 }
