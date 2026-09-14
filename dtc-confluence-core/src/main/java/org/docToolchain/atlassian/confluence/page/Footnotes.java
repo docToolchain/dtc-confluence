@@ -71,7 +71,7 @@ class Footnotes {
         block.appendElement("hr");
         for (String id : wanted) {
             Element definition = definitions.get(id).clone();
-            dropBacklinksWithoutTarget(definition, pageBody);
+            dropBacklinkWithoutTarget(definition, id, pageBody);
             if (!label.isEmpty()) {
                 // Asciidoctor's own rendering carries the heading of the footnote section above
                 // the list; here the definitions sit at the end of a page that says nothing about
@@ -100,9 +100,12 @@ class Footnotes {
      * to it, so its reference is there by construction. The one exception is the reference that was
      * stripped with a heading, and that one is on no page at all.</p>
      */
-    private static void dropBacklinksWithoutTarget(Element definition, Element pageBody) {
-        for (Element backlink : definition.select("a[href^=#" + REFERENCE_ID_PREFIX + "]")) {
-            String target = backlink.attr("href").substring(1);
+    private static void dropBacklinkWithoutTarget(Element definition, String id, Element pageBody) {
+        // Only this definition's own back-link, matched by number. A footnote may mention another
+        // footnote's reference in its text, and that link is for the transformer to resolve
+        // through the anchor map covering every page.
+        String target = REFERENCE_ID_PREFIX + id.substring(DEFINITION_ID_PREFIX.length());
+        for (Element backlink : definition.select("a[href=#" + target + "]")) {
             if (pageBody.getElementById(target) == null) {
                 backlink.unwrap();
             }

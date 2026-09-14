@@ -277,6 +277,36 @@ class FootnotesSpec extends Specification {
             alpha.body.select('div.footnotes a[href=#_footnoteref_1]').text() == '1'
     }
 
+    def 'a definition mentioning another footnote keeps that link'() {
+        given: """Footnote 1 refers to footnote 2's reference. That target is on another page, and
+                  the transformer resolves it through the anchor map - so it is not this
+                  definition's back-link and must not be cleaned up with it."""
+            def html = """
+                <h1>The Document</h1>
+                <div id="content">
+                  <div class="sect1"><h2 id="alpha">Alpha</h2><div class="sectionbody">
+                    <p>alpha<sup class="footnote"><a id="_footnoteref_1" href="#_footnotedef_1">1</a></sup></p>
+                  </div></div>
+                  <div class="sect1"><h2 id="beta">Beta</h2><div class="sectionbody">
+                    <p>beta<sup class="footnote"><a id="_footnoteref_2" href="#_footnotedef_2">2</a></sup></p>
+                  </div></div>
+                </div>
+                <div id="footnotes"><hr>
+                  <div class="footnote" id="_footnotedef_1"><a href="#_footnoteref_1">1</a>.
+                    See also <a href="#_footnoteref_2">the other one</a>.</div>
+                  <div class="footnote" id="_footnotedef_2"><a href="#_footnoteref_2">2</a>. The other one.</div>
+                </div>
+            """
+
+        when:
+            def tree = new PageTreeBuilder().build(parse(html), '99', 1)
+            def alpha = tree.pages[0]
+
+        then: 'its own back-link is there, and so is the mention of the other'
+            !alpha.body.select('div.footnotes a[href=#_footnoteref_1]').isEmpty()
+            !alpha.body.select('div.footnotes a[href=#_footnoteref_2]').isEmpty()
+    }
+
     def 'a document without footnotes is left untouched'() {
         given:
             def html = '''
