@@ -10,8 +10,9 @@ import picocli.CommandLine.Option;
 /**
  * Deletes every page in a space.
  *
- * <p>The confirmation is a required option, so the command line refuses the call before anything
- * here runs. Nothing else stands between a mistyped space key and an emptied space.</p>
+ * <p>Nothing else stands between a mistyped space key and an emptied space, so the confirmation is
+ * both required and read. Required alone is not enough: picocli accepts
+ * {@code --yes-delete-every-page=false}, which satisfies the requirement while saying no.</p>
  */
 @Command(name = "wipe", description = "Delete every page in the configured space.",
         mixinStandardHelpOptions = true,
@@ -34,6 +35,10 @@ public class WipeCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
+        if (!confirmed) {
+            System.err.println("Refusing to wipe: --yes-delete-every-page was given as false.");
+            return 1;
+        }
         taskFactory.create(options.load(), options.docDir()).execute();
         return 0;
     }

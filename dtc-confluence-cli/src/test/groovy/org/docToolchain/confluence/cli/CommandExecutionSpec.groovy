@@ -89,6 +89,17 @@ class CommandExecutionSpec extends Specification {
             RecordingTask.executed
     }
 
+    def 'wipe with the confirmation set to false deletes nothing'() {
+        when: """required = true only asks that the option was given, and picocli accepts
+                 --yes-delete-every-page=false as having given it."""
+            def exit = run(new WipeCommand(), '--yes-delete-every-page=false')
+
+        then: 'and the configuration is not even read'
+            exit != 0
+            !RecordingTask.executed
+            RecordingTask.seenConfig == null
+    }
+
     def 'wipe without the confirmation deletes nothing'() {
         when:
             def exit = run(new WipeCommand())
