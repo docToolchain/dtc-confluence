@@ -2,8 +2,6 @@ package org.docToolchain.confluence.cli;
 
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.net.URI;
-import java.util.Locale;
 
 import groovy.util.ConfigObject;
 import org.docToolchain.configuration.ConfigBuilder;
@@ -20,9 +18,6 @@ public class ConfigurationOptions {
     private static final String BEARER_TOKEN_VARIABLE = "CONFLUENCE_BEARER_TOKEN";
     private static final String CREDENTIALS_VARIABLE = "CONFLUENCE_CREDENTIALS";
     private static final String API_VARIABLE = "CONFLUENCE_API";
-
-    /** Confluence Cloud is reachable only under this host suffix, and REST v2 only on Cloud. */
-    private static final String CLOUD_HOST_SUFFIX = ".atlassian.net";
 
     @Option(names = {"-c", "--config"}, defaultValue = "docToolchainConfig.groovy",
             description = "Configuration file, relative to the document directory. "
@@ -42,6 +37,10 @@ public class ConfigurationOptions {
      */
     public ConfigObject load() throws FileNotFoundException {
         ConfigObject config = new ConfigBuilder(docDir, configFile).build();
+        // ConfigBuilder records the configuration file's own parent. With -d docs -c sub/x.groovy
+        // that is docs/sub, while everything else here means docs, so paths in the configuration
+        // would resolve against two different roots. --doc-dir wins.
+        config.put("docDir", docDir);
         applyCredentials(config);
         // The override first: the API version is derived from the URL, so it has to be derived
         // from the URL that will actually be used.
@@ -49,49 +48,11 @@ public class ConfigurationOptions {
         if (apiUrl != null && !apiUrl.isEmpty()) {
             nested(config, "confluence").put("api", apiUrl);
         }
-        applyApiVersion(config);
         return config;
     }
 
     public String docDir() {
         return new File(docDir).getPath();
-    }
-
-    /**
-     * Chooses the API version when the configuration does not.
-     *
-     * <p>REST v2 exists in Cloud only; on Server and Data Center it answers 404. Cloud is
-     * recognisable by its host, so the version can be derived rather than configured. docToolchain
-     * defaults this in its Gradle wrapper, which is why the library never needed to - and why any
-     * consumer without that wrapper used to reach a 404 with nothing pointing at the cause.</p>
-     */
-    private static void applyApiVersion(ConfigObject config) {
-        ConfigObject confluence = nested(config, "confluence");
-        if (confluence.get("useV1Api") instanceof Boolean) {
-            return;
-        }
-        boolean cloud = isCloud(String.valueOf(confluence.get("api")));
-        confluence.put("useV1Api", !cloud);
-        System.out.println("confluence.useV1Api is not set; assuming "
-                + (cloud ? "Cloud, using API v2" : "Server or Data Center, using API v1")
-                + " from the API URL.");
-    }
-
-    /**
-     * Recognises Cloud by host, not by substring: {@code https://example.atlassian.net.invalid/}
-     * is not Cloud however much it reads like it, and a host is case insensitive.
-     *
-     * @return whether the URL names a Confluence Cloud instance
-     */
-    private static boolean isCloud(String apiUrl) {
-        try {
-            String host = URI.create(apiUrl).getHost();
-            return host != null && host.toLowerCase(Locale.ROOT).endsWith(CLOUD_HOST_SUFFIX);
-        } catch (IllegalArgumentException notAUri) {
-            // Nothing to read a host from; Server and Data Center is the safer guess, because a
-            // v1 endpoint exists on Cloud too while v2 does not exist anywhere else.
-            return false;
-        }
     }
 
     private static void applyCredentials(ConfigObject config) {
@@ -103,6 +64,9 @@ public class ConfigurationOptions {
         }
         String credentials = System.getenv(CREDENTIALS_VARIABLE);
         if (credentials != null && !credentials.isEmpty()) {
+            // RestClient prefers a bearer token, so one left in the configuration file would
+            // quietly beat the credentials given here.
+            confluence.remove("bearerToken");
             confluence.put("credentials", credentials);
         }
     }

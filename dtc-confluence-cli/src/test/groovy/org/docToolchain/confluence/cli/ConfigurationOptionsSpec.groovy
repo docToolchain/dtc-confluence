@@ -30,74 +30,31 @@ class ConfigurationOptionsSpec extends Specification {
         return options
     }
 
-    def 'a Data Center URL is served by API v1'() {
-        when:
-            def config = optionsFor('https://cwiki.apache.org/confluence').load()
-
-        then: 'v2 exists in Cloud only, and answers 404 on Data Center'
-            config.confluence.useV1Api == true
-    }
-
-    def 'a Cloud URL is served by API v2'() {
-        when:
-            def config = optionsFor('https://example.atlassian.net/wiki').load()
-
-        then:
-            config.confluence.useV1Api == false
-    }
-
-    def 'a configured version is left alone'() {
-        given: 'a Cloud URL that the configuration overrides'
-            docDir.resolve('config.groovy').toFile().text = """
-                confluence = [:]
-                confluence.with {
-                    api = 'https://example.atlassian.net/wiki'
-                    useV1Api = true
-                    input = []
-                }
-            """
-            def options = new ConfigurationOptions()
-            new CommandLine(options).parseArgs('-d', docDir.toString(), '-c', 'config.groovy')
-
-        when:
-            def config = options.load()
-
-        then: 'the URL does not get a say'
-            config.confluence.useV1Api == true
-    }
-
     def 'the api option overrides the configured URL'() {
         when:
             def config = optionsFor('https://configured.example.org',
                 '--api', 'https://given.atlassian.net/wiki').load()
 
-        then:
+        then: 'ConfluenceApiVersion then derives the API version from this one'
             config.confluence.api == 'https://given.atlassian.net/wiki'
-
-        and: 'and the version follows the URL that will actually be used'
-            config.confluence.useV1Api == false
     }
 
-    def 'an override the other way round picks v1'() {
-        when: 'a Cloud URL in the configuration, a Data Center one on the command line'
-            def config = optionsFor('https://example.atlassian.net/wiki',
-                '--api', 'https://cwiki.apache.org/confluence').load()
+    def 'the document directory is the one given, not the configuration file\'s parent'() {
+        given: 'a configuration one level down'
+            docDir.resolve('sub').toFile().mkdirs()
+            docDir.resolve('sub/config.groovy').toFile().text = """
+                confluence = [:]
+                confluence.with { api = 'https://cwiki.apache.org/confluence'; input = [] }
+            """
+            def options = new ConfigurationOptions()
+            new CommandLine(options).parseArgs('-d', docDir.toString(), '-c', 'sub/config.groovy')
 
-        then:
-            config.confluence.useV1Api == true
-    }
+        when:
+            def config = options.load()
 
-    def 'Cloud is recognised by host, not by substring'() {
-        expect:
-            optionsFor(api).load().confluence.useV1Api == v1
-
-        where:
-            api                                      || v1
-            'https://example.atlassian.net'          || false
-            'https://EXAMPLE.ATLASSIAN.NET/wiki'     || false
-            'https://example.atlassian.net.invalid/' || true
-            'https://self.hosted/x?q=.atlassian.net' || true
-            'not a url at all'                       || true
+        then: 'paths in the configuration resolve against one root, the one --doc-dir named'
+            config.docDir == docDir.toString()
+            options.docDir() == docDir.toString()
     }
 
     def 'the doc directory is reported as given'() {
