@@ -548,9 +548,13 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
                 // #342-dierk42: get the keywords from the meta tags
                 def keywords = confluenceService.getKeywords(dom)
 
-                def footnoteLabel = configService.getConfigProperty('confluence.footnoteLabel')
-                def tree = new PageTreeBuilder(
-                    footnoteLabel == null ? PageTreeBuilder.DEFAULT_FOOTNOTE_LABEL : footnoteLabel as String)
+                // Read off the configuration rather than through getConfigProperty, which
+                // mirrors Groovy truth: an empty string answers null there, so a label the author
+                // deliberately emptied would come back as the default. An entry nobody wrote is
+                // an empty ConfigObject, and that is the one that gets the default.
+                def configuredLabel = config.confluence.footnoteLabel
+                def tree = new PageTreeBuilder(configuredLabel instanceof ConfigObject
+                        ? PageTreeBuilder.DEFAULT_FOOTNOTE_LABEL : configuredLabel as String)
                     .build(dom, parentId, confluenceSubpagesForSections)
                 def pages = tree.pages
                 def anchors = tree.anchors

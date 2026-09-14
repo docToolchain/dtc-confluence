@@ -16,6 +16,8 @@ class MinimalConfigurationSpec extends Specification {
 
     private List<String> titles = []
 
+    private List<String> bodies = []
+
     /** A one-pixel PNG as a data URI, which is the path that reaches the image store. */
     private static final String EMBEDDED_IMAGE_DOCUMENT = '''<!DOCTYPE html>
 <html lang=""><head><meta charset="UTF-8"><title>Embedded</title></head><body class="article">
@@ -25,6 +27,11 @@ class MinimalConfigurationSpec extends Specification {
 <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==" alt="Dot">
 </div></div>
 </div></div></div></body></html>'''
+
+    def setup() {
+        titles = []
+        bodies = []
+    }
 
     private Asciidoc2ConfluenceTask taskWithoutPrefixOrSuffix() {
         ConfigObject config = new ConfigObject()
@@ -46,6 +53,7 @@ class MinimalConfigurationSpec extends Specification {
         recorder.createPage(_, _, _, _, _) >> { String title, String spaceKey, Object body,
                                                 String comment, String parentId ->
             titles << title
+            bodies << (body as String)
             return [id: '1000']
         }
         recorder.addLabel(_, _) >> [:]
@@ -69,6 +77,29 @@ class MinimalConfigurationSpec extends Specification {
         cleanup:
             new File("${RESOURCES}/embedded-input.html").delete()
             new File("${RESOURCES}/images").deleteDir()
+    }
+
+    def 'a footnote label that was deliberately emptied stays empty'() {
+        given: """getConfigProperty mirrors Groovy truth, where an empty string is absent - so a
+                 label the author emptied on purpose would come back as the default."""
+            def task = taskWithoutPrefixOrSuffix()
+            task.@config.confluence.footnoteLabel = ''
+
+        when:
+            task.execute()
+
+        then: 'the definition is there, and nothing in front of its number'
+            bodies.join('').contains('A note belonging to the first page.')
+            !bodies.join('').contains('Footnote')
+    }
+
+    def 'a label nobody configured is the default'() {
+        when:
+            taskWithoutPrefixOrSuffix().execute()
+
+        then: """The number is a link by then, so the label and the number are not adjacent
+                 characters - the label sits directly in front of that link."""
+            bodies.join('').contains('Footnote')
     }
 
     def 'a configuration without a page prefix or suffix publishes'() {
