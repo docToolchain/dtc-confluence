@@ -1,6 +1,9 @@
 package org.docToolchain.tasks
 
+import org.docToolchain.atlassian.confluence.clients.ConfluenceApiVersion
 import org.docToolchain.atlassian.confluence.clients.ConfluenceClient
+import org.docToolchain.atlassian.confluence.clients.ConfluenceClientV1
+import org.docToolchain.atlassian.confluence.clients.ConfluenceClientV2
 import org.docToolchain.atlassian.confluence.page.PageTreeBuilder
 import org.docToolchain.atlassian.confluence.page.PageDecorator
 import org.docToolchain.atlassian.confluence.image.EmbeddedImage
@@ -24,8 +27,6 @@ import java.nio.file.Path
 import java.security.MessageDigest
 import static groovy.io.FileType.FILES
 
-import org.docToolchain.atlassian.confluence.clients.ConfluenceClientV1
-import org.docToolchain.atlassian.confluence.clients.ConfluenceClientV2
 import org.docToolchain.atlassian.confluence.ConfluenceService
 
 /**
@@ -76,7 +77,10 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
         this.config = config
         this.docDir = docDir
         confluenceService = new ConfluenceService(configService)
-        confluenceClient = configService.getConfigProperty("confluence.useV1Api") ?
+        // This task descends from DocToolchainTask, not from AbstractConfluenceTask, so it picks
+        // its own client - through the same derivation, so that an unset useV1Api does not send
+        // Data Center to a v2 endpoint that answers 404.
+        confluenceClient = ConfluenceApiVersion.useV1(configService) ?
             new ConfluenceClientV1(configService) :
             new ConfluenceClientV2(configService)
     }

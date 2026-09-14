@@ -94,4 +94,30 @@ class ConfigServiceSpec extends Specification {
             property == Collections.EMPTY_MAP
             noExceptionThrown()
     }
+
+    def 'a raw lookup tells a configured false from an unwritten one'() {
+        given:
+            def config = new ConfigObject()
+            config.confluence = [useV1Api: false, spaceKey: 'SPACE']
+            def service = new ConfigService(config)
+
+        expect: 'Groovy truth calls both of these empty, so the usual lookup cannot tell them apart'
+            service.getConfigProperty('confluence.useV1Api') == null
+            service.getConfigProperty('confluence.absent') == null
+
+        and: 'the raw lookup keeps the value that was written'
+            service.getRawConfigProperty('confluence.useV1Api') == false
+            service.getRawConfigProperty('confluence.absent') == null
+    }
+
+    def 'a raw lookup returns the other falsy values as written too'() {
+        given:
+            def config = new ConfigObject()
+            config.confluence = [rateLimit: 0, pagePrefix: '']
+            def service = new ConfigService(config)
+
+        expect:
+            service.getRawConfigProperty('confluence.rateLimit') == 0
+            service.getRawConfigProperty('confluence.pagePrefix') == ''
+    }
 }

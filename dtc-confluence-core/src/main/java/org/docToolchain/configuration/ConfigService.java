@@ -34,6 +34,33 @@ public class ConfigService {
     }
 
     /**
+     * Reads a value without applying Groovy truth, so that a setting of {@code false} or {@code 0}
+     * is a value rather than an absence.
+     *
+     * <p>{@link #getConfigProperty} cannot tell {@code useV1Api = false} from a {@code useV1Api}
+     * nobody wrote, because Groovy truth calls both of them empty. Everywhere that only asks
+     * "is this switched on?" the difference does not matter; where a default has to be applied
+     * only when nothing was configured, it does.</p>
+     *
+     * @return the value at {@code propertyPath}, or {@code null} if the path resolves to nothing
+     */
+    public Object getRawConfigProperty(String propertyPath) {
+        Object property = config.get(propertyPath);
+        if (isEmptyNode(property)) {
+            property = config.flatten().get(propertyPath);
+        }
+        return isEmptyNode(property) ? null : property;
+    }
+
+    /**
+     * {@link ConfigObject#get} answers a missing key with an empty ConfigObject rather than with
+     * {@code null}, and that is the only shape meaning "nothing is here".
+     */
+    private static boolean isEmptyNode(Object value) {
+        return value == null || (value instanceof ConfigObject nested && nested.isEmpty());
+    }
+
+    /**
      * @return every leaf below {@code propertyPath}, keyed by the remainder of its path, or an
      *         empty map if nothing lives there
      */
