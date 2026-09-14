@@ -93,6 +93,19 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
     }
 
     /**
+     * Whether the author actually wrote this entry.
+     *
+     * <p>Absent takes two shapes. A section built by property assignment answers a missing key
+     * with an empty ConfigObject; one written as "confluence = [:]" with a with block is a plain
+     * map, where a missing key is simply null. A guard that tests only for the first reads the
+     * second as a value that was set - which is how a deprecation check meant to reject an option
+     * came to reject its absence.</p>
+     */
+    private static boolean isConfigured(value) {
+        value != null && !(value instanceof ConfigObject)
+    }
+
+    /**
      * The same trap in the other direction: coercing an empty ConfigObject with 'as List' builds a
      * proxy whose iterator throws UnsupportedOperationException, which surfaces far from the cause.
      *
@@ -502,7 +515,7 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
                 confluenceSpaceKey = input.spaceKey ?: config.confluence.spaceKey
                 def confluenceCreateSubpages = (input.createSubpages != null) ? input.createSubpages : config.confluence.createSubpages
                 def confluenceAllInOnePage = (input.allInOnePage != null) ? input.allInOnePage : config.confluence.allInOnePage
-                if (!(confluenceCreateSubpages instanceof ConfigObject && confluenceAllInOnePage instanceof ConfigObject)) {
+                if (isConfigured(confluenceCreateSubpages) || isConfigured(confluenceAllInOnePage)) {
                     println "ERROR:"
                     println "Deprecated configuration, migrate as follows:"
                     println "allInOnePage = true -> subpagesForSections = 0"
@@ -520,7 +533,7 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
                 //  added
                 confluencePageSuffix = asText(input.pageSuffix ?: config.confluence.pageSuffix)
                 def confluencePreambleTitle = input.preambleTitle ?: config.confluence.preambleTitle
-                if (!(confluencePreambleTitle instanceof ConfigObject)) {
+                if (isConfigured(confluencePreambleTitle)) {
                     println "ERROR:"
                     println "Deprecated configuration, use first level heading in document instead of preambleTitle configuration"
                     throw new RuntimeException("config problem")
@@ -552,8 +565,13 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
                 // mirrors Groovy truth: an empty string answers null there, so a label the author
                 // deliberately emptied would come back as the default. An entry nobody wrote is
                 // an empty ConfigObject, and that is the one that gets the default.
+                // Absent takes two shapes: a ConfigObject where the section was built by
+                // property assignment, and null where it was written as "confluence = [:]" and a
+                // with block - a plain map, where a missing key is simply a miss. Only a string
+                // the author actually wrote counts, and an empty one of those is the opt-out.
                 def configuredLabel = config.confluence.footnoteLabel
-                def tree = new PageTreeBuilder(configuredLabel instanceof ConfigObject
+                def labelIsAbsent = configuredLabel == null || configuredLabel instanceof ConfigObject
+                def tree = new PageTreeBuilder(labelIsAbsent
                         ? PageTreeBuilder.DEFAULT_FOOTNOTE_LABEL : configuredLabel as String)
                     .build(dom, parentId, confluenceSubpagesForSections)
                 def pages = tree.pages

@@ -93,13 +93,27 @@ class MinimalConfigurationSpec extends Specification {
             !bodies.join('').contains('Footnote')
     }
 
-    def 'a label nobody configured is the default'() {
+    def 'a label nobody configured is the default, whichever shape the section has'() {
+        given: """Written as "confluence = [:]" with a with block, the section is a plain map and
+                 a missing key is null; built by property assignment it is a ConfigObject and a
+                 missing key is an empty one. Both mean nobody wrote a label."""
+            def task = taskWithoutPrefixOrSuffix()
+            if (asPlainMap) {
+                task.@config.confluence = [
+                    api: 'https://confluence.example/rest/api/', credentials: 'x',
+                    useV1Api: true, spaceKey: 'SPACE', subpagesForSections: 1,
+                    input: [[file: 'smoke-input.html', ancestorId: '99']]]
+            }
+
         when:
-            taskWithoutPrefixOrSuffix().execute()
+            task.execute()
 
         then: """The number is a link by then, so the label and the number are not adjacent
                  characters - the label sits directly in front of that link."""
             bodies.join('').contains('Footnote')
+
+        where:
+            asPlainMap << [false, true]
     }
 
     def 'a configuration without a page prefix or suffix publishes'() {
@@ -112,5 +126,24 @@ class MinimalConfigurationSpec extends Specification {
 
         and: 'the titles are the headings, with nothing stuck to either end'
             titles == ['docToolchain Confluence Smoke Test', 'First Page', 'Second Page']
+    }
+
+    def 'a deprecated option is still refused when it is actually set'() {
+        given:
+            def task = taskWithoutPrefixOrSuffix()
+            task.@config.confluence[option] = value
+
+        when:
+            task.execute()
+
+        then: 'the guard is about the option being there, not about its absence'
+            def e = thrown(RuntimeException)
+            e.message == 'config problem'
+
+        where:
+            option           | value
+            'allInOnePage'   | true
+            'createSubpages' | false
+            'preambleTitle'  | 'Introduction'
     }
 }
