@@ -225,4 +225,55 @@ class YamlConfigReaderSpec extends Specification {
             config.confluence.export instanceof ConfigObject
             new ConfigService(config).getConfigProperty('confluence.export.api.pageLimit') == 100
     }
+
+    def 'an alias chain does not explode into billions of nodes'() {
+        given: """Nine levels of nine references each: 81 aliases, under any sane alias limit, and
+                  three billion leaves if every alias is rebuilt. Measured before the fix:
+                  OutOfMemoryError in about a second."""
+            def yaml = new StringBuilder('a0: &a0 ["x","x","x","x","x","x","x","x","x"]\n')
+            (1..9).each { level ->
+                yaml << "a${level}: &a${level} [" + (['*a' + (level - 1)] * 9).join(',') + "]\n"
+            }
+
+        when:
+            def config = read(yaml.toString())
+
+        then: 'the parser shares the node an alias refers to, and so does the conversion'
+            noExceptionThrown()
+            config.a9.size() == 9
+    }
+
+    def 'an alias and its anchor are the same object afterwards'() {
+        given:
+            def config = read("""
+                defaults: &defaults
+                  - one
+                  - two
+                first: *defaults
+                second: *defaults
+            """)
+
+        expect: 'which is what keeps a chain of them from multiplying'
+            config.first.is(config.second)
+            config.first == ['one', 'two']
+    }
+
+    def 'an explicit null is not an empty configuration'() {
+        when: 'load() answers null for this and for an empty file alike'
+            read(document)
+
+        then: 'a document that says "nothing" is still a document, and not a mapping'
+            def e = thrown(IllegalArgumentException)
+            e.message.contains('mapping at the top level')
+
+        where:
+            document << ['null\n', '~\n', '--- null\n']
+    }
+
+    def 'a file that truly says nothing is still accepted'() {
+        expect:
+            read('').isEmpty()
+            read('# only a comment\n').isEmpty()
+            read('\n\n').isEmpty()
+    }
 }
