@@ -83,7 +83,7 @@ public class ConfigurationOptions {
     }
 
     /**
-     * @return {@code user:token} as the Basic authorization scheme wants it
+     * @return the Base64 of {@code user:token}, which is what goes behind {@code Basic }
      */
     private static String base64(String credentials) {
         return Base64.getEncoder().encodeToString(credentials.getBytes(StandardCharsets.UTF_8));

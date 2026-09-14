@@ -16,7 +16,9 @@ Usage: ./install.sh [--prefix DIR] [--force]
 USAGE
 }
 
-prefix="${HOME}/.local"
+# Not "${HOME}/.local" directly: set -u aborts on an unset HOME before the options are even read,
+# so an explicit --prefix would fail in an environment that deliberately has none.
+prefix="${HOME:-}/.local"
 force=no
 
 while [ $# -gt 0 ]; do
@@ -36,6 +38,11 @@ while [ $# -gt 0 ]; do
         *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
     esac
 done
+
+if [ -z "${HOME:-}" ] && [ "${prefix}" = "/.local" ]; then
+    echo "install.sh: no HOME to install into; pass --prefix DIR" >&2
+    exit 2
+fi
 
 here=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 [ -f "${here}/lib/dtc-confluence.jar" ] || {
@@ -80,7 +87,7 @@ echo "Installed:"
 echo "  ${launcher}"
 echo "  ${lib_dir}/dtc-confluence.jar"
 
-case ":${PATH}:" in
+case ":${PATH:-}:" in
     *":${bin_dir}:"*) echo "Run it with: dtc-confluence --help" ;;
     *) echo
        echo "${bin_dir} is not on your PATH. Either add it:"
