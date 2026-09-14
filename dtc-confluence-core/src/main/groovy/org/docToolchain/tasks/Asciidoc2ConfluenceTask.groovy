@@ -92,6 +92,19 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
         (value == null || value instanceof ConfigObject) ? '' : value as String
     }
 
+    /**
+     * The same trap in the other direction: coercing an empty ConfigObject with 'as List' builds a
+     * proxy whose iterator throws UnsupportedOperationException, which surfaces far from the cause.
+     *
+     * @return the value as a list, empty where nothing was configured
+     */
+    private static List asList(value) {
+        if (value == null || value instanceof ConfigObject) {
+            return []
+        }
+        return value instanceof List ? value : (value as List)
+    }
+
 
     /**
      *  #342-dierk42
@@ -258,7 +271,7 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
                     def imageData = EmbeddedImage.parse(src)
                     def fileExtension = imageData.fileExtension()
                     fileName = img.attr('alt').replaceAll(/\s+/,"_").concat(".${fileExtension}")
-                    def storedImage = new ImageStore(config.imageDirs as List)
+                    def storedImage = new ImageStore(asList(config.imageDirs))
                         .store(sanitizedBaseUrl, fileName, fileExtension, imageData.content())
                     newUrl = storedImage.filePath()
                     fileName = storedImage.fileName()
