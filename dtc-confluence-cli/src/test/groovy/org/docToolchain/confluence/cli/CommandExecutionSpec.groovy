@@ -128,4 +128,25 @@ class CommandExecutionSpec extends Specification {
             exit != 0
             !RecordingTask.executed
     }
+
+    def 'a configuration written as a map literal reaches the task intact'() {
+        given: """ConfigSlurper leaves this a plain LinkedHashMap. Keeping it that way is what the
+                  publisher needs - a copy into a ConfigObject would lose nothing here, but the
+                  guards for the deprecated options read a missing key differently in each shape."""
+            docDir.resolve('literal.groovy').toFile().text = """
+                confluence = [api: 'https://cwiki.apache.org/confluence',
+                              spaceKey: 'SPACE', pageSuffix: ' (copy)', input: []]
+            """
+
+        when:
+            def command = new PublishCommand()
+            command.useTaskFactory(recording())
+            def exit = new CommandLine(command)
+                .execute('-d', docDir.toString(), '-c', 'literal.groovy')
+
+        then:
+            exit == 0
+            RecordingTask.seenConfig.confluence.spaceKey == 'SPACE'
+            RecordingTask.seenConfig.confluence.pageSuffix == ' (copy)'
+    }
 }

@@ -91,11 +91,11 @@
         <version>${guava.version}</version>
       </dependency>
       <dependency>
-<<<<<<< HEAD
         <groupId>org.yaml</groupId>
         <artifactId>snakeyaml</artifactId>
         <version>${snakeyaml.version}</version>
-=======
+      </dependency>
+      <dependency>
         <groupId>info.picocli</groupId>
         <artifactId>picocli</artifactId>
         <version>${picocli.version}</version>
@@ -104,7 +104,6 @@
         <groupId>org.doctoolchain</groupId>
         <artifactId>dtc-confluence-core</artifactId>
         <version>${project.version}</version>
->>>>>>> 48a5ddd (Add a command line, so publishing needs no build tool)
       </dependency>
       <dependency>
         <groupId>org.spockframework</groupId>
