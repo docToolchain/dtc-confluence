@@ -17,11 +17,19 @@ public class HtmlTransformer {
     private static final String PADDED_LANGUAGE_PARAMETER =
             "(?m)(ac:name=\"language\">)([\\n\\r\\t ]*)([a-z]+)([\\n\\r\\t ]*)(</ac)";
 
-    private final CodeBlockTransformer codeBlockTransformer = new CodeBlockTransformer();
     private final LinkTransformer linkTransformer = new LinkTransformer();
 
+    private CodeBlockTransformer codeBlockTransformer = new CodeBlockTransformer();
     private String jiraServerId;
     private String jiraBaseUrl;
+
+    /**
+     * @param calloutStyle what to do with callout markers, from {@code confluence.callouts}
+     */
+    public HtmlTransformer withCallouts(CalloutStyle calloutStyle) {
+        this.codeBlockTransformer = new CodeBlockTransformer(calloutStyle);
+        return this;
+    }
 
     public HtmlTransformer withJiraIntegration(String jiraBaseUrl) {
         this.jiraBaseUrl = jiraBaseUrl;

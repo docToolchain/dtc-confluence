@@ -10,6 +10,7 @@ import org.docToolchain.atlassian.transformer.AdmonitionTransformer
 import org.docToolchain.atlassian.transformer.CollapsibleTransformer
 import org.docToolchain.atlassian.transformer.OpenApiTransformer
 import org.docToolchain.atlassian.transformer.DescriptionListTransformer
+import org.docToolchain.atlassian.transformer.CalloutStyle
 import org.docToolchain.atlassian.transformer.HtmlTransformer
 import org.docToolchain.atlassian.transformer.MarkTransformer
 import org.docToolchain.atlassian.constants.ConfluenceTags
@@ -341,6 +342,7 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
             .outputSettings(new Document.OutputSettings().syntax(Document.OutputSettings.Syntax.xml).prettyPrint(false))
             .html(bodyString)
         HtmlTransformer transformer = new HtmlTransformer()
+            .withCallouts(CalloutStyle.from(configService.getConfigProperty('confluence.callouts')))
         if(config.jira.api){
             transformer.withJiraIntegration(config.jira.api)
         }
