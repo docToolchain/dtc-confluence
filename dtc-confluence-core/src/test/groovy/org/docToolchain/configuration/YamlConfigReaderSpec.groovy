@@ -236,11 +236,14 @@ class YamlConfigReaderSpec extends Specification {
             }
 
         when:
-            def config = read(yaml.toString())
+            read(yaml.toString())
 
-        then: 'the parser shares the node an alias refers to, and so does the conversion'
-            noExceptionThrown()
-            config.a9.size() == 9
+        then: """Converting it would be cheap - each node once - but reading from it is
+                 not: ConfigService falls back to flatten(), which writes every alias out.
+                 Measured before this limit: converted in 39 ms, and the first dotted lookup
+                 ended in an OutOfMemoryError two seconds later."""
+            def e = thrown(IllegalArgumentException)
+            e.message.contains('expands to more than')
     }
 
     def 'an alias and its anchor are the same object afterwards'() {
@@ -346,11 +349,11 @@ class YamlConfigReaderSpec extends Specification {
             }
 
         when:
-            def config = read(yaml.toString())
+            read(yaml.toString())
 
-        then: 'the mappings are outside any list, so they are shared'
-            noExceptionThrown()
-            config.a9.size() == 9
+        then:
+            def e = thrown(IllegalArgumentException)
+            e.message.contains('expands to more than')
     }
 
     def 'a mapping chain aliased into a list does not explode'() {
@@ -365,14 +368,31 @@ class YamlConfigReaderSpec extends Specification {
             yaml << 'confluence:\n  input:\n    - *m9\n'
 
         when:
-            def config = read(yaml.toString())
+            read(yaml.toString())
+
+        then: 'the same limit, reached through a list entry'
+            def e = thrown(IllegalArgumentException)
+            e.message.contains('expands to more than')
+    }
+
+    def 'a lookup on an accepted configuration stays cheap'() {
+        given: 'the shape a real one has, with an alias sharing a fragment'
+            def config = read("""
+                defaults: &defaults
+                  spaceKey: SPACE
+                confluence:
+                  <<: *defaults
+                  api: https://cwiki.apache.org/confluence
+                  input:
+                    - file: a.html
+            """)
+
+        when: 'a dotted lookup, which is what flattens the tree'
+            def service = new ConfigService(config)
 
         then:
-            noExceptionThrown()
-            config.confluence.input[0].size() == 9
-
-        and: 'the entry is still its own object, and what it contains is still shared'
-            !(config.confluence.input[0] instanceof ConfigObject)
-            config.confluence.input[0].k0.is(config.m9.k0)
+            service.getConfigProperty('confluence.api') == 'https://cwiki.apache.org/confluence'
+            service.getConfigProperty('confluence.spaceKey') == 'SPACE'
+            service.getConfigProperty('confluence.nothing.here') == null
     }
 }
