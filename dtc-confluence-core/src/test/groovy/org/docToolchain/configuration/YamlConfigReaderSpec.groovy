@@ -276,4 +276,80 @@ class YamlConfigReaderSpec extends Specification {
             read('# only a comment\n').isEmpty()
             read('\n\n').isEmpty()
     }
+
+    def 'two aliases of one input entry are two entries'() {
+        given: """The publisher writes back into an input entry - it canonicalises input.file in
+                  place. Sharing one object would let the second entry see the first one's path
+                  and publish the same page twice."""
+            def config = read("""
+                confluence:
+                  input:
+                    - &doc
+                      file: a.html
+                    - *doc
+            """)
+
+        when: 'the publisher rewrites the path of the first entry'
+            config.confluence.input[0].file = 'canonical/a.html'
+
+        then: 'the second is untouched, as two separate files must be'
+            !config.confluence.input[0].is(config.confluence.input[1])
+            config.confluence.input[1].file == 'a.html'
+    }
+
+    def 'a mapping aliased into a list is a plain map there'() {
+        given: """Anchored outside a list it becomes a ConfigObject; used as an input entry it has
+                  to be a plain map, or a key it does not have answers with an empty ConfigObject
+                  instead of null - and the publisher reads that as "set per input"."""
+            def config = read("""
+                defaults: &d
+                  file: x.html
+                confluence:
+                  subpagesForSections: 0
+                  input:
+                    - *d
+            """)
+            def entry = config.confluence.input[0]
+
+        expect:
+            config.defaults instanceof ConfigObject
+            !(entry instanceof ConfigObject)
+
+        and: 'so the global setting is what applies'
+            entry.subpagesForSections == null
+            (entry.subpagesForSections != null ? entry.subpagesForSections
+                : config.confluence.subpagesForSections) == 0
+    }
+
+    def 'a mapping used both inside and outside a list gets both shapes'() {
+        given:
+            def config = read("""
+                shared: &s
+                  file: a.html
+                confluence:
+                  input:
+                    - *s
+            """)
+
+        expect: 'the first use must not decide the second'
+            config.shared instanceof ConfigObject
+            !(config.confluence.input[0] instanceof ConfigObject)
+            config.confluence.input[0].file == 'a.html'
+    }
+
+    def 'an alias chain built from mappings does not explode either'() {
+        given: 'the same shape as the list bomb, with a mapping at every level'
+            def yaml = new StringBuilder('a0: &a0 {k: v}\n')
+            (1..9).each { level ->
+                def refs = (1..9).collect { "k${it}: *a${level - 1}" }.join(', ')
+                yaml << "a${level}: &a${level} {${refs}}\n"
+            }
+
+        when:
+            def config = read(yaml.toString())
+
+        then: 'the mappings are outside any list, so they are shared'
+            noExceptionThrown()
+            config.a9.size() == 9
+    }
 }
