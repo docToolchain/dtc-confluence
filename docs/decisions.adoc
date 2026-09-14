@@ -242,3 +242,12 @@ The driver is therefore to be rewritten onto the existing client rather than mov
 
 That is a rewrite, not a move, so it does not share the safety of the converter port: there the closures became methods with the behaviour untouched, and the characterisation tests mean something.
 Here the tests have to be written against what the driver produces - the pages, attachments and space maps the converter expects - before the fetching underneath them changes.
+== An explicit `false` is not the same as an unset value
+
+`ConfigService.getConfigProperty` mirrors Groovy truth, which the original implementation relied on: an empty map, an empty string, a zero and a `false` all answer `null`.
+
+Everywhere the question is only "is this switched on?" that is harmless.
+It stops being harmless where a default is applied only when nothing was configured - `confluence.useV1Api = false` then reads as "nobody said", and the derived value silently overrides what the author wrote.
+
+`getRawConfigProperty` answers without applying Groovy truth, and is what such a decision has to use.
+The distinction is worth keeping in mind for the typed configuration: it disappears there, which is one more reason to want it.

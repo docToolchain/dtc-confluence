@@ -50,10 +50,12 @@ if [ "${force}" = no ]; then
     done
 fi
 
-# Nothing outside the prefix may be written. Copying onto a symlink writes through it, so a
-# symlinked destination is refused rather than followed - --force replaces an installation, it
-# does not overrule where the files land.
-for path in "${bin_dir}" "${lib_dir}" "${launcher}" "${lib_dir}/dtc-confluence.jar"; do
+# Nothing outside the prefix may be written. Copying onto a symlink writes through it, and so does
+# mkdir -p through a symlinked parent, so every path below the prefix is refused if it is one.
+# The prefix itself is not checked: the caller named it, and following their own symlink is what
+# they asked for. --force replaces an installation; it does not overrule where the files land.
+for path in "${prefix}/lib" "${bin_dir}" "${lib_dir}" "${launcher}" \
+            "${lib_dir}/dtc-confluence.jar"; do
     if [ -L "${path}" ]; then
         echo "install.sh: ${path} is a symlink; refusing to write through it" >&2
         exit 1
