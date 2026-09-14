@@ -95,4 +95,39 @@ class ConfluenceConverterSpec extends Specification {
         expect:
             !convert('<table><tr><td colspan="1">a</td></tr></table>').contains('colspan="1"')
     }
+
+    def 'a link within the export becomes a local path'() {
+        given:
+            def pages = ['1': [title: 'A Page', filename: 'A_Page', adocFilename: 'A_Page'],
+                         '2': [title: 'Another', filename: 'Another', adocFilename: 'Another']]
+            def storage = '<a href="/spaces/SPACE/pages/2/Another">there</a>'
+
+        when:
+            def html = converter.fixBody('1', storage, NO_USERS, pages, NO_ATTACHMENTS, SPACE)[0] as String
+
+        then:
+            html.contains('Another.html')
+    }
+
+    def 'a link to a page outside the export keeps its URL'() {
+        given: """Exporting a subtree, a link may point at a page of the same space that is not
+                  part of it. Rewriting that to a local path yields ".../.html" - a link to
+                  nothing, where the original URL still works."""
+            def storage = '<a href="/spaces/SPACE/pages/999/Elsewhere">elsewhere</a>'
+
+        when:
+            def html = converter.fixBody('1', storage, NO_USERS, PAGES, NO_ATTACHMENTS, SPACE)[0] as String
+
+        then:
+            html.contains('/spaces/SPACE/pages/999/Elsewhere')
+            !html.contains('/.html')
+    }
+
+    def 'the child includes are written where AsciiDoc can see them'() {
+        expect: """Indented by four spaces they would be a literal block, and every child page
+                   would silently drop out of the export."""
+            def source = new File('src/main/groovy/org/docToolchain/atlassian/confluence/export/ConfluenceConverter.groovy')
+            source.readLines().any { it == 'ifdef::includeChildren[]' }
+            source.readLines().any { it == ':jbake-status: published' }
+    }
 }

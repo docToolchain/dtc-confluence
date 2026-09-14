@@ -190,11 +190,18 @@ class ConfluenceConverter {
                     println "WARNING: can't rewrite links between different spaces (source: $space.key, target: $targetSpace)"
                 } else {
                     def targetPage = regexp[0][2]
-                    def targetFilename = (pages[targetPage]?.filename) ?: ''
-                    def folderStructureTarget = getFolderStructure(pages, targetPage).join("/")
-                    def folderStructureSource = getFolderStructure(pages, pageId)
-                    def targetLink = "../" * folderStructureSource.size() + folderStructureTarget + "/" + targetFilename + ".html"
-                    element.attr('href', targetLink)
+                    def targetFilename = pages[targetPage]?.filename
+                    if (!targetFilename) {
+                        // Exporting a subtree: a link may point at a page of the same space that
+                        // is not part of it. Rewriting that to a local path would produce
+                        // ".../.html", a link to nothing - the working URL is the better answer.
+                        println "WARNING: link target ${targetPage} is not part of this export, leaving the URL as it is"
+                    } else {
+                        def folderStructureTarget = getFolderStructure(pages, targetPage).join("/")
+                        def folderStructureSource = getFolderStructure(pages, pageId)
+                        def targetLink = "../" * folderStructureSource.size() + folderStructureTarget + "/" + targetFilename + ".html"
+                        element.attr('href', targetLink)
+                    }
                 }
             }
         }
@@ -409,12 +416,12 @@ class ConfluenceConverter {
                                 filepath = "../" * getFolderStructure(pages, pageId).size() + filepath
                                 if (filename.toLowerCase().endsWith('.pdf')) {
                                     element.before("""
-    <div>
-    ++++%%CRLF%%
-    &lt;iframe name="${filename.replaceAll(":", "_")}" allowfullscreen frameborder="0" src='${filepath}/${(version ? version + "_" : "1_") + (filename.replaceAll(":", "_"))}' width='100%' height='${height}' >&lt;/iframe>%%CRLF%%
-    ++++%%CRLF%%
-    </div>
-    """)
+<div>
+++++%%CRLF%%
+&lt;iframe name="${filename.replaceAll(":", "_")}" allowfullscreen frameborder="0" src='${filepath}/${(version ? version + "_" : "1_") + (filename.replaceAll(":", "_"))}' width='100%' height='${height}' >&lt;/iframe>%%CRLF%%
+++++%%CRLF%%
+</div>
+""")
                                 } else if (filename[-4..-1].toLowerCase() in ['.jpg', '.png']) {
                                     element.before("<img src='${filepath}/${(version ? version + "_" : "1_") + (filename.replaceAll(":", "_"))}'  />")
                                 } else {
@@ -431,19 +438,19 @@ class ConfluenceConverter {
                                 def userkey = element.select("ri|user").attr("ri:userkey")
                                 if (users[userkey]) {
                                     element.before("""
-    User:: ${users[userkey].name}%%CRLF%%
-    // ${users[userkey].atlassianAccountId}%%CRLF%%
-    """)
+User:: ${users[userkey].name}%%CRLF%%
+// ${users[userkey].atlassianAccountId}%%CRLF%%
+""")
                                     element.remove()
                                 }
                                 break
                             case 'lucidchart':
                                 def documentId = element.select("ac|parameter[ac:name=documentId]").text()
                                 def lucidInfos = """
-    // lucidChart
-    // localId: ${element.attr("ac:local-id")}
-    // macroId: ${element.attr("ac:macro-id")}
-    """
+// lucidChart
+// localId: ${element.attr("ac:local-id")}
+// macroId: ${element.attr("ac:macro-id")}
+"""
                                 element.select("ac|parameter").each { parameter ->
                                     def pname = parameter.attr("ac:name")
                                     def pvalue = parameter.text()
@@ -452,28 +459,28 @@ class ConfluenceConverter {
                                 def chart = ""
                                 if (lucidChartsIframe) {
                                     chart = """
-    ++++%%CRLF%%
-    &lt;iframe allowfullscreen frameborder="0" style="width:640px; height:480px" src="https://lucid.app/documents/embedded/${documentId}" >&lt;/iframe>%%CRLF%%
-    ++++%%CRLF%%
-    """
+++++%%CRLF%%
+&lt;iframe allowfullscreen frameborder="0" style="width:640px; height:480px" src="https://lucid.app/documents/embedded/${documentId}" >&lt;/iframe>%%CRLF%%
+++++%%CRLF%%
+"""
                                 } else {
                                     def folderStructure = getFolderStructure(pages, pageId)
                                     chart = """
-    %%CRLF%%
-    image::${folderStructure.join("/")}/${documentId}.png[]%%CRLF%%
-    %%CRLF%%
-    """
+%%CRLF%%
+image::${folderStructure.join("/")}/${documentId}.png[]%%CRLF%%
+%%CRLF%%
+"""
                                     lucidInfoFile.append("""\
-    images/${folderStructure.join("/")}/${documentId}.png
-    """.toString())
+images/${folderStructure.join("/")}/${documentId}.png
+""".toString())
                                 }
                                 element.before("""
-        <div class="lucidchart-wrapper">
-    ${lucidInfos.replaceAll("\n", "%%CRLF%%")}
-        $chart
-        https://lucid.app/lucidchart/${documentId}/edit[edit lucidchart]
-        </div>
-        """)
+    <div class="lucidchart-wrapper">
+${lucidInfos.replaceAll("\n", "%%CRLF%%")}
+    $chart
+    https://lucid.app/lucidchart/${documentId}/edit[edit lucidchart]
+    </div>
+    """)
                                 element.remove()
                                 break
                             case 'toc':
@@ -562,13 +569,13 @@ class ConfluenceConverter {
                                 def language = element.select("ac|parameter[ac:name=language]").text()
                                 def code = element.select("ac|plain-text-body").text()
                                 element.html("""
-        <div class="code-wrapper">
-        [source, $language]%%CRLF%%
-        ----%%CRLF%%
-        ${code.replaceAll("\n", "%%CRLF%%")}%%CRLF%%
-        ----%%CRLF%%
-        </div>
-        """)
+    <div class="code-wrapper">
+    [source, $language]%%CRLF%%
+    ----%%CRLF%%
+    ${code.replaceAll("\n", "%%CRLF%%")}%%CRLF%%
+    ----%%CRLF%%
+    </div>
+    """)
                                 element.unwrap()
                                 break
                             default:
@@ -664,31 +671,31 @@ class ConfluenceConverter {
             // No leading whitespace in the template — AsciiDoc treats 4+ spaces
             // as a literal/code block, which would swallow the ifdef and includes.
             childIncludes = """
-    ifdef::includeChildren[]
-    ${weightedChildren.sort { a, b -> naturalKey(a.include) <=> naturalKey(b.include) }.collect { it.include }.join("\n")}
-    endif::includeChildren[]
-    """
+ifdef::includeChildren[]
+${weightedChildren.sort { a, b -> naturalKey(a.include) <=> naturalKey(b.include) }.collect { it.include }.join("\n")}
+endif::includeChildren[]
+"""
         }
         println deepFilename
         def fileHeader = """
-    :jbake-menu: ${adocFolderStructure.size() > 0 ? adocFolderStructure[0] : '-'}
-    :jbake-deep-menu: ${adocFolderStructure.join("/")}
-    :jbake-status: published
-    :jbake-type: page_custom_menu
-    :jbake-order: ${metaData.position ?: '0'}
-    :jbake-root: ${"../" * (adocFolderStructure.size())}
-    :filename: ${adocFilename.toString()}.adoc
-    :filepath: ${folderStructure.join("/")}
-    include::{jbake-root}_config.adoc[]
-    ifdef::show-microsite-menu[]
-    include::{jbake-root}_menu.adoc[]
-    ++++
-    <!-- endtoc -->
-    ++++
-    endif::show-microsite-menu[]
-    ifndef::imagesdir[:imagesdir: {jbake-root}images]
+:jbake-menu: ${adocFolderStructure.size() > 0 ? adocFolderStructure[0] : '-'}
+:jbake-deep-menu: ${adocFolderStructure.join("/")}
+:jbake-status: published
+:jbake-type: page_custom_menu
+:jbake-order: ${metaData.position ?: '0'}
+:jbake-root: ${"../" * (adocFolderStructure.size())}
+:filename: ${adocFilename.toString()}.adoc
+:filepath: ${folderStructure.join("/")}
+include::{jbake-root}_config.adoc[]
+ifdef::show-microsite-menu[]
+include::{jbake-root}_menu.adoc[]
+++++
+<!-- endtoc -->
+++++
+endif::show-microsite-menu[]
+ifndef::imagesdir[:imagesdir: {jbake-root}images]
 
-    """
+"""
         def adoc = outFileAdoc.text
                 .replaceAll("%%CRLF%% *", "\n")
                 .replaceAll("(=+) \\[discrete\\]", "[discrete]\n\$1 ")
