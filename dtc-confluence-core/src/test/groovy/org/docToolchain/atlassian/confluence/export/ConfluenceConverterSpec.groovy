@@ -130,4 +130,20 @@ class ConfluenceConverterSpec extends Specification {
             source.readLines().any { it == 'ifdef::includeChildren[]' }
             source.readLines().any { it == ':jbake-status: published' }
     }
+
+    def 'a link uses the name the page is written under'() {
+        given: """writePage writes under adocFilename, which a stripPagePrefixRegex makes differ
+                  from filename. A link built from the original name points at a file that was
+                  never written."""
+            def pages = ['1': [title: 'A', filename: 'PROJ_A', adocFilename: 'A'],
+                         '2': [title: 'B', filename: 'PROJ_B', adocFilename: 'B']]
+            def storage = '<a href="/spaces/SPACE/pages/2/B">there</a>'
+
+        when:
+            def html = converter.fixBody('1', storage, NO_USERS, pages, NO_ATTACHMENTS, SPACE)[0] as String
+
+        then:
+            html.contains('B.html')
+            !html.contains('PROJ_B.html')
+    }
 }

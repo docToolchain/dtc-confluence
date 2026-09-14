@@ -197,9 +197,13 @@ class ConfluenceConverter {
                         // ".../.html", a link to nothing - the working URL is the better answer.
                         println "WARNING: link target ${targetPage} is not part of this export, leaving the URL as it is"
                     } else {
-                        def folderStructureTarget = getFolderStructure(pages, targetPage).join("/")
-                        def folderStructureSource = getFolderStructure(pages, pageId)
-                        def targetLink = "../" * folderStructureSource.size() + folderStructureTarget + "/" + targetFilename + ".html"
+                        // The adoc variants, because those are the names writePage writes under.
+                        // With a stripPagePrefixRegex set the two differ, and a link built from
+                        // the original names points at a file that was never written.
+                        def adocTarget = pages[targetPage]?.adocFilename ?: targetFilename
+                        def folderStructureTarget = getAdocFolderStructure(pages, targetPage).join("/")
+                        def folderStructureSource = getAdocFolderStructure(pages, pageId)
+                        def targetLink = "../" * folderStructureSource.size() + folderStructureTarget + "/" + adocTarget + ".html"
                         element.attr('href', targetLink)
                     }
                 }
