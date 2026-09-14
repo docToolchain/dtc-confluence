@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.Locale;
 
 import groovy.util.ConfigObject;
 import groovy.util.ConfigSlurper;
@@ -40,10 +41,20 @@ public class ConfigBuilder {
         if (!configFile.exists()) {
             throw new FileNotFoundException("Config file does not exist: " + canonicalPath());
         }
-        ConfigObject config = configSlurper.parse(readConfigFile());
+        ConfigObject config = isYaml(configFile.getName())
+                ? new YamlConfigReader().read(configFile.toPath())
+                : configSlurper.parse(readConfigFile());
         config.put("docDir", configFile.getParent());
         config.put("mainConfigFile", configFile.getName());
         return config;
+    }
+
+    /**
+     * @return whether this name asks to be read as YAML rather than as Groovy
+     */
+    public static boolean isYaml(String fileName) {
+        String lower = fileName.toLowerCase(Locale.ROOT);
+        return lower.endsWith(".yaml") || lower.endsWith(".yml");
     }
 
     private String readConfigFile() {
