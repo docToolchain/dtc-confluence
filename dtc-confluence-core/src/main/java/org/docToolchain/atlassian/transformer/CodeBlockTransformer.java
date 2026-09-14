@@ -236,11 +236,25 @@ class CodeBlockTransformer {
             return false;
         }
         for (Element marker : code.select(CALLOUT_SELECTOR)) {
-            if (textBefore(marker).stripTrailing().endsWith("\\")) {
+            if (continuesLine(textBefore(marker))) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * @return whether this text ends in a line continuation
+     */
+    private static boolean continuesLine(String text) {
+        // Only an odd run continues the line: two backslashes are an escaped backslash, and a
+        // marker behind those is an ordinary comment that the shell ignores.
+        String trimmed = text.stripTrailing();
+        int backslashes = 0;
+        for (int i = trimmed.length() - 1; i >= 0 && trimmed.charAt(i) == '\\'; i--) {
+            backslashes++;
+        }
+        return backslashes % 2 == 1;
     }
 
     private static String textBefore(Element marker) {

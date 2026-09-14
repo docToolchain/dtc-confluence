@@ -187,7 +187,11 @@ The code stays copyable character for character; the markers no longer sit besid
 
 `comment` stays the default, because changing what existing users publish should be their decision rather than an upgrade's.
 
-A warning is worth emitting regardless of the setting: a callout directly after a line continuation in a shell-like language produces a block that cannot be run, and the author is unlikely to notice from the source.
+A callout directly after a line continuation in a shell-like language produces a block that cannot be run, and the author is unlikely to notice from the source.
+Such a block is published with a collapsed copy without markers underneath it whatever the setting says, and warned about - with one exception: `linenumbers` already leaves the block runnable, so there is nothing there to warn about.
+
+Only an odd run of trailing backslashes counts.
+Two of them are an escaped backslash and the line ends there, so a marker behind those is an ordinary comment.
 
 All three need the same building block as the collapsible fix above, which is a reason to do that one first.
 
