@@ -251,3 +251,22 @@ It stops being harmless where a default is applied only when nothing was configu
 
 `getRawConfigProperty` answers without applying Groovy truth, and is what such a decision has to use.
 The distinction is worth keeping in mind for the typed configuration: it disappears there, which is one more reason to want it.
+
+== Page titles are unique per space, so keying by title is safe on Data Center
+
+`fetchPagesBySpaceKey` collects pages into a map keyed by the lower-cased title, and `wipe` deletes what that map holds.
+A review raised this as a defect: if Confluence only guaranteed titles to be unique among siblings, two pages could collide in that map and one would never be deleted, while a command that promises to delete every page said it had.
+
+Measured against Confluence Data Center 9.2.21, creating a page whose title already exists elsewhere in the space:
+
+[source]
+----
+HTTP 400 - A page already exists with the title "..." in the space
+----
+
+The parent does not matter; the space does.
+The premise is therefore wrong for Data Center, and the title-keyed map holds every page.
+
+Two things follow.
+It is the reason page identity in this project is the title at all - and the reason renaming a heading creates a page rather than moving one.
+And it is a Data Center guarantee: Cloud has not been verified here, and if it ever allows two pages of one title, the wipe path needs a listing keyed by id rather than a rewrite of the one publishing shares.
