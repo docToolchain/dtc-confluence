@@ -228,4 +228,25 @@ class CalloutStyleSpec extends Specification {
             result.contains('<ac:structured-macro ac:name="expand">')
             result.count('ac:name="code"') == 2
     }
+
+    def 'only an odd run of backslashes continues the line'() {
+        given: 'two backslashes are an escaped backslash, and the line ends there'
+            def code = "echo \\\\ ${calloutOf(1)}"
+
+        when:
+            def result = transform('bash', code, CalloutStyle.COMMENT)
+
+        then: 'so the comment style is perfectly valid and nothing is added'
+            result.contains('# (1)')
+            !result.contains('ac:name="expand"')
+    }
+
+    def 'three backslashes do continue it'() {
+        when:
+            def result = transform('bash',
+                "echo \\\\\\ ${calloutOf(1)}", CalloutStyle.COMMENT)
+
+        then:
+            result.contains('ac:name="expand"')
+    }
 }
