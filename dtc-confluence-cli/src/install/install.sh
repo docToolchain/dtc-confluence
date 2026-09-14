@@ -21,7 +21,10 @@ force=no
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --prefix) [ $# -ge 2 ] || { echo "--prefix needs a directory" >&2; exit 2; }
+        --prefix) [ $# -ge 2 ] && [ -n "$2" ] || {
+                      # An empty prefix would make the destinations /bin and /lib, which is
+                      # outside anything the caller asked for - and --force would remove them.
+                      echo "--prefix needs a directory" >&2; exit 2; }
                   prefix="$2"; shift 2 ;;
         --force)  force=yes; shift ;;
         -h|--help) usage; exit 0 ;;
