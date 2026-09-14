@@ -28,6 +28,12 @@ public abstract class ConfluenceClient {
     private static final String API_V1_IDENTIFIER = "/rest/api";
     private static final String API_V2_IDENTIFIER = "/api/v2";
 
+    /** The path a REST v1 call hangs under, context included. */
+    public static String apiV1PathFor(ConfigService configService) {
+        return constructApiContext(
+                String.valueOf(configService.getConfigProperty("confluence.api"))) + API_V1_IDENTIFIER;
+    }
+
     protected final String API_V1_PATH;
     protected final String API_V2_PATH;
     protected final String editorVersion;
