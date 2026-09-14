@@ -7,7 +7,8 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
 
 @Command(name = "verify", description = "Check that the API URL and the credentials work.",
-        mixinStandardHelpOptions = true)
+        mixinStandardHelpOptions = true,
+        versionProvider = ManifestVersionProvider.class)
 public class VerifyCommand implements Callable<Integer> {
 
     @Mixin

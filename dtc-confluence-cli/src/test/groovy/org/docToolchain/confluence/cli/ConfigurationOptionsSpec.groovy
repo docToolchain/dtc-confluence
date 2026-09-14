@@ -123,4 +123,69 @@ class ConfigurationOptionsSpec extends Specification {
         then: 'the section is created rather than the load failing'
             config.confluence.api == 'https://given.example.org'
     }
+
+    def 'credentials arrive encoded for the Basic scheme'() {
+        given: """RestClient puts confluence.credentials straight behind "Basic ", so a plain
+                  user:token would be rejected. docToolchain's Gradle wrapper encodes it before
+                  storing it, which is why the library itself never had to."""
+            def config = new ConfigObject()
+
+        when:
+            ConfigurationOptions.applyCredentials(config, null, 'jane:s3cr3t')
+
+        then:
+            config.confluence.credentials == 'amFuZTpzM2NyM3Q='
+            new String(config.confluence.credentials.decodeBase64()) == 'jane:s3cr3t'
+    }
+
+    def 'a bearer token is taken as it stands'() {
+        given:
+            def config = new ConfigObject()
+
+        when:
+            ConfigurationOptions.applyCredentials(config, 'a-token', null)
+
+        then: 'a token is sent behind "Bearer ", where nothing is encoded'
+            config.confluence.bearerToken == 'a-token'
+    }
+
+    def 'a bearer token wins over credentials'() {
+        given:
+            def config = new ConfigObject()
+
+        when:
+            ConfigurationOptions.applyCredentials(config, 'a-token', 'jane:s3cr3t')
+
+        then:
+            config.confluence.bearerToken == 'a-token'
+            config.confluence.credentials == [:]
+    }
+
+    def 'credentials clear a token left in the configuration file'() {
+        given: 'RestClient prefers a token, so one left behind would beat what was given here'
+            def config = new ConfigObject()
+            config.confluence = [bearerToken: 'stale-token', spaceKey: 'SPACE']
+
+        when:
+            ConfigurationOptions.applyCredentials(config, null, 'jane:s3cr3t')
+
+        then:
+            config.confluence.bearerToken == null
+            config.confluence.credentials == 'amFuZTpzM2NyM3Q='
+
+        and: 'the rest of the section is untouched'
+            config.confluence.spaceKey == 'SPACE'
+    }
+
+    def 'neither given leaves the configuration file to speak for itself'() {
+        given:
+            def config = new ConfigObject()
+            config.confluence = [bearerToken: 'from-the-file']
+
+        when:
+            ConfigurationOptions.applyCredentials(config, null, '')
+
+        then:
+            config.confluence.bearerToken == 'from-the-file'
+    }
 }

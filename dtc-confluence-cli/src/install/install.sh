@@ -39,12 +39,23 @@ bin_dir="${prefix}/bin"
 lib_dir="${prefix}/lib/dtc-confluence"
 launcher="${bin_dir}/dtc-confluence"
 
-if [ -e "${launcher}" ] && [ "${force}" = no ]; then
+if { [ -e "${launcher}" ] || [ -L "${launcher}" ]; } && [ "${force}" = no ]; then
     echo "install.sh: ${launcher} exists already; pass --force to replace it" >&2
     exit 1
 fi
 
+# Nothing outside the prefix may be written. Copying onto a symlink writes through it, so a
+# symlinked destination is refused rather than followed - --force replaces an installation, it
+# does not overrule where the files land.
+for path in "${bin_dir}" "${lib_dir}" "${launcher}" "${lib_dir}/dtc-confluence.jar"; do
+    if [ -L "${path}" ]; then
+        echo "install.sh: ${path} is a symlink; refusing to write through it" >&2
+        exit 1
+    fi
+done
+
 mkdir -p "${bin_dir}" "${lib_dir}"
+rm -f "${lib_dir}/dtc-confluence.jar" "${launcher}"
 cp "${here}/lib/dtc-confluence.jar" "${lib_dir}/dtc-confluence.jar"
 cp "${here}/bin/dtc-confluence" "${launcher}"
 chmod 755 "${launcher}"

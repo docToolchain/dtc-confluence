@@ -2,6 +2,8 @@ package org.docToolchain.confluence.cli;
 
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Map;
 
 import groovy.util.ConfigObject;
@@ -57,19 +59,34 @@ public class ConfigurationOptions {
     }
 
     private static void applyCredentials(ConfigObject config) {
+        applyCredentials(config,
+                System.getenv(BEARER_TOKEN_VARIABLE), System.getenv(CREDENTIALS_VARIABLE));
+    }
+
+    /**
+     * Takes the two values rather than reading the environment itself, so that what they do to a
+     * configuration can be stated in a test.
+     */
+    static void applyCredentials(ConfigObject config, String bearerToken, String credentials) {
         Map<Object, Object> confluence = nested(config, "confluence");
-        String bearerToken = System.getenv(BEARER_TOKEN_VARIABLE);
         if (bearerToken != null && !bearerToken.isEmpty()) {
             confluence.put("bearerToken", bearerToken);
             return;
         }
-        String credentials = System.getenv(CREDENTIALS_VARIABLE);
         if (credentials != null && !credentials.isEmpty()) {
-            // RestClient prefers a bearer token, so one left in the configuration file would
-            // quietly beat the credentials given here.
+            // RestClient puts confluence.credentials straight behind "Basic ", so it has to arrive
+            // encoded. docToolchain's Gradle wrapper encodes it before storing it, which is why the
+            // library never had to; here the environment holds the plain "user:token".
             confluence.remove("bearerToken");
-            confluence.put("credentials", credentials);
+            confluence.put("credentials", base64(credentials));
         }
+    }
+
+    /**
+     * @return {@code user:token} as the Basic authorization scheme wants it
+     */
+    private static String base64(String credentials) {
+        return Base64.getEncoder().encodeToString(credentials.getBytes(StandardCharsets.UTF_8));
     }
 
     /**

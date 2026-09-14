@@ -12,7 +12,8 @@ import picocli.CommandLine.Option;
  * between a mistyped space key and a wiped space.
  */
 @Command(name = "wipe", description = "Delete every page in the configured space.",
-        mixinStandardHelpOptions = true)
+        mixinStandardHelpOptions = true,
+        versionProvider = ManifestVersionProvider.class)
 public class WipeCommand implements Callable<Integer> {
 
     @Mixin

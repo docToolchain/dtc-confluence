@@ -49,4 +49,12 @@ class ConfluenceCliSpec extends Specification {
         expect:
             run().contains('Usage: dtc-confluence')
     }
+
+    def 'every subcommand reports the version too'() {
+        expect: 'picocli does not hand the root provider down, so each one names it'
+            run(command, '--version').startsWith('dtc-confluence ')
+
+        where:
+            command << ['publish', 'verify', 'wipe']
+    }
 }

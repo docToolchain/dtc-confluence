@@ -8,7 +8,8 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
 
 @Command(name = "publish", description = "Publish the configured HTML files to Confluence.",
-        mixinStandardHelpOptions = true)
+        mixinStandardHelpOptions = true,
+        versionProvider = ManifestVersionProvider.class)
 public class PublishCommand implements Callable<Integer> {
 
     @Mixin
