@@ -82,6 +82,16 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
 
     // helper functions
 
+    /**
+     * An entry nobody configured is an empty ConfigObject rather than null, and 'as String' would
+     * turn that into the literal '[:]'. A prefix nobody wrote is no prefix.
+     *
+     * @return the value as text, empty where nothing was configured
+     */
+    private static String asText(value) {
+        (value == null || value instanceof ConfigObject) ? '' : value as String
+    }
+
 
     /**
      *  #342-dierk42
@@ -493,9 +503,9 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
                     confluenceSubpagesForSections = 1
                 }
                 //  hard to read in case of using :sectnums: -> so we add a suffix
-                confluencePagePrefix = input.pagePrefix ?: config.confluence.pagePrefix
+                confluencePagePrefix = asText(input.pagePrefix ?: config.confluence.pagePrefix)
                 //  added
-                confluencePageSuffix = input.pageSuffix ?: config.confluence.pageSuffix
+                confluencePageSuffix = asText(input.pageSuffix ?: config.confluence.pageSuffix)
                 def confluencePreambleTitle = input.preambleTitle ?: config.confluence.preambleTitle
                 if (!(confluencePreambleTitle instanceof ConfigObject)) {
                     println "ERROR:"
