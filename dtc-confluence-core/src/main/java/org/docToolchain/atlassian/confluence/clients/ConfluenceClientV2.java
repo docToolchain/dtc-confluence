@@ -24,8 +24,10 @@ import org.docToolchain.configuration.ConfigService;
 /**
  * Speaks the Confluence REST API v2, which exists in Cloud only.
  *
- * <p>v2 addresses a space by id rather than by key, so the key is resolved once while the client is
- * being built. Labels and attachments have no v2 equivalent and go through v1 paths.</p>
+ * <p>v2 addresses a space by id rather than by key. The configured key is resolved to one the
+ * first time a call needs it, and only then: most calls address a page, and a client is also built
+ * to check credentials, where a space problem must not fail first. Labels and attachments have no
+ * v2 equivalent and go through v1 paths.</p>
  */
 public class ConfluenceClientV2 extends ConfluenceClient {
 
@@ -58,6 +60,10 @@ public class ConfluenceClientV2 extends ConfluenceClient {
      * depend on the space - including checking credentials, where a missing or forbidden space
      * would fail first and the check never ran. A space key that resolves to nothing still yields
      * {@code null} rather than an error, as it did before.</p>
+     *
+     * <p>Four calls need it: listing a space's pages, finding a page by name, and creating or
+     * updating a page - the last two because they share one request body builder, which names the
+     * space.</p>
      */
     public String getSpaceId() {
         if (!spaceResolved) {
