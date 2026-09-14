@@ -177,9 +177,10 @@ That is a property of the shell, not of Confluence, and no amount of escaping fi
 
 Three handlings, to be selected in the configuration rather than argued about:
 
-`comment`:: What happens today. The marker becomes a comment in the code: `+// (1)+`.
+`comment`:: The default. The marker becomes a comment in the code: `+# (1)+` in a shell, `+// (1)+` in Java.
 Keeps the marker beside its line, at the cost of copyability.
-Its comment character is currently `+//+` regardless of language, which is wrong for shell, XML, YAML, properties and SQL.
+The comment character follows the language - `+#+` for shell, Python, YAML and Perl, `+--+` for SQL and AppleScript, `+<!-- -->+` for XML, `+/* */+` for CSS.
+docToolchain wrote `+//+` into every one of them, and a marker the language does not ignore defeats its own purpose.
 `expand`:: The annotated block is published as it is, and a second copy without markers follows it inside a collapsed `expand` macro.
 Nothing is lost, at the cost of every affected block appearing twice.
 `linenumbers`:: The markers are left out of the code entirely and the macro is given `linenumbers=true`, so the callout list can refer to line numbers.
