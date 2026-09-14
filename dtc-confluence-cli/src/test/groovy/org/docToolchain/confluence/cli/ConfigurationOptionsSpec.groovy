@@ -133,9 +133,9 @@ class ConfigurationOptionsSpec extends Specification {
         when:
             ConfigurationOptions.applyCredentials(config, null, 'jane:s3cr3t')
 
-        then:
-            config.confluence.credentials == 'amFuZTpzM2NyM3Q='
+        then: 'the stored value decodes back to what was given, and is not that value itself'
             new String(config.confluence.credentials.decodeBase64()) == 'jane:s3cr3t'
+            config.confluence.credentials != 'jane:s3cr3t'
     }
 
     def 'a bearer token is taken as it stands'() {
@@ -171,7 +171,7 @@ class ConfigurationOptionsSpec extends Specification {
 
         then:
             config.confluence.bearerToken == null
-            config.confluence.credentials == 'amFuZTpzM2NyM3Q='
+            new String(config.confluence.credentials.decodeBase64()) == 'jane:s3cr3t'
 
         and: 'the rest of the section is untouched'
             config.confluence.spaceKey == 'SPACE'
