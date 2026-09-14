@@ -191,6 +191,32 @@ class FootnotesSpec extends Specification {
             !alpha.body.select('div.footnotes a[href=#_footnoteref_1]').isEmpty()
     }
 
+    def 'a cross-reference inside a footnote is left for the link transformer'() {
+        given: 'the note carries a link to an anchor that lives on another page'
+            def html = """
+                <h1>The Document</h1>
+                <div id="content">
+                  <div class="sect1"><h2 id="alpha">Alpha</h2><div class="sectionbody">
+                    <p>alpha body<sup class="footnote"><a id="_footnoteref_1" href="#_footnotedef_1">1</a></sup></p>
+                  </div></div>
+                  <div class="sect1"><h2 id="beta">Beta</h2><div class="sectionbody"><p>beta body</p></div></div>
+                </div>
+                <div id="footnotes"><hr>
+                  <div class="footnote" id="_footnotedef_1"><a href="#_footnoteref_1">1</a>.
+                    See <a href="#beta">Beta</a> for the rest.</div>
+                </div>
+            """
+
+        when:
+            def tree = new PageTreeBuilder().build(parse(html), '99', 1)
+            def alpha = tree.pages[0]
+
+        then: """Only the generated back-link is cleaned up. This one points at another page, which
+                 the transformer resolves through the anchor map covering all of them."""
+            !alpha.body.select('div.footnotes a[href=#beta]').isEmpty()
+            tree.pageAnchors['beta'] == 'Beta'
+    }
+
     def 'a document without footnotes is left untouched'() {
         given:
             def html = '''
