@@ -193,4 +193,36 @@ class YamlConfigReaderSpec extends Specification {
             config.confluence['1'] == 'first'
             config.confluence.two == 'second'
     }
+
+    def 'an entry of a list is a plain map, as ConfigSlurper leaves it'() {
+        given: """The publisher asks an input entry for keys it may not have. A ConfigObject
+                  answers those with an empty ConfigObject rather than null, which reads as
+                  "configured" and overrides the global setting with nothing."""
+            def config = read("""
+                confluence:
+                  subpagesForSections: 0
+                  input:
+                    - file: build/html5/one.html
+            """)
+            def entry = config.confluence.input[0]
+
+        expect:
+            !(entry instanceof ConfigObject)
+            entry instanceof Map
+
+        and: 'a key it does not have is absent, not an empty ConfigObject'
+            entry.subpagesForSections == null
+            (entry.subpagesForSections != null ? entry.subpagesForSections
+                : config.confluence.subpagesForSections) == 0
+    }
+
+    def 'a mapping that is not inside a list is still a ConfigObject'() {
+        given:
+            def config = read('confluence:\n  export:\n    api:\n      pageLimit: 100\n')
+
+        expect: 'because a dotted lookup goes through ConfigObject.flatten'
+            config.confluence instanceof ConfigObject
+            config.confluence.export instanceof ConfigObject
+            new ConfigService(config).getConfigProperty('confluence.export.api.pageLimit') == 100
+    }
 }
