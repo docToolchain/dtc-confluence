@@ -2,8 +2,14 @@ package org.docToolchain.configuration
 
 import org.docToolchain.util.TestUtils
 import spock.lang.Specification
+import spock.lang.TempDir
+
+import java.nio.file.Path
 
 class ConfigBuilderSpec extends Specification {
+
+    @TempDir
+    Path dir
 
     def "test config builder"() {
         String MAIN_CONFIG_FILE = "configBuilderSpec.groovy"
@@ -95,5 +101,51 @@ class ConfigBuilderSpec extends Specification {
         then: 'the failure names the file rather than surfacing a bare IOException'
             def e = thrown(UncheckedIOException)
             e.message.contains(MAIN_CONFIG_FILE)
+    }
+
+    def 'a .yaml file is read as YAML'() {
+        given:
+            dir.resolve('config.yaml').toFile().text = """
+                confluence:
+                  api: https://cwiki.apache.org/confluence
+                  spaceKey: SPACE
+            """
+
+        when:
+            def config = new ConfigBuilder(dir.toString(), 'config.yaml').build()
+
+        then:
+            config.confluence.api == 'https://cwiki.apache.org/confluence'
+
+        and: 'and is recorded as the file that was read'
+            config.mainConfigFile == 'config.yaml'
+    }
+
+    def 'a .groovy file is still read as Groovy'() {
+        given:
+            dir.resolve('config.groovy').toFile().text = """
+                confluence = [:]
+                confluence.with { api = 'https://cwiki.apache.org/confluence' }
+            """
+
+        when:
+            def config = new ConfigBuilder(dir.toString(), 'config.groovy').build()
+
+        then:
+            config.confluence.api == 'https://cwiki.apache.org/confluence'
+    }
+
+    def 'the format follows the extension, whatever its case'() {
+        expect:
+            ConfigBuilder.isYaml(name) == yaml
+
+        where:
+            name                      || yaml
+            'config.yaml'             || true
+            'config.yml'              || true
+            '.dtc-confluence.YAML'    || true
+            'docToolchainConfig.groovy' || false
+            'Config.groovy'           || false
+            'config'                  || false
     }
 }
