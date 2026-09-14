@@ -127,6 +127,17 @@ class CollapsibleTransformerSpec extends Specification {
             body.text().contains('b')
     }
 
+    def 'a summary that says nothing falls back to the default title'() {
+        expect: 'an expand macro with an empty title would be a bar with no label'
+            def body = bodyOf("<details>${summary}<p>a</p></details>")
+            new CollapsibleTransformer().transformCollapsibles(body)
+            body.html().contains('<ac:parameter ac:name="title">Details</ac:parameter>')
+
+        where:
+            summary << ['', '<summary></summary>', '<summary>   </summary>',
+                        '<summary>\n</summary>']
+    }
+
     def 'a document without collapsible blocks is untouched'() {
         given:
             def body = bodyOf('<p>ordinary</p>')

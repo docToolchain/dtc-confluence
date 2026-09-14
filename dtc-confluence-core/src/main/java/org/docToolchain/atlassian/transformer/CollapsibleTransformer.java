@@ -27,8 +27,13 @@ public class CollapsibleTransformer {
         for (int i = collapsibles.size() - 1; i >= 0; i--) {
             Element details = collapsibles.get(i);
             Element summary = details.selectFirst("summary");
-            String title = summary == null ? DEFAULT_TITLE : summary.text();
+            String title = DEFAULT_TITLE;
             if (summary != null) {
+                // A summary can be present and say nothing. An expand macro with an empty title
+                // is a bar with no label, so the default stands in for that too.
+                if (!summary.text().isBlank()) {
+                    title = summary.text();
+                }
                 summary.remove();
             }
 
