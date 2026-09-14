@@ -57,13 +57,14 @@ class CodeBlockTransformer {
                 escapeNestedCdata(code);
             }
             boolean hadCallouts = !code.select(CALLOUT_SELECTOR).isEmpty();
-            String plainCopy = hadCallouts && calloutStyle == CalloutStyle.EXPAND
+            CalloutStyle style = styleFor(code, language, hadCallouts);
+            String plainCopy = hadCallouts && style == CalloutStyle.EXPAND
                     ? withoutCallouts(code)
                     : null;
-            stripHighlightingMarkup(code, language);
+            stripHighlightingMarkup(code, language, style);
             Element pre = code.parent();
             code.before("<ac:parameter ac:name=\"language\">" + language + "</ac:parameter>");
-            if (hadCallouts && calloutStyle == CalloutStyle.LINENUMBERS) {
+            if (hadCallouts && style == CalloutStyle.LINENUMBERS) {
                 code.before("<ac:parameter ac:name=\"linenumbers\">true</ac:parameter>");
             }
             pre.wrap("<ac:structured-macro ac:name=\"code\"></ac:structured-macro>");
@@ -105,12 +106,11 @@ class CodeBlockTransformer {
      * wraps a callout marker in {@code i.conum > b}. What becomes of that marker is the configured
      * style's business.
      */
-    private void stripHighlightingMarkup(Element code, String language) {
+    private void stripHighlightingMarkup(Element code, String language, CalloutStyle style) {
         code.select("span[class]").forEach(Element::unwrap);
         // Only linenumbers takes the markers out of the block itself; expand keeps them here and
         // adds a copy without them underneath.
-        if (calloutStyle != CalloutStyle.LINENUMBERS) {
-            warnAboutLineContinuations(code, language);
+        if (style != CalloutStyle.LINENUMBERS) {
             String opening = CommentSyntax.opening(language);
             String closing = CommentSyntax.closing(language);
             for (Element marker : code.select(CALLOUT_SELECTOR)) {
@@ -194,23 +194,39 @@ class CodeBlockTransformer {
     }
 
     /**
-     * A shell continues a line with a trailing backslash, and that backslash has to be the last
-     * character on the line - so a comment after it breaks the command rather than being ignored.
-     * Nothing can be done about it here; the author is the one who can decide.
+     * Chooses the style for one block, which is usually the configured one.
+     *
+     * <p>The exception is a callout following a line continuation in a shell: the backslash has to
+     * be the last character on the line, so any comment after it breaks the command rather than
+     * being ignored. Such a block cannot be published as comments and stay runnable, so it gets a
+     * copy without markers underneath whatever the configuration says. The author asked for
+     * comments; they still get them, plus something that can be pasted.</p>
      */
-    private static void warnAboutLineContinuations(Element code, String language) {
+    private CalloutStyle styleFor(Element code, String language, boolean hadCallouts) {
+        if (!hadCallouts || calloutStyle != CalloutStyle.COMMENT
+                || !followsLineContinuation(code, language)) {
+            return calloutStyle;
+        }
+        System.out.println(">>> INFO: a callout follows a line continuation in a " + language
+                + " block, which no comment character survives. Publishing a copy without markers "
+                + "underneath it; set confluence.callouts = 'linenumbers' to leave them out "
+                + "entirely.");
+        return CalloutStyle.EXPAND;
+    }
+
+    /**
+     * @return whether any callout in this block sits behind a line continuation
+     */
+    private static boolean followsLineContinuation(Element code, String language) {
         if (!CommentSyntax.brokenByLineContinuation(language)) {
-            return;
+            return false;
         }
         for (Element marker : code.select(CALLOUT_SELECTOR)) {
-            String before = textBefore(marker);
-            if (before.stripTrailing().endsWith("\\")) {
-                System.out.println(">>> WARN: a callout follows a line continuation in a "
-                        + language + " block. As a comment it breaks the command; consider "
-                        + "confluence.callouts = 'linenumbers' or 'expand'.");
-                return;
+            if (textBefore(marker).stripTrailing().endsWith("\\")) {
+                return true;
             }
         }
+        return false;
     }
 
     private static String textBefore(Element marker) {

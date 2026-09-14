@@ -138,4 +138,53 @@ class CalloutStyleSpec extends Specification {
         where:
             style << CalloutStyle.values()
     }
+
+    def 'a shell continuation gets a copyable copy even under comment'() {
+        given: """The AsciiDoc convention writes \\#<1> so the marker is a shell comment, but
+                  Asciidoctor strips that # while rendering - the HTML carries the bare marker, and
+                  a backslash followed by a space escapes the space instead of continuing the line.
+                  No comment character can save the block, so a copy without markers is added."""
+            def code = "./build verify \\ ${calloutOf(1)}\n  --offline \\ ${calloutOf(2)}"
+
+        when:
+            def result = transform('bash', code, CalloutStyle.COMMENT)
+
+        then: 'the block as written, with its markers'
+            result.contains('./build verify \\ # (1)')
+
+        and: 'and a folded copy that can be pasted'
+            result.contains('<ac:structured-macro ac:name="expand">')
+            result.count('ac:name="code"') == 2
+            def copy = result.split('ac:name="expand"')[1]
+            copy.contains('./build verify \\')
+            !copy.contains('(1)')
+    }
+
+    def 'a shell block whose callouts are not behind a continuation is left as comments'() {
+        when:
+            def result = transform('bash', "echo one ${calloutOf(1)}", CalloutStyle.COMMENT)
+
+        then: 'nothing is wrong with that block, so nothing is added'
+            result.contains('echo one # (1)')
+            !result.contains('ac:name="expand"')
+    }
+
+    def 'a continuation in a language that has no such thing changes nothing'() {
+        when: 'a backslash in Java is an escape, not a continuation'
+            def result = transform('java', "String s = \"a\\\\\" ${calloutOf(1)}",
+                CalloutStyle.COMMENT)
+
+        then:
+            !result.contains('ac:name="expand"')
+    }
+
+    def 'linenumbers is left alone by the continuation rule'() {
+        when: 'it already produces a block that can be pasted'
+            def result = transform('bash', "./build verify \\ ${calloutOf(1)}",
+                CalloutStyle.LINENUMBERS)
+
+        then:
+            !result.contains('ac:name="expand"')
+            result.contains('<ac:parameter ac:name="linenumbers">true</ac:parameter>')
+    }
 }
