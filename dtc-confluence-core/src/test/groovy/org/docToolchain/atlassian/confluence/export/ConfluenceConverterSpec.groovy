@@ -21,13 +21,11 @@ class ConfluenceConverterSpec extends Specification {
     private static final Map PAGES = ['1': [title: 'A Page', filename: 'A_Page', adocFilename: 'A_Page']]
 
     private String convert(String storage) {
-        def result = converter.fixBody('1', storage, NO_USERS, PAGES, NO_ATTACHMENTS, SPACE)
-        return result[0] as String
+        return converter.fixBody('1', storage, NO_USERS, PAGES, NO_ATTACHMENTS, SPACE).html()
     }
 
     private List unknownTagsIn(String storage) {
-        def result = converter.fixBody('1', storage, NO_USERS, PAGES, NO_ATTACHMENTS, SPACE)
-        return result[1] as List
+        return converter.fixBody('1', storage, NO_USERS, PAGES, NO_ATTACHMENTS, SPACE).unknownTags()
     }
 
     def 'a code macro keeps its code and its language'() {
@@ -103,7 +101,7 @@ class ConfluenceConverterSpec extends Specification {
             def storage = '<a href="/spaces/SPACE/pages/2/Another">there</a>'
 
         when:
-            def html = converter.fixBody('1', storage, NO_USERS, pages, NO_ATTACHMENTS, SPACE)[0] as String
+            def html = converter.fixBody('1', storage, NO_USERS, pages, NO_ATTACHMENTS, SPACE).html()
 
         then:
             html.contains('Another.html')
@@ -116,7 +114,7 @@ class ConfluenceConverterSpec extends Specification {
             def storage = '<a href="/spaces/SPACE/pages/999/Elsewhere">elsewhere</a>'
 
         when:
-            def html = converter.fixBody('1', storage, NO_USERS, PAGES, NO_ATTACHMENTS, SPACE)[0] as String
+            def html = converter.fixBody('1', storage, NO_USERS, PAGES, NO_ATTACHMENTS, SPACE).html()
 
         then:
             html.contains('/spaces/SPACE/pages/999/Elsewhere')
@@ -124,11 +122,40 @@ class ConfluenceConverterSpec extends Specification {
     }
 
     def 'the child includes are written where AsciiDoc can see them'() {
-        expect: """Indented by four spaces they would be a literal block, and every child page
+        given: """Indented by four spaces they would be a literal block, and every child page
                    would silently drop out of the export."""
-            def source = new File('src/main/groovy/org/docToolchain/atlassian/confluence/export/ConfluenceConverter.groovy')
-            source.readLines().any { it == 'ifdef::includeChildren[]' }
-            source.readLines().any { it == ':jbake-status: published' }
+            def pages = ['1': [filename: 'Parent', adocFilename: 'Parent'],
+                         '2': [filename: 'Chapter_10', adocFilename: 'Chapter_10', parentId: '1'],
+                         '3': [filename: 'Chapter_2', adocFilename: 'Chapter_2', parentId: '1']]
+
+        when:
+            def includes = ConfluenceConverter.childIncludes('1', ['2', '3'], pages)
+
+        then: 'no line is indented'
+            includes.readLines().every { it == it.stripLeading() }
+
+        and: 'in the order a reader reads them, not the one the API answers with'
+            includes.readLines().findAll { it.startsWith('include::') } == [
+                'include::Parent/Chapter_2.adoc[levelOffset=+1]',
+                'include::Parent/Chapter_10.adoc[levelOffset=+1]']
+
+        and: 'between the markers that make them optional'
+            includes.readLines().contains('ifdef::includeChildren[]')
+            includes.readLines().contains('endif::includeChildren[]')
+    }
+
+    def 'the file header is written where AsciiDoc can see it'() {
+        given:
+            def page = [title: 'A Page', position: '3']
+
+        when:
+            def header = ConfluenceConverter.fileHeader(page, 'A_Page', ['Root'], ['Root'])
+
+        then: 'an indented attribute line is a literal block, and sets no attribute'
+            header.readLines().every { it == it.stripLeading() }
+            header.readLines().contains(':jbake-status: published')
+            header.readLines().contains(':jbake-order: 3')
+            header.readLines().contains(':filepath: Root')
     }
 
     def 'a link uses the name the page is written under'() {
@@ -140,7 +167,7 @@ class ConfluenceConverterSpec extends Specification {
             def storage = '<a href="/spaces/SPACE/pages/2/B">there</a>'
 
         when:
-            def html = converter.fixBody('1', storage, NO_USERS, pages, NO_ATTACHMENTS, SPACE)[0] as String
+            def html = converter.fixBody('1', storage, NO_USERS, pages, NO_ATTACHMENTS, SPACE).html()
 
         then:
             html.contains('B.html')
@@ -155,7 +182,7 @@ class ConfluenceConverterSpec extends Specification {
                 '<ri:attachment ri:filename="diagram.png" /></ac:image>'
 
         when: "select takes a query string; a list literal would not even dispatch"
-            def html = converter.fixBody('1', storage, NO_USERS, PAGES, attachments, SPACE)[0] as String
+            def html = converter.fixBody('1', storage, NO_USERS, PAGES, attachments, SPACE).html()
 
         then:
             noExceptionThrown()
@@ -206,5 +233,89 @@ class ConfluenceConverterSpec extends Specification {
         then:
             noExceptionThrown()
             html != null
+    }
+
+
+    def 'the menu names every page below the one it starts at'() {
+        given:
+            def pages = [
+                '1': [title: 'Root', filename: 'Root', adocFilename: 'Root', parentId: '0'],
+                '2': [title: 'Chapter 10', filename: 'PROJ_C10', adocFilename: 'C10', parentId: '1'],
+                '3': [title: 'Chapter 2', filename: 'PROJ_C2', adocFilename: 'C2', parentId: '1'],
+                '4': [title: 'A Detail', filename: 'Detail', adocFilename: 'Detail', parentId: '3']]
+
+        when:
+            def menu = converter.createMenu(pages, '1')
+
+        then: """in the order a reader reads them - the API answers children sorted by title, so
+                 "Chapter 10" comes before "Chapter 2" there - one star per folder the page sits
+                 in, and the name it is written under rather than the one Confluence gave it"""
+            menu == '** xref:{jbake-root}Root/C2.adoc[Chapter 2]\n' +
+                    '*** xref:{jbake-root}Root/C2/Detail.adoc[A Detail]\n' +
+                    '** xref:{jbake-root}Root/C10.adoc[Chapter 10]\n'
+    }
+
+    def 'a root page is found by its title'() {
+        expect:
+            converter.findRootIdByTitle(['7': [title: 'The One']], 'The One') == '7'
+    }
+
+    def 'a title no page carries, or two do, is not a root'() {
+        when:
+            converter.findRootIdByTitle(pages, 'Twice')
+
+        then:
+            def e = thrown(IllegalArgumentException)
+            e.message.contains(expected)
+
+        where:
+            pages                                             || expected
+            ['1': [title: 'Other']]                           || 'No page found'
+            ['1': [title: 'Twice'], '2': [title: 'Twice']]    || 'Multiple pages found'
+    }
+
+    def 'an export of a subtree holds that subtree and nothing else'() {
+        given:
+            def pages = [
+                '1': [title: 'Root', parentId: '0'],
+                '2': [title: 'Branch', parentId: '1'],
+                '3': [title: 'Leaf', parentId: '2'],
+                '4': [title: 'Elsewhere', parentId: '1']]
+            def attachments = ['a': [pageId: '3', filename: 'kept.png'],
+                               'b': [pageId: '4', filename: 'dropped.png']]
+
+        when:
+            def subtree = converter.filterToSubtree(pages, attachments, '2')
+
+        then:
+            subtree.pages().keySet() == ['2', '3'] as Set
+            subtree.attachments().keySet() == ['a'] as Set
+
+        and: 'the root of the subtree is a root, not a page in the middle of a tree'
+            subtree.pages()['2'].parentId == 0
+    }
+
+    def 'a subtree of a page that is not in the export is not an export'() {
+        when:
+            converter.filterToSubtree(['1': [title: 'Root']], [:], '99')
+
+        then:
+            thrown(IllegalArgumentException)
+    }
+
+    def 'an attached file is referred to by the name it was written under'() {
+        given: """The name comes from Confluence, and the file was written with its separators and
+                  spaces replaced. A reference that keeps them points at a file that is not there."""
+            def attachments = ['a': [pageId: '1', filename: 'my report.pdf', version: '2']]
+            def storage = '<ac:structured-macro ac:name="view-file">' +
+                '<ri:attachment ri:filename="my report.pdf" ri:version-at-save="2"/>' +
+                '</ac:structured-macro>'
+
+        when:
+            def html = converter.fixBody('1', storage, NO_USERS, PAGES, attachments, SPACE).html()
+
+        then:
+            html.contains("2_my_report.pdf")
+            !html.contains("2_my report.pdf")
     }
 }
