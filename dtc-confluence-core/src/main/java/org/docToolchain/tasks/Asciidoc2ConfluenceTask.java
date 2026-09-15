@@ -56,10 +56,8 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
 
     private ConfluenceClient confluenceClient;
     private String baseUrl;
-    private Map<?, ?> allPages;
-
-    /** The space named by the current input, which decides whether the page listing still fits. */
-    private Object spaceKeyInput;
+    /** The pages of a space, as they were listed for the first input that needed them. */
+    private final Map<String, Map<?, ?>> allPagesBySpace = new LinkedHashMap<>();
 
     private String confluenceSpaceKey;
     private String confluencePagePrefix = "";
@@ -109,7 +107,6 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
 
     private void publish(Map<?, ?> input, String file) {
         PublishSettings settings = PublishSettings.of(input, confluenceSection());
-        spaceKeyInput = input.get("spaceKey");
         confluenceSpaceKey = settings.spaceKey();
         confluencePagePrefix = settings.pagePrefix();
         confluencePageSuffix = settings.pageSuffix();
@@ -167,16 +164,21 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
         return inputs;
     }
 
-    private List<Map<?, ?>> inputsFromFolder() {
+    /** Visible to its test: what a configured folder turns into is worth stating on its own. */
+    List<Map<?, ?>> inputsFromFolder() {
         Object folder = configService.getConfigProperty("confluence.inputHtmlFolder");
         if (folder == null) {
             return List.of();
         }
         System.out.println("Starting processing files in folder: " + folder);
         List<Map<?, ?>> found = new ArrayList<>();
-        try (Stream<Path> files = Files.walk(Path.of(docDir, String.valueOf(folder)))) {
-            files.filter(Files::isRegularFile).forEach(file ->
-                    found.add(Map.of("file", folder + file.getFileName().toString())));
+        Path root = Path.of(docDir, String.valueOf(folder));
+        try (Stream<Path> files = Files.walk(root)) {
+            // Relative to the folder that was walked, and composed as a path: a folder named
+            // without a trailing slash would otherwise run into the file name, and two pages of
+            // the same name in different subfolders would become one.
+            files.filter(Files::isRegularFile).forEach(file -> found.add(Map.of("file",
+                    Path.of(String.valueOf(folder)).resolve(root.relativize(file)).toString())));
         } catch (IOException e) {
             throw new UncheckedIOException("Cannot read " + folder, e);
         }
@@ -299,14 +301,16 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
     /**
      * Lists the pages the document may already have, keyed by lower-cased title.
      *
-     * <p>Kept between pages of one run, because a document of forty sections would otherwise ask
-     * for the same listing forty times. It is dropped when an input names its own space, since the
-     * listing then describes somewhere else.</p>
+     * <p>Kept between the pages of one run, because a document of forty sections would otherwise
+     * ask for the same listing forty times. Kept per space: an input that names its own space is
+     * asking about somewhere else, and must neither be answered from another space's listing nor
+     * throw that listing away.</p>
      */
     private Map<?, ?> retrieveAllPages(String spaceKey) {
-        if (allPages != null && spaceKeyInput == null) {
+        Map<?, ?> listed = allPagesBySpace.get(spaceKey);
+        if (listed != null) {
             System.out.println("allPages already retrieved");
-            return allPages;
+            return listed;
         }
         List<String> ancestorIds = new ArrayList<>();
         boolean wholeSpace = false;
@@ -322,10 +326,11 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
         System.out.println(".");
 
         int pageLimit = pageLimit();
-        allPages = wholeSpace
+        Map<?, ?> allPages = wholeSpace
                 ? confluenceClient.fetchPagesBySpaceKey(spaceKey, pageLimit)
                 : confluenceClient.fetchPagesByAncestorId(ancestorIds, pageLimit);
         System.out.println(allPages.size() + " pages retrieved");
+        allPagesBySpace.put(spaceKey, allPages);
         return allPages;
     }
 

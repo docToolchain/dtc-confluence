@@ -9,6 +9,7 @@ import java.util.List;
 import org.docToolchain.atlassian.confluence.image.EmbeddedImage;
 import org.docToolchain.atlassian.confluence.image.ImageStore;
 import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Entities;
 
 /**
  * Turns the images of a document into what Confluence understands.
@@ -79,8 +80,12 @@ public class ImageTransformer {
         }
         url = decode(url);
         System.out.println("    image: " + url);
+        // Escaped, because the fragment is parsed again: a quote in the name - the data-URI
+        // branch takes it from the alt text - would close the attribute and cut the name short,
+        // leaving the page pointing at an attachment nobody uploads.
         image.after("<ac:image ac:align=\"" + alignment + "\" ac:width=\"" + width
-                + "\"><ri:attachment ri:filename=\"" + fileName + "\"/></ac:image>");
+                + "\"><ri:attachment ri:filename=\"" + Entities.escape(fileName)
+                + "\"/></ac:image>");
         return new Upload(url, fileName, "automatically uploaded");
     }
 

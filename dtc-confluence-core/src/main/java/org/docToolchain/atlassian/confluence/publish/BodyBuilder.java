@@ -17,6 +17,7 @@ import org.docToolchain.atlassian.transformer.OpenApiTransformer;
 import org.docToolchain.configuration.ConfigService;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Entities;
 
 /**
  * Turns the HTML of one page into Confluence storage format.
@@ -113,10 +114,13 @@ public class BodyBuilder {
             uploads.add(new Upload(decode(directory + source), fileName,
                     "automatically uploaded non-image attachment by docToolchain"));
             String text = link.html();
+            // Escaped, because the fragment is parsed again: a quote in the name would close
+            // the attribute and cut the name short.
+            String named = Entities.escape(fileName);
             link.after("<ac:structured-macro ac:name=\"view-file\" ac:schema-version=\"1\">"
-                    + "<ac:parameter ac:name=\"name\"><ri:attachment ri:filename=\"" + fileName
+                    + "<ac:parameter ac:name=\"name\"><ri:attachment ri:filename=\"" + named
                     + "\"/></ac:parameter></ac:structured-macro>");
-            link.after("<ac:link><ri:attachment ri:filename=\"" + fileName + "\"/>"
+            link.after("<ac:link><ri:attachment ri:filename=\"" + named + "\"/>"
                     + "<ac:plain-text-link-body> <![CDATA[\"" + text + "\"]]>"
                     + "</ac:plain-text-link-body></ac:link>");
             link.remove();

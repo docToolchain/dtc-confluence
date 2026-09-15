@@ -8,8 +8,9 @@ import org.docToolchain.atlassian.confluence.page.PageTreeBuilder;
 /**
  * What one entry of {@code confluence.input} decides, with the global settings folded in.
  *
- * <p>Every value may be given per input or once for all of them, and "not given" arrives in two
- * shapes. A section built by property assignment answers a missing key with an <em>empty
+ * <p>Most values may be given per input or once for all of them. Two are read from one place
+ * only, as they were before this moved out of Groovy: {@code footnoteLabel} from the global
+ * section, {@code ancestorName} from the input. "Not given" arrives in two shapes. A section built by property assignment answers a missing key with an <em>empty
  * ConfigObject</em>; one written as {@code confluence = [:]} with a with block is a plain map,
  * where a missing key is simply {@code null}. Reading one shape and not the other is how a
  * deprecation guard came to reject the absence of the option it was meant to reject, and how a
