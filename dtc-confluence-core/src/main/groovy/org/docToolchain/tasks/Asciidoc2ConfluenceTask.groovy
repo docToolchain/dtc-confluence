@@ -5,8 +5,7 @@ import org.docToolchain.atlassian.confluence.clients.ConfluenceClient
 import org.docToolchain.atlassian.confluence.clients.ConfluenceClientV1
 import org.docToolchain.atlassian.confluence.clients.ConfluenceClientV2
 import org.docToolchain.atlassian.confluence.page.PageTreeBuilder
-import org.docToolchain.atlassian.confluence.publish.ImageTransformer
-import org.docToolchain.atlassian.confluence.publish.Upload
+import org.docToolchain.atlassian.confluence.publish.BodyBuilder
 import org.docToolchain.atlassian.confluence.publish.PublishSettings
 import org.docToolchain.atlassian.confluence.page.PageDecorator
 import org.docToolchain.atlassian.confluence.image.EmbeddedImage
@@ -234,84 +233,12 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
 
 
     /**
-     * modify local page in order to match the internal confluence storage representation a bit better
-     * definition lists are not displayed by confluence, so turn them into tables
-     * body can be of type Element or Elements
+     * @return the page in Confluence storage format, and the files it refers to
      */
     def parseBody(body, anchors, pageAnchors) {
-        def uploads = []
-        new OpenApiTransformer(configService.getConfigProperty('confluence.useOpenapiMacro'))
-            .transformOpenApi(body)
-
-        body.select('div.paragraph').unwrap()
-        body.select('div.ulist').unwrap()
-        //body.select('div.sect3').unwrap()
-        new AdmonitionTransformer().transformAdmonitions(body)
-        new CollapsibleTransformer().transformCollapsibles(body)
-        //special for the arc42-template
-        body.select('div.arc42help').select('.content')
-            .wrap('<ac:structured-macro ac:name="expand"></ac:structured-macro>')
-            .wrap('<ac:rich-text-body></ac:rich-text-body>')
-            .wrap('<ac:structured-macro ac:name="info"></ac:structured-macro>')
-            .before('<ac:parameter ac:name="title">arc42</ac:parameter>')
-            .wrap('<ac:rich-text-body><p></p></ac:rich-text-body>')
-        body.select('div.arc42help').unwrap()
-        body.select('div.title').wrap("<strong></strong>").before("<br />").wrap("<div></div>")
-        body.select('div.listingblock').wrap("<p></p>").unwrap()
-        new File("tmp/images/.").mkdirs()
-
-        uploads.addAll(new ImageTransformer(baseUrl.toString(), asList(config.imageDirs))
-            .transformImages(body))
-
-        if(config.confluence.enableAttachments){
-            def attachmentPrefix = config.confluence.attachmentPrefix ? config.confluence.attachmentPrefix : 'attachment'
-            body.select('a').each { link ->
-
-                def src = link.attr('href')
-                println "    attachment src: "+src
-
-                //upload it to confluence and use the ri:attachment tag
-                if(src.startsWith(attachmentPrefix)) {
-                    def newUrl = baseUrl.toString().replaceAll('\\\\','/').replaceAll('/[^/]*$','/')+src
-                    def fileName = URLDecoder.decode((src.tokenize('/')[-1]),"UTF-8")
-                    newUrl = URLDecoder.decode(newUrl,"UTF-8")
-
-                    uploads << new Upload(newUrl, fileName, "automatically uploaded non-image attachment by docToolchain")
-                    def uriArray=fileName.split("/")
-                    def pureFilename = uriArray[uriArray.length-1]
-                    def innerhtml = link.html()
-                    link.after("<ac:structured-macro ac:name=\"view-file\" ac:schema-version=\"1\"><ac:parameter ac:name=\"name\"><ri:attachment ri:filename=\"${pureFilename}\"/></ac:parameter></ac:structured-macro>")
-                    link.after("<ac:link><ri:attachment ri:filename=\"${pureFilename}\"/><ac:plain-text-link-body> <![CDATA[\"${innerhtml}\"]]></ac:plain-text-link-body></ac:link>")
-                    link.remove()
-
-                }
-            }
-        }
-
-        new MarkTransformer().transformMarks(body)
-        new DescriptionListTransformer().transformDescriptionLists(body)
-        //not really sure if must check here the type
-        String bodyString = body
-        if(body instanceof Element){
-            bodyString = body.html()
-        }
-        Element saneHtml = new Document("")
-            .outputSettings(new Document.OutputSettings().syntax(Document.OutputSettings.Syntax.xml).prettyPrint(false))
-            .html(bodyString)
-        HtmlTransformer transformer = new HtmlTransformer()
-            .withCallouts(CalloutStyle.from(configService.getConfigProperty('confluence.callouts')))
-        if(config.jira.api){
-            transformer.withJiraIntegration(config.jira.api)
-        }
-        if(config.confluence.jiraServerId){
-            transformer.usingOnPremiseJira(config.confluence.jiraServerId)
-        }
-        def pageString = transformer.transformToConfluenceFormat(saneHtml, anchors, pageAnchors, confluencePagePrefix, confluencePageSuffix)
-
-        return Map.of(
-            "page", pageString,
-            "uploads", uploads
-        )
+        def built = new BodyBuilder(configService, baseUrl.toString(),
+            confluencePagePrefix, confluencePageSuffix).build(body, anchors, pageAnchors)
+        return Map.of("page", built.storageFormat(), "uploads", built.uploads())
     }
 
 
