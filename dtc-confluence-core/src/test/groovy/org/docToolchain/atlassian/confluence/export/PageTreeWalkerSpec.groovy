@@ -86,10 +86,9 @@ class PageTreeWalkerSpec extends Specification {
             e.message.contains('404')
     }
 
-    def 'a page reached twice is walked once'() {
+    def 'a page reached twice is read once'() {
         given: 'otherwise its children are queued twice, and that does not end'
             reader.fetchPage('1') >> page('1', 'Root')
-            reader.fetchPage('2') >> page('2', 'Child')
             reader.fetchChildPages('1') >> [[id: '2'], [id: '2']]
             reader.fetchChildPages('2') >> []
             reader.fetchAttachments(_) >> []
@@ -97,7 +96,9 @@ class PageTreeWalkerSpec extends Specification {
         when:
             def tree = walker().walk('1')
 
-        then:
+        then: """Counted, not inferred from the result: walking the same page twice writes the
+                 same entry twice and leaves a map that looks exactly right."""
+            1 * reader.fetchPage('2') >> page('2', 'Child')
             tree.pages.keySet() == ['1', '2'] as Set
     }
 
