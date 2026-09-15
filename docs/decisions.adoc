@@ -309,3 +309,24 @@ Worth building for page identity, which is a real defect with no other fix in si
 Not worth building for change tracking alone, which the hash in the page already does.
 
 If it is built: written always, committed by choice, keyed by target rather than by source file, and documented as a cache that Confluence overrules.
+
+== Porting the converter: verified against its twin, not by reading
+
+The conversion back from storage format was 788 lines of Groovy with fifteen tests over one of its methods.
+Reading it carefully and porting it "unchanged" would have been a claim, not a check.
+
+What was done instead: the Groovy class was kept beside the Java one as a test-scope twin long enough to run both over the same inputs - the three pages this project publishes in its own golden files, and 30 hand-written samples covering every macro the old switch named - and to compare the XHTML and the reported unknown tags.
+All 33 came out identical, and the twin was deleted in the same commit.
+
+That found one real defect in the port that no amount of re-reading had: an empty attachment name matched an attachment that had none, because Java's `String.valueOf(null)` is `"null"` while a Groovy `==` against `null` is simply false.
+An image referring to something other than an attachment picked up a file at random.
+
+The method generalises: where a rewrite has to preserve behaviour, keep the old implementation runnable until the new one has been compared against it, and make the comparison part of the commit that removes it.
+
+=== Two differences kept on purpose
+
+An attachment is now referred to by the name it was written under.
+A file called `my report.pdf` lands on disk as `2_my_report.pdf`, and the link the converter wrote kept the space - a link to nothing.
+
+A `profile` macro naming a user who is not in the export is removed rather than left in the document.
+It was left there only when the user was unknown, which is exactly when its parameters leaked into the text.
