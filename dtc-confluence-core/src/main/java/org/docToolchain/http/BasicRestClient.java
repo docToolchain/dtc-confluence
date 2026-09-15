@@ -52,8 +52,12 @@ public abstract class BasicRestClient {
         }
     }
 
-    public Optional<String> doRequest(HttpHost targetHost, ClassicHttpRequest httpRequest,
-                                      HttpClientResponseHandler<String> responseHandler) {
+    /**
+     * @param <T> what the handler makes of the response - text for an API call, bytes for a
+     *            download
+     */
+    public <T> Optional<T> doRequest(HttpHost targetHost, ClassicHttpRequest httpRequest,
+                                     HttpClientResponseHandler<T> responseHandler) {
         try (CloseableHttpClient httpClient = httpClientBuilder.build()) {
             return Optional.ofNullable(httpClient.execute(targetHost, httpRequest, responseHandler));
         } catch (IOException e) {

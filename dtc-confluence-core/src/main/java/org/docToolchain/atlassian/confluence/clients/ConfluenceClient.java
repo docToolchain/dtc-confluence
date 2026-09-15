@@ -30,8 +30,16 @@ public abstract class ConfluenceClient {
 
     /** The path a REST v1 call hangs under, context included. */
     public static String apiV1PathFor(ConfigService configService) {
-        return constructApiContext(
-                String.valueOf(configService.getConfigProperty("confluence.api"))) + API_V1_IDENTIFIER;
+        return contextPathFor(configService) + API_V1_IDENTIFIER;
+    }
+
+    /**
+     * The path Confluence itself is served under - "/confluence" on a typical Data Center, empty
+     * where it sits at the root. Links Confluence hands out, such as an attachment's download
+     * link, are relative to it.
+     */
+    public static String contextPathFor(ConfigService configService) {
+        return constructApiContext(String.valueOf(configService.getConfigProperty("confluence.api")));
     }
 
     protected final String API_V1_PATH;

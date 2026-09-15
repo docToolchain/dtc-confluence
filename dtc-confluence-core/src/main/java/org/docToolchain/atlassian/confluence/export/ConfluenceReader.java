@@ -42,10 +42,17 @@ public class ConfluenceReader {
      */
     private final String apiPath;
 
+    /**
+     * The path Confluence is served under. A download link comes back as
+     * {@code /download/attachments/...}, which is relative to this and reaches nothing without it.
+     */
+    private final String contextPath;
+
     public ConfluenceReader(ConfigService configService, RestClient restClient, int pageLimit) {
         this.restClient = restClient;
         this.pageLimit = pageLimit;
         this.apiPath = ConfluenceClient.apiV1PathFor(configService);
+        this.contextPath = ConfluenceClient.contextPathFor(configService);
     }
 
     /**
@@ -69,6 +76,22 @@ public class ConfluenceReader {
      */
     public List<Map<?, ?>> fetchAttachments(String pageId) {
         return fetchAllPages("/content/" + pageId + "/child/attachment", "version");
+    }
+
+    /**
+     * Fetches an attachment as the bytes it is.
+     *
+     * @param downloadPath what Confluence gave as the attachment's download link, which is a path
+     *                     below the same host rather than a full URL
+     * @return the bytes, or {@code null} where there is nothing at that path any more
+     */
+    public byte[] download(String downloadPath) {
+        // Already absolute where a caller passed a full link; otherwise it is relative to the
+        // context path, which Confluence reports beside the link as "_links.context".
+        String path = downloadPath.startsWith(contextPath) || downloadPath.startsWith("http")
+                ? downloadPath
+                : contextPath + downloadPath;
+        return restClient.doRequestAndReturnBytes(new HttpGet(URI.create(path)));
     }
 
     /**
