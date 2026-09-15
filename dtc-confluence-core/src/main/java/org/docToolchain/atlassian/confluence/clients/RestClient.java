@@ -77,6 +77,28 @@ public class RestClient extends BasicRestClient {
         return doRequest(httpRequest, response -> response.getCode() == HttpStatus.SC_NOT_FOUND);
     }
 
+    /**
+     * Fetches a resource as the bytes it is, for an attachment rather than an API answer.
+     *
+     * <p>The same client as every other call: the credentials, the rate limit, the proxy and the
+     * user agent are the ones already configured, rather than a second connection opened by hand.</p>
+     *
+     * @return the bytes, or {@code null} where Confluence says there is nothing there
+     */
+    public byte[] doRequestAndReturnBytes(ClassicHttpRequest httpRequest) {
+        rateLimiter.acquire();
+        return this.<byte[]>doRequest(targetHost, httpRequest, response -> {
+            if (response.getCode() == HttpStatus.SC_NOT_FOUND) {
+                return null;
+            }
+            if (isNotSuccessful(response)) {
+                throw new RequestFailedException(response, null);
+            }
+            HttpEntity entity = response.getEntity();
+            return entity == null ? new byte[0] : EntityUtils.toByteArray(entity);
+        }).orElse(null);
+    }
+
     private static boolean isNotSuccessful(ClassicHttpResponse response) {
         return response.getCode() < HttpStatus.SC_OK || response.getCode() > HttpStatus.SC_PARTIAL_CONTENT;
     }

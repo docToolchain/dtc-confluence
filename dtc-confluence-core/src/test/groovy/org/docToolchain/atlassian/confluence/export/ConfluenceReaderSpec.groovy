@@ -144,4 +144,37 @@ class ConfluenceReaderSpec extends Specification {
             children*.id == ['10', '11']
             requests.size() == 2
     }
+
+    def 'a download link is asked for below the context path'() {
+        given: """Confluence hands out /download/attachments/... , which is relative to the
+                  path it is served under - /confluence on a typical Data Center. Without it the
+                  request reaches nothing, and every attachment of an export is lost."""
+            responses << 'BYTES'
+
+        when:
+            def content = reader().download('/download/attachments/1/a.png?version=1')
+
+        then:
+            new String(content) == 'BYTES'
+            requests.first().uri == '/confluence/download/attachments/1/a.png?version=1'
+    }
+
+    def 'a link that already carries the context is not given it twice'() {
+        given:
+            responses << 'BYTES'
+
+        when:
+            reader().download('/confluence/download/attachments/1/a.png')
+
+        then:
+            requests.first().uri == '/confluence/download/attachments/1/a.png'
+    }
+
+    def 'an attachment that is gone answers with nothing rather than failing'() {
+        given:
+            responses << '404:'
+
+        expect:
+            reader().download('/download/attachments/1/gone.png') == null
+    }
 }
