@@ -339,9 +339,11 @@ public class ConfluenceConverter {
             // prefix stripped the two differ, and a link built from the original names would
             // point at a file that was never written.
             String name = firstOf(text(target.get("adocFilename")), text(target.get("filename")));
-            String folders = String.join("/", getAdocFolderStructure(pages, targetPage));
+            // Without the folders where the target is a root page: naming them would leave a
+            // leading slash, and a path from a page below would carry an empty segment.
+            List<String> folders = getAdocFolderStructure(pages, targetPage);
             String prefix = "../".repeat(getAdocFolderStructure(pages, pageId).size());
-            link.attr("href", prefix + folders + "/" + name + ".html");
+            link.attr("href", prefix + joinPath(String.join("/", folders), name + ".html"));
         }
     }
 
@@ -558,6 +560,21 @@ public class ConfluenceConverter {
         }
         digits.appendTail(key);
         return key.toString();
+    }
+
+    /** @return the segments as a path, skipping the ones that are not there */
+    private static String joinPath(String... segments) {
+        StringBuilder path = new StringBuilder();
+        for (String segment : segments) {
+            if (segment == null || segment.isEmpty()) {
+                continue;
+            }
+            if (path.length() > 0) {
+                path.append("/");
+            }
+            path.append(segment);
+        }
+        return path.toString();
     }
 
     private static String firstOf(String... candidates) {
