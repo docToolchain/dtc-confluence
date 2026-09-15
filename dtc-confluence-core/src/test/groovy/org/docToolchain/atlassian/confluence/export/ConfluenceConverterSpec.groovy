@@ -305,17 +305,96 @@ class ConfluenceConverterSpec extends Specification {
 
     def 'an attached file is referred to by the name it was written under'() {
         given: """The name comes from Confluence, and the file was written with its separators and
-                  spaces replaced. A reference that keeps them points at a file that is not there."""
-            def attachments = ['a': [pageId: '1', filename: 'my report.pdf', version: '2']]
+                  spaces replaced. A reference that keeps them points at a file that is not there.
+                  view-file reads the name from the markup, not from the attachment map."""
             def storage = '<ac:structured-macro ac:name="view-file">' +
                 '<ri:attachment ri:filename="my report.pdf" ri:version-at-save="2"/>' +
                 '</ac:structured-macro>'
 
         when:
-            def html = converter.fixBody('1', storage, NO_USERS, PAGES, attachments, SPACE).html()
+            def html = converter.fixBody('1', storage, NO_USERS, PAGES, NO_ATTACHMENTS, SPACE).html()
 
         then:
             html.contains("2_my_report.pdf")
             !html.contains("2_my report.pdf")
+    }
+
+    def 'an image of a root page is where imagesdir already points'() {
+        given: """AsciiDoc resolves an image target against imagesdir, and the file header points
+                  that at the images directory. A root page sits in no folder, so naming
+                  {filepath} would leave a leading slash, and naming the directory again would
+                  resolve to images/images/... - neither is where the attachment was written."""
+            def attachments = ['a': [pageId: '1', filename: 'shot.png', version: '3']]
+
+        when:
+            def html = converter.fixBody('1', storage, NO_USERS, PAGES, attachments, SPACE).html()
+
+        then:
+            html.contains('src="3_shot.png"')
+
+        where:
+            storage << [
+                '<ac:image><ri:attachment ri:filename="shot.png" ri:version-at-save="3"/></ac:image>',
+                '<ac:structured-macro ac:name="view-file"><ri:attachment ri:filename="shot.png"' +
+                    ' ri:version-at-save="3"/></ac:structured-macro>']
+    }
+
+    def 'an image of a page below the root is named relative to its folder'() {
+        given:
+            def pages = ['1': [title: 'Root', filename: 'Root', adocFilename: 'Root'],
+                         '2': [title: 'Child', filename: 'Child', adocFilename: 'Child',
+                               parentId: '1']]
+            def attachments = ['a': [pageId: '2', filename: 'shot.png', version: '3']]
+            def storage =
+                '<ac:image><ri:attachment ri:filename="shot.png" ri:version-at-save="3"/></ac:image>'
+
+        when:
+            def html = converter.fixBody('2', storage, NO_USERS, pages, attachments, SPACE).html()
+
+        then: 'through {filepath}, which the file header sets to the folders of the page'
+            html.contains('src="{filepath}/3_shot.png"')
+    }
+
+    def 'a link between pages uses the names they are written under'() {
+        given: """An ac:link names its target by title. writePage writes under adocFilename, so a
+                  link built from filename points at a file that was never written."""
+            def pages = ['1': [title: 'A', filename: 'PROJ_A', adocFilename: 'A'],
+                         '2': [title: 'B', filename: 'PROJ_B', adocFilename: 'B', parentId: '1']]
+            def storage = '<ac:link ac:anchor="part"><ri:page ri:content-title="B"/>' +
+                '<ac:plain-text-link-body><![CDATA[there]]></ac:plain-text-link-body></ac:link>'
+
+        when:
+            def html = converter.fixBody('1', storage, NO_USERS, pages, NO_ATTACHMENTS, SPACE).html()
+
+        then:
+            html.contains('xref:A/B.adoc#_part[there]')
+            !html.contains('PROJ_')
+    }
+
+    def 'a link to a root page carries no empty folder'() {
+        given: 'a root page sits in no folder, and "/Root.adoc" is a path to nothing'
+            def pages = ['1': [title: 'A', filename: 'A', adocFilename: 'A'],
+                         '2': [title: 'Root', filename: 'Root', adocFilename: 'Root']]
+            def storage = '<ac:link><ri:page ri:content-title="Root"/>' +
+                '<ac:plain-text-link-body><![CDATA[home]]></ac:plain-text-link-body></ac:link>'
+
+        when:
+            def html = converter.fixBody('1', storage, NO_USERS, pages, NO_ATTACHMENTS, SPACE).html()
+
+        then:
+            html.contains('xref:Root.adoc[home]')
+    }
+
+    def 'an href to a root page carries no empty folder either'() {
+        given:
+            def pages = ['1': [title: 'A', filename: 'A', adocFilename: 'A'],
+                         '2': [title: 'Root', filename: 'Root', adocFilename: 'Root']]
+            def storage = '<a href="/spaces/SPACE/pages/2/Root">home</a>'
+
+        when:
+            def html = converter.fixBody('1', storage, NO_USERS, pages, NO_ATTACHMENTS, SPACE).html()
+
+        then:
+            html.contains('href="Root.html"')
     }
 }

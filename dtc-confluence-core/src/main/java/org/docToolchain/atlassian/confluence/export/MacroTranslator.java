@@ -159,7 +159,7 @@ class MacroTranslator {
         String version = attachment == null
                 ? firstOf(riVersion, "1")
                 : firstOf(text(attachment.get("version")), riVersion, "1");
-        element.before("<img src='{filepath}/" + version + "_" + fileName(filename)
+        element.before("<img src='" + imageTarget(version + "_" + fileName(filename))
                 + "' align='" + alignment + "' width='" + width + "' />");
         element.remove();
     }
@@ -179,9 +179,14 @@ class MacroTranslator {
             // A link to an attachment rather than to a page, or to a page outside this export.
             return;
         }
-        String target = String.join("/", folders(targetId, "filename"))
-                + "/" + text(pages.get(targetId).get("filename")) + ".adoc";
-        String link = "../".repeat(folders(pageId, "filename").size()) + target;
+        // The AsciiDoc names, the same ones writePage writes under: with a page prefix stripped
+        // the two differ, and a link built from the original name points at a file that was never
+        // written. The folders are the AsciiDoc ones for the same reason.
+        List<String> targetFolders = folders(targetId, "adocFilename");
+        String name = firstOf(text(pages.get(targetId).get("adocFilename")),
+                text(pages.get(targetId).get("filename")));
+        String link = "../".repeat(folders(pageId, "adocFilename").size())
+                + joinPath(String.join("/", targetFolders), name + ".adoc");
         if (!anchor.isEmpty()) {
             // Every anchor id is written with a leading underscore (see AdocOutput), because
             // AsciiDoc and HTML want an id to start with a letter or an underscore. A reference
@@ -205,8 +210,8 @@ class MacroTranslator {
                 String version = firstOf(text(attachment.get("version")), "1");
                 String filename = firstOf(text(attachment.get("filename")), png);
                 String width = diagramWidth.isEmpty() ? "" : " width='" + diagramWidth + "'";
-                element.before("<img src='{filepath}/" + version + "_" + fileName(filename) + "'"
-                        + width + " />");
+                element.before("<img src='" + imageTarget(version + "_" + fileName(filename))
+                        + "'" + width + " />");
             }
         }
         element.remove();
@@ -259,7 +264,11 @@ class MacroTranslator {
                     + " frameborder=\"0\" src='" + file + "' width='100%' height='" + height
                     + "' >&lt;/iframe>%%CRLF%%\n++++%%CRLF%%\n</div>\n");
         } else if (name.endsWith(".jpg") || name.endsWith(".png")) {
-            element.before("<img src='" + file + "'  />");
+            // Through {filepath} like any other image: AsciiDoc resolves an image target against
+            // imagesdir, which the file header already points at the images directory. The path
+            // built above would be resolved a second time, to images/images/...
+            element.before("<img src='"
+                    + imageTarget(firstOf(version, "1") + "_" + fileName(filename)) + "'  />");
         } else {
             element.before("<a href='" + file + "'  >" + filename + "</a>");
         }
@@ -468,6 +477,31 @@ class MacroTranslator {
     private Map<String, Object> page(String id) {
         Map<String, Object> page = pages.get(id);
         return page == null ? new LinkedHashMap<>() : page;
+    }
+
+    /**
+     * @return where an image of this page is, as AsciiDoc reads it: relative to {@code imagesdir},
+     *         which the file header points at the images directory, and below the folders of the
+     *         page where it has any. A root page has none, and naming them would leave a leading
+     *         slash - an absolute path to nothing.
+     */
+    private String imageTarget(String fileName) {
+        return joinPath(folders(pageId, "filename").isEmpty() ? "" : "{filepath}", fileName);
+    }
+
+    /** @return the segments as a path, skipping the ones that are not there */
+    private static String joinPath(String... segments) {
+        StringBuilder path = new StringBuilder();
+        for (String segment : segments) {
+            if (segment == null || segment.isEmpty()) {
+                continue;
+            }
+            if (path.length() > 0) {
+                path.append("/");
+            }
+            path.append(segment);
+        }
+        return path.toString();
     }
 
     /** @return the attachment's name as the file it was written as is called */
