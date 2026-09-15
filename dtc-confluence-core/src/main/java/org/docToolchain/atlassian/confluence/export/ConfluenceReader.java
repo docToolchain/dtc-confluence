@@ -88,7 +88,11 @@ public class ConfluenceReader {
     public byte[] download(String downloadPath) {
         // Already absolute where a caller passed a full link; otherwise it is relative to the
         // context path, which Confluence reports beside the link as "_links.context".
-        String path = downloadPath.startsWith(contextPath) || downloadPath.startsWith("http")
+        // On a segment boundary: with a context path of /confluence, a link below
+        // /confluence-other carries no context of ours and needs one.
+        boolean carriesContext = downloadPath.equals(contextPath)
+                || downloadPath.startsWith(contextPath + "/");
+        String path = carriesContext || downloadPath.startsWith("http")
                 ? downloadPath
                 : contextPath + downloadPath;
         return restClient.doRequestAndReturnBytes(new HttpGet(URI.create(path)));

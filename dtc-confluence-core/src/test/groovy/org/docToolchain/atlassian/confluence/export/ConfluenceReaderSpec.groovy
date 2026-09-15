@@ -21,20 +21,27 @@ class ConfluenceReaderSpec extends Specification {
     List<Map> requests = []
 
     @Shared
-    List<String> responses = []
+    List<Object> responses = []
 
     def setupSpec() {
         server = HttpServer.create(new InetSocketAddress('127.0.0.1', 0), 0)
         server.createContext('/') { exchange ->
             requests << [uri: exchange.requestURI.toString()]
-            String next = responses.isEmpty() ? '{}' : responses.remove(0)
-            // A queued response may name its status: "404:" for a page that is not there.
+            Object next = responses.isEmpty() ? '{}' : responses.remove(0)
+            // A queued response is either bytes to hand back untouched - an attachment is not
+            // text - or a string, which may name its status: "404:" for a page that is not there.
             int status = 200
-            if (next.startsWith('404:')) {
-                status = 404
-                next = next.substring(4)
+            byte[] payload
+            if (next instanceof byte[]) {
+                payload = next
+            } else {
+                String body = next as String
+                if (body.startsWith('404:')) {
+                    status = 404
+                    body = body.substring(4)
+                }
+                payload = body.bytes
             }
-            byte[] payload = next.bytes
             exchange.sendResponseHeaders(status, payload.length)
             exchange.responseBody.withStream { it.write(payload) }
         }
@@ -157,6 +164,31 @@ class ConfluenceReaderSpec extends Specification {
         then:
             new String(content) == 'BYTES'
             requests.first().uri == '/confluence/download/attachments/1/a.png?version=1'
+    }
+
+    def 'an attachment comes back as the bytes it is'() {
+        given: """A PNG is not text. Were the transport to decode the response and encode it
+                  again, every byte above 0x7F would come back as the replacement character and
+                  the image on disk would be broken."""
+            byte[] png = [0x89, 0x50, 0x4E, 0x47, 0x00, 0xFF, 0x80, 0x7F] as byte[]
+            responses << png
+
+        when:
+            byte[] content = reader().download('/download/attachments/1/a.png')
+
+        then:
+            content == png
+    }
+
+    def 'a link below a path that merely starts like the context is given its own'() {
+        given: 'a context of /confluence does not cover /confluence-other'
+            responses << 'BYTES'
+
+        when:
+            reader().download('/confluence-other/download/1/a.png')
+
+        then:
+            requests.first().uri == '/confluence/confluence-other/download/1/a.png'
     }
 
     def 'a link that already carries the context is not given it twice'() {
