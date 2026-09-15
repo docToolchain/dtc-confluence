@@ -18,10 +18,10 @@ docToolchain can equally consume the plain library and keep its own task definit
 
 Production code is Java, compiled with JDK 25 and released for Java 17.
 
-The moved code is Groovy and is ported class by class, bottom up.
-Ported that way, Groovy classes reference Java classes and never the reverse, so `maven-compiler-plugin` can simply run before `gmavenplus-plugin` and no stub generation is needed.
+The moved code was Groovy and was ported class by class, bottom up; the port is finished, and `gmavenplus-plugin` now compiles the tests only.
+Ported that way, Groovy classes referenced Java classes and never the reverse, so `maven-compiler-plugin` could simply run before `gmavenplus-plugin` and no stub generation was needed.
 
-Tests stay on Spock for the duration of the port, so the suite keeps verifying every ported class.
+Tests stay on Spock, which kept the suite verifying every class as it was ported and is the better tool for the data-driven cases either way.
 Two measured constraints shape the versions:
 
 * Groovy 3.0.13, which docToolchain pins, cannot compile on JDK 25 ("Unsupported class file major version 69").
@@ -61,8 +61,9 @@ They must not depend on `confluence.clients`, so they stay testable without any 
 
 == Packages stay free of cycles
 
-The Groovy code is being ported to Java one package at a time, bottom up.
-That only works while the dependency graph is acyclic: a cycle would force two packages to move together, and the port would stop being decomposable.
+The Groovy code was ported to Java one package at a time, bottom up, and the main sources carry no Groovy any more.
+That only worked while the dependency graph was acyclic: a cycle would have forced two packages to move together, and the port would have stopped being decomposable.
+The rule stays: the tests are Spock, and a Spock test reaching across a cycle would bring the same problem back.
 
 Every package is its own slice, which is stricter than slicing by top-level sub-package.
 
