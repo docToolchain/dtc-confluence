@@ -78,17 +78,18 @@ class PageNamingSpec extends Specification {
             PageNaming.folderStructure(pages, '2') == []
     }
 
-    def 'a page that is its own ancestor does not recurse forever'() {
+    def 'a page in a cycle is named at most once above itself'() {
         given:
             def pages = ['1': [filename: 'A', parentId: '2'],
                          '2': [filename: 'B', parentId: '1']]
 
-        when:
-            def folders = PageNaming.folderStructure(pages, '1')
+        expect: 'the one ancestor between the two, and not A above itself'
+            PageNaming.folderStructure(pages, '1') == ['B']
+    }
 
-        then:
-            noExceptionThrown()
-            folders.size() <= 2
+    def 'a page that is its own parent is not its own folder'() {
+        expect:
+            PageNaming.folderStructure(['1': [filename: 'A', parentId: '1']], '1') == []
     }
 
     def 'a page nobody knows has no folders'() {

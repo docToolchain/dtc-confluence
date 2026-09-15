@@ -54,9 +54,12 @@ public final class PageNaming {
         // would otherwise recurse until the stack runs out.
         Set<String> seen = new LinkedHashSet<>();
         String current = pageId;
-        while (seen.add(current)) {
+        seen.add(current);
+        while (true) {
             String parentId = parentOf(pages, current);
-            if (parentId == null) {
+            // Stop before naming a page already walked. A page that claims itself as its parent
+            // is not its own folder, and a cycle must not name any page in it twice.
+            if (parentId == null || !seen.add(parentId)) {
                 break;
             }
             Object parent = pages.get(parentId);
