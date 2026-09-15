@@ -151,12 +151,12 @@
           <groupId>org.codehaus.gmavenplus</groupId>
           <artifactId>gmavenplus-plugin</artifactId>
           <version>${gmavenplus.version}</version>
+          <!-- Tests only: the main sources are Java. Groovy remains a dependency, because the
+               configuration this reads is a Groovy DSL, and Spock is a Groovy framework. -->
           <executions>
             <execution>
               <goals>
-                <goal>addSources</goal>
                 <goal>addTestSources</goal>
-                <goal>compile</goal>
                 <goal>compileTests</goal>
               </goals>
             </execution>
