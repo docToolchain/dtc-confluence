@@ -5,6 +5,8 @@ import org.docToolchain.atlassian.confluence.clients.ConfluenceClient
 import org.docToolchain.atlassian.confluence.clients.ConfluenceClientV1
 import org.docToolchain.atlassian.confluence.clients.ConfluenceClientV2
 import org.docToolchain.atlassian.confluence.page.PageTreeBuilder
+import org.docToolchain.atlassian.confluence.publish.ImageTransformer
+import org.docToolchain.atlassian.confluence.publish.Upload
 import org.docToolchain.atlassian.confluence.publish.PublishSettings
 import org.docToolchain.atlassian.confluence.page.PageDecorator
 import org.docToolchain.atlassian.confluence.image.EmbeddedImage
@@ -256,48 +258,10 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
         body.select('div.arc42help').unwrap()
         body.select('div.title').wrap("<strong></strong>").before("<br />").wrap("<div></div>")
         body.select('div.listingblock').wrap("<p></p>").unwrap()
-        // see if we can find referenced images and fetch them
         new File("tmp/images/.").mkdirs()
-        // find images, extract their URLs for later uploading (after we know the pageId) and replace them with this macro:
-        // <ac:image ac:align="center" ac:width="500">
-        // <ri:attachment ri:filename="deployment-context.png"/>
-        // </ac:image>
 
-        body.select('img').each { img ->
-            def src = img.attr('src')
-            def imgWidth = img.attr('width')?:500
-            def imgAlign = img.attr('align')?:"center"
-
-            //it is not an online image, so upload it to confluence and use the ri:attachment tag
-            if(!src.startsWith("http")) {
-                def sanitizedBaseUrl = baseUrl.toString().replaceAll('\\\\','/').replaceAll('/[^/]*$','/')
-                def newUrl
-                def fileName
-                //it is an embedded image
-                if(src.startsWith("data:image")){
-                    def imageData = EmbeddedImage.parse(src)
-                    def fileExtension = imageData.fileExtension()
-                    fileName = img.attr('alt').replaceAll(/\s+/,"_").concat(".${fileExtension}")
-                    def storedImage = new ImageStore(asList(config.imageDirs))
-                        .store(sanitizedBaseUrl, fileName, fileExtension, imageData.content())
-                    newUrl = storedImage.filePath()
-                    fileName = storedImage.fileName()
-                }else {
-                    newUrl = sanitizedBaseUrl + src
-                    fileName = URLDecoder.decode((src.tokenize('/')[-1]),"UTF-8")
-                }
-                newUrl = URLDecoder.decode(newUrl,"UTF-8")
-                println "    image: "+newUrl
-                uploads <<  [0,newUrl,fileName,"automatically uploaded"]
-                img.after("<ac:image ac:align=\"${imgAlign}\" ac:width=\"${imgWidth}\"><ri:attachment ri:filename=\"${fileName}\"/></ac:image>")
-            }
-            // it is an online image, so we have to use the ri:url tag
-            else {
-                img.after("<ac:image ac:align=\"${imgAlign}\" ac:width=\"${imgWidth}\"><ri:url ri:value=\"${src}\"/></ac:image>")
-            }
-            img.remove()
-        }
-
+        uploads.addAll(new ImageTransformer(baseUrl.toString(), asList(config.imageDirs))
+            .transformImages(body))
 
         if(config.confluence.enableAttachments){
             def attachmentPrefix = config.confluence.attachmentPrefix ? config.confluence.attachmentPrefix : 'attachment'
@@ -312,7 +276,7 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
                     def fileName = URLDecoder.decode((src.tokenize('/')[-1]),"UTF-8")
                     newUrl = URLDecoder.decode(newUrl,"UTF-8")
 
-                    uploads <<  [0,newUrl,fileName,"automatically uploaded non-image attachment by docToolchain"]
+                    uploads << new Upload(newUrl, fileName, "automatically uploaded non-image attachment by docToolchain")
                     def uriArray=fileName.split("/")
                     def pureFilename = uriArray[uriArray.length-1]
                     def innerhtml = link.html()
@@ -407,7 +371,7 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
             if (remoteHash == localHash) {
                 println "page hasn't changed!"
                 deferredUpload.each {
-                    uploadAttachment(page?.id, it[1], it[2], it[3])
+                    uploadAttachment(page?.id, it.url(), it.fileName(), it.comment())
                 }
                 deferredUpload = []
                 // #324-dierk42: Add keywords as labels to page.
@@ -429,7 +393,7 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
                 )
                 println "> updated page "+page.id
                 deferredUpload.each {
-                    uploadAttachment(page.id, it[1], it[2], it[3])
+                    uploadAttachment(page.id, it.url(), it.fileName(), it.comment())
                 }
                 deferredUpload = []
                 // #324-dierk42: Add keywords as labels to page.
@@ -456,7 +420,7 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
             )
             println "> created page "+page?.id
             deferredUpload.each {
-                uploadAttachment(page?.id, it[1], it[2], it[3])
+                uploadAttachment(page?.id, it.url(), it.fileName(), it.comment())
             }
             deferredUpload = []
             // #324-dierk42: Add keywords as labels to page.
