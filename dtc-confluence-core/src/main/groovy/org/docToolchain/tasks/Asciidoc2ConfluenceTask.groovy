@@ -5,6 +5,7 @@ import org.docToolchain.atlassian.confluence.clients.ConfluenceClient
 import org.docToolchain.atlassian.confluence.clients.ConfluenceClientV1
 import org.docToolchain.atlassian.confluence.clients.ConfluenceClientV2
 import org.docToolchain.atlassian.confluence.page.PageTreeBuilder
+import org.docToolchain.atlassian.confluence.publish.PublishSettings
 import org.docToolchain.atlassian.confluence.page.PageDecorator
 import org.docToolchain.atlassian.confluence.image.EmbeddedImage
 import org.docToolchain.atlassian.confluence.image.ImageStore
@@ -97,18 +98,6 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
         (value == null || value instanceof ConfigObject) ? '' : value as String
     }
 
-    /**
-     * Whether the author actually wrote this entry.
-     *
-     * <p>Absent takes two shapes. A section built by property assignment answers a missing key
-     * with an empty ConfigObject; one written as "confluence = [:]" with a with block is a plain
-     * map, where a missing key is simply null. A guard that tests only for the first reads the
-     * second as a value that was set - which is how a deprecation check meant to reject an option
-     * came to reject its absence.</p>
-     */
-    private static boolean isConfigured(value) {
-        value != null && !(value instanceof ConfigObject)
-    }
 
     /**
      * The same trap in the other direction: coercing an empty ConfigObject with 'as List' builds a
@@ -517,33 +506,12 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
                 input.file = confluenceService.checkAndBuildCanonicalFileName(input.file)
                 //  assignend, but never used in pushToConfluence(...) (fixed here)
                 // #938-mksiva: assign spaceKey passed for each file in the input
+                def settings = PublishSettings.of(input as Map, config.confluence as Map)
                 spaceKeyInput = input.spaceKey
-                confluenceSpaceKey = input.spaceKey ?: config.confluence.spaceKey
-                def confluenceCreateSubpages = (input.createSubpages != null) ? input.createSubpages : config.confluence.createSubpages
-                def confluenceAllInOnePage = (input.allInOnePage != null) ? input.allInOnePage : config.confluence.allInOnePage
-                if (isConfigured(confluenceCreateSubpages) || isConfigured(confluenceAllInOnePage)) {
-                    println "ERROR:"
-                    println "Deprecated configuration, migrate as follows:"
-                    println "allInOnePage = true -> subpagesForSections = 0"
-                    println "allInOnePage = false && createSubpages = false -> subpagesForSections = 1"
-                    println "allInOnePage = false && createSubpages = true -> subpagesForSections = 2"
-                    throw new RuntimeException("config problem")
-                }
-                confluenceSubpagesForSections = (input.subpagesForSections != null) ? input.subpagesForSections : config.confluence.subpagesForSections
-
-                if (confluenceSubpagesForSections instanceof ConfigObject) {
-                    confluenceSubpagesForSections = 1
-                }
-                //  hard to read in case of using :sectnums: -> so we add a suffix
-                confluencePagePrefix = asText(input.pagePrefix ?: config.confluence.pagePrefix)
-                //  added
-                confluencePageSuffix = asText(input.pageSuffix ?: config.confluence.pageSuffix)
-                def confluencePreambleTitle = input.preambleTitle ?: config.confluence.preambleTitle
-                if (isConfigured(confluencePreambleTitle)) {
-                    println "ERROR:"
-                    println "Deprecated configuration, use first level heading in document instead of preambleTitle configuration"
-                    throw new RuntimeException("config problem")
-                }
+                confluenceSpaceKey = settings.spaceKey()
+                confluenceSubpagesForSections = settings.subpagesForSections()
+                confluencePagePrefix = settings.pagePrefix()
+                confluencePageSuffix = settings.pageSuffix()
                 File htmlFile = new File(input.file)
 
                 println "Publish ${input.file} to $confluenceSpaceKey at ${config.confluence.api} ..."
@@ -552,33 +520,20 @@ class Asciidoc2ConfluenceTask extends DocToolchainTask {
 
                 // if ancestorName is defined try to find machingAncestorId in confluence
                 def retrievedAncestorId
-                if (input.ancestorName) {
+                if (settings.ancestorName()) {
                     // Retrieve a page id by name
-                    retrievedAncestorId = retrievePageIdByName(input.ancestorName)
-                    println("Retrieved pageId for given ancestorName '${input.ancestorName}' is ${retrievedAncestorId}")
+                    retrievedAncestorId = retrievePageIdByName(settings.ancestorName())
+                    println("Retrieved pageId for given ancestorName '${settings.ancestorName()}' is ${retrievedAncestorId}")
                 }
-                // if input does not contain an ancestorName, check if there is ancestorId, otherwise check if there is a global one
-                def parentId = retrievedAncestorId ?: input.ancestorId ?: config.confluence.ancestorId
-
-                // if parentId is still not set, create a new parent page (parentId = null)
-                parentId = parentId ?: null
+                // if no ancestorName was given, the configured ancestorId - and where there is
+                // none either, null, which creates the page at the root of the space
+                def parentId = retrievedAncestorId ?: (settings.ancestorId() ?: null)
                 //println("ancestorName: '${input.ancestorName}', ancestorId: ${input.ancestorId} ---> final parentId: ${parentId}")
 
                 // #342-dierk42: get the keywords from the meta tags
                 def keywords = confluenceService.getKeywords(dom)
 
-                // Read off the configuration rather than through getConfigProperty, which
-                // mirrors Groovy truth: an empty string answers null there, so a label the author
-                // deliberately emptied would come back as the default. An entry nobody wrote is
-                // an empty ConfigObject, and that is the one that gets the default.
-                // Absent takes two shapes: a ConfigObject where the section was built by
-                // property assignment, and null where it was written as "confluence = [:]" and a
-                // with block - a plain map, where a missing key is simply a miss. Only a string
-                // the author actually wrote counts, and an empty one of those is the opt-out.
-                def configuredLabel = config.confluence.footnoteLabel
-                def labelIsAbsent = configuredLabel == null || configuredLabel instanceof ConfigObject
-                def tree = new PageTreeBuilder(labelIsAbsent
-                        ? PageTreeBuilder.DEFAULT_FOOTNOTE_LABEL : configuredLabel as String)
+                def tree = new PageTreeBuilder(settings.footnoteLabel())
                     .build(dom, parentId, confluenceSubpagesForSections)
                 def pages = tree.pages
                 def anchors = tree.anchors
