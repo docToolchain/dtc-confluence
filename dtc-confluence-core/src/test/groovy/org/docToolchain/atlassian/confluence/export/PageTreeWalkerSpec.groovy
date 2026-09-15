@@ -8,14 +8,13 @@ import spock.lang.Specification
 class PageTreeWalkerSpec extends Specification {
 
     private ConfluenceReader reader = Mock(ConfluenceReader)
-    private ConfluenceConverter converter = new ConfluenceConverter()
 
     private static Map page(String id, String title, Map extra = [:]) {
         return [id: id, title: title, space: [key: 'SPACE', name: 'A Space']] + extra
     }
 
     private PageTreeWalker walker(String stripRegex = '') {
-        return new PageTreeWalker(reader, converter, stripRegex)
+        return new PageTreeWalker(reader, stripRegex)
     }
 
     def 'a root without children is one page'() {

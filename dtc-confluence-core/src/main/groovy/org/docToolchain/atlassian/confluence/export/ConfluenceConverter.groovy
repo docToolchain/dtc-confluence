@@ -36,17 +36,7 @@ class ConfluenceConverter {
     // Uses `filename` (the original sanitised name) — this governs XHTML paths, image
     // paths, and the {filepath} attribute substituted into image references.
     def getFolderStructure(Map pages, String pageId) {
-        def parentId = pages[pageId]?.parentId
-        if (parentId && parentId != "null" && parentId != 0) {
-            if (pages[parentId]) {
-                return getFolderStructure(pages, parentId) + pages[parentId].filename
-            } else {
-                println "parent page not found: " + parentId + " for " + pages[pageId].filename
-                return []
-            }
-        } else {
-            return []
-        }
+        return PageNaming.folderStructure(pages, pageId)
     }
 
     // Same as getFolderStructure but reads `adocFilename` (prefix-stripped filename)
@@ -55,17 +45,7 @@ class ConfluenceConverter {
     // images/XHTML, stripped for .adoc) allow shortening file paths without breaking
     // image references.
     def getAdocFolderStructure(Map pages, String pageId) {
-        def parentId = pages[pageId]?.parentId
-        if (parentId && parentId != "null" && parentId != 0) {
-            if (pages[parentId]) {
-                return getAdocFolderStructure(pages, parentId) + (pages[parentId].adocFilename ?: pages[parentId].filename)
-            } else {
-                println "parent page not found: " + parentId + " for " + (pages[pageId].adocFilename ?: pages[pageId].filename)
-                return []
-            }
-        } else {
-            return []
-        }
+        return PageNaming.adocFolderStructure(pages, pageId)
     }
 
     // resolve a page title to its id; throws if not found or ambiguous
@@ -109,12 +89,7 @@ class ConfluenceConverter {
     // sanitize a page title into a filename usable on any filesystem (matches the
     // XML driver's original logic so file layouts stay byte-compatible).
     def sanitizeFilename(String title) {
-        return title
-                .replaceAll("[Ää]", "ae")
-                .replaceAll("[Üü]", "ue")
-                .replaceAll("[Öö]", "oe")
-                .replaceAll("[^a-zA-Z0-9]", "_")
-                .replaceAll("_+", "_")
+        return PageNaming.sanitizeFilename(title)
     }
 
     // takes confluence xHTML storage format and fixes some issues to be better converted by pandoc
