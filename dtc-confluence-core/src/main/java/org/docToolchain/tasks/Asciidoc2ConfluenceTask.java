@@ -315,6 +315,12 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
         List<String> ancestorIds = new ArrayList<>();
         boolean wholeSpace = false;
         for (Map<?, ?> input : inputs()) {
+            // Only the inputs that publish into this space. An ancestor of another space would
+            // otherwise be listed as if it were here, and its titles would look like pages of
+            // this space that this document is about to collide with.
+            if (!spaceKey.equals(effectiveSpaceKey(input))) {
+                continue;
+            }
             Object ancestorId = input.get("ancestorId");
             if (ancestorId == null) {
                 // One input without an ancestor means the document may go anywhere in the space.
@@ -326,12 +332,29 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
         System.out.println(".");
 
         int pageLimit = pageLimit();
-        Map<?, ?> allPages = wholeSpace
-                ? confluenceClient.fetchPagesBySpaceKey(spaceKey, pageLimit)
-                : confluenceClient.fetchPagesByAncestorId(ancestorIds, pageLimit);
+        Map<?, ?> allPages;
+        if (wholeSpace) {
+            allPages = confluenceClient.fetchPagesBySpaceKey(spaceKey, pageLimit);
+        } else if (ancestorIds.isEmpty()) {
+            // Nothing publishes into this space under an ancestor, so there is nothing to ask
+            // about - and asking for no ancestors at all would answer with the whole space.
+            allPages = Map.of();
+        } else {
+            allPages = confluenceClient.fetchPagesByAncestorId(ancestorIds, pageLimit);
+        }
         System.out.println(allPages.size() + " pages retrieved");
         allPagesBySpace.put(spaceKey, allPages);
         return allPages;
+    }
+
+    /** @return the space this input publishes into, its own where it names one */
+    private String effectiveSpaceKey(Map<?, ?> input) {
+        Object named = input.get("spaceKey");
+        return named == null ? String.valueOf(spaceKeyOfSection()) : String.valueOf(named);
+    }
+
+    private Object spaceKeyOfSection() {
+        return confluenceSection().get("spaceKey");
     }
 
     private int pageLimit() {

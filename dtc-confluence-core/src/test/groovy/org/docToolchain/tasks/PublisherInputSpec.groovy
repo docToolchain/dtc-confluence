@@ -73,4 +73,37 @@ class PublisherInputSpec extends Specification {
         and: 'and one for the space the third names for itself'
             1 * client.fetchPagesBySpaceKey('OTHER', _) >> [:]
     }
+
+    def 'an ancestor of another space is not listed as if it were here'() {
+        given: """Both clients walk every ancestor they are given, without asking which space it
+                  is in. Listed together, a page below the other space's ancestor looks like a
+                  page of this one - and a title that is merely used there reads as a collision
+                  here."""
+            def config = new ConfigObject()
+            config.docDir = RESOURCES
+            config.confluence.api = 'https://confluence.example/rest/api/'
+            config.confluence.credentials = 'x'
+            config.confluence.useV1Api = true
+            config.confluence.spaceKey = 'SPACE'
+            config.confluence.input = [[file: 'smoke-input.html', ancestorId: '10'],
+                                       [file: 'smoke-input.html', spaceKey: 'OTHER',
+                                        ancestorId: '20']]
+
+            def client = Mock(ConfluenceClient)
+            client.retrievePageIdByName(_, _) >> null
+            client.retrieveFullPageById(_) >> [:]
+            client.createPage(_, _, _, _, _) >> [id: '1000']
+            client.addLabel(_, _) >> [:]
+
+            def task = Asciidoc2ConfluenceTask.From(config, RESOURCES)
+            task.confluenceClient = client
+
+        when:
+            task.execute()
+
+        then: 'each space is asked about its own ancestor, and only that one'
+            1 * client.fetchPagesByAncestorId(['10'], _) >> [:]
+            1 * client.fetchPagesByAncestorId(['20'], _) >> [:]
+            0 * client.fetchPagesBySpaceKey(_, _)
+    }
 }
