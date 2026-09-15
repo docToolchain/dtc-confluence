@@ -14,14 +14,13 @@ class AttachmentDownloaderSpec extends Specification {
     Path destination
 
     private ConfluenceReader reader = Mock(ConfluenceReader)
-    private AttachmentDownloader downloader =
-        new AttachmentDownloader(reader, new ConfluenceConverter())
+    private AttachmentDownloader downloader = new AttachmentDownloader(reader)
 
     private static ExportedTree treeWith(Map... attachments) {
         def tree = new ExportedTree()
-        tree.pages = [
+        tree.pages.putAll(
             '1': [title: 'Root', parentId: '0', filename: 'Root', adocFilename: 'Root'],
-            '2': [title: 'Child', parentId: '1', filename: 'Child', adocFilename: 'Child']]
+            '2': [title: 'Child', parentId: '1', filename: 'Child', adocFilename: 'Child'])
         attachments.eachWithIndex { attachment, index ->
             tree.attachments["att${index}" as String] = attachment
         }
@@ -70,6 +69,28 @@ class AttachmentDownloaderSpec extends Specification {
 
         then:
             imageAt('2_my_diagram__final.png').exists()
+    }
+
+    def 'a name that would reach out of the image directory stays in it'() {
+        given: '''the name comes from the server: an export must not be able to write a file
+                  anywhere on the machine that runs it'''
+            def tree = treeWith([filename: name, version: '1', pageId: '1',
+                                 downloadUrl: '/download/x'])
+            reader.download(_) >> 'x'.bytes
+
+        when:
+            downloader.downloadAll(tree, destination.toFile())
+
+        then: 'the separators are gone, so the file is one name below images/'
+            imageAt(landsAt).exists()
+            !new File(destination.toFile().parentFile, 'escaped.png').exists()
+            !new File(destination.toFile(), 'escaped.png').exists()
+
+        where:
+            name                          || landsAt
+            '../../escaped.png'           || '1_.._.._escaped.png'
+            '..\\..\\escaped.png'         || '1_.._.._escaped.png'
+            '/etc/escaped.png'            || '1__etc_escaped.png'
     }
 
     def 'an attachment without a download link is reported, and the rest still lands'() {

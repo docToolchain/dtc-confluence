@@ -34,6 +34,17 @@ public final class PageNaming {
     }
 
     /**
+     * Confluence accepts a colon, a space, and a path separator in an attachment name. The first
+     * two are awkward in a path and in an AsciiDoc image macro; the third would reach into another
+     * directory, and the name comes from the server rather than from here.
+     *
+     * @return the name as a single path segment
+     */
+    public static String sanitizeAttachmentName(String filename) {
+        return filename.replaceAll("[\\\\/:\\s]", "_");
+    }
+
+    /**
      * @return the folders this page sits in, outermost first, named after the original file names
      */
     public static List<String> folderStructure(Map<?, ?> pages, String pageId) {
