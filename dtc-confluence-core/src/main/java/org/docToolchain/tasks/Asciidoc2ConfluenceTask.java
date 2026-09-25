@@ -10,8 +10,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -50,6 +52,9 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
     /** How many pages to ask Confluence for at a time while listing a space. */
     private static final int DEFAULT_PAGE_LIMIT = 100;
 
+    /** Stands in for the id of a page that does not exist yet, so its children have a parent. */
+    private static final String NOT_CREATED = "(not created)";
+
     private final ConfigObject config;
     private final String docDir;
     private final ConfluenceService confluenceService;
@@ -58,6 +63,15 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
     private String baseUrl;
     /** The pages of a space, as they were listed for the first input that needed them. */
     private final Map<String, Map<?, ?>> allPagesBySpace = new LinkedHashMap<>();
+
+    /**
+     * Whether this run only says what it would do. Read from the configuration rather than passed
+     * in, so that the CLI, a build plugin and a configuration file all reach it the same way.
+     */
+    private final boolean dryRun;
+
+    /** What a dry run counts, so the run can end with a sentence rather than a wall of lines. */
+    private final Map<Verdict, Integer> verdicts = new EnumMap<>(Verdict.class);
 
     private String confluenceSpaceKey;
     private String confluencePagePrefix = "";
@@ -79,6 +93,37 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
         this.confluenceClient = ConfluenceApiVersion.useV1(configService)
                 ? new ConfluenceClientV1(configService)
                 : new ConfluenceClientV2(configService);
+        // Raw, because "dryRun = false" is a decision and Groovy truth would read it as absence.
+        Object configured = configService.getRawConfigProperty("confluence.dryRun");
+        this.dryRun = configured instanceof Boolean set
+                ? set : Boolean.parseBoolean(String.valueOf(configured));
+    }
+
+    /** What publishing would do to one page. */
+    public enum Verdict {
+
+        /** No page of this title is there: publishing would create one. */
+        CREATE("would create   "),
+
+        /** The page is there and says something else: publishing would write a new version. */
+        UPDATE("would update   "),
+
+        /** The page is there and already carries this text, hash for hash. */
+        UNCHANGED("unchanged      "),
+
+        /** A page of this title exists under another parent, and a title is unique per space. */
+        CONFLICT("would fail     ");
+
+        private final String label;
+
+        Verdict(String label) {
+            this.label = label;
+        }
+
+        @Override
+        public String toString() {
+            return label;
+        }
     }
 
     public ConfigObject getConfig() {
@@ -96,6 +141,9 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
 
     @Override
     public void execute() {
+        if (dryRun) {
+            System.out.println("dry run: reading what is there, writing nothing");
+        }
         for (Map<?, ?> input : inputs()) {
             Object file = input.get("file");
             if (file == null) {
@@ -103,6 +151,45 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
             }
             publish(input, String.valueOf(file));
         }
+        if (dryRun) {
+            summarise();
+        }
+    }
+
+    /**
+     * @return what a dry run found, by verdict. Empty after a run that published.
+     */
+    public Map<Verdict, Integer> getVerdicts() {
+        return verdicts;
+    }
+
+    private void summarise() {
+        System.out.println();
+        int pages = verdicts.values().stream().mapToInt(Integer::intValue).sum();
+        System.out.println("dry run over " + pages + " page(s):");
+        for (Verdict verdict : Verdict.values()) {
+            int count = verdicts.getOrDefault(verdict, 0);
+            if (count > 0) {
+                System.out.println("  " + verdict.name().toLowerCase(Locale.ROOT) + ": " + count);
+            }
+        }
+        int changes = verdicts.getOrDefault(Verdict.CREATE, 0) + verdicts.getOrDefault(Verdict.UPDATE, 0);
+        System.out.println(changes == 0
+                ? "nothing would change."
+                : changes + " page(s) would be written. Attachments and labels are not compared "
+                        + "in a dry run; they are written after the page they belong to.");
+    }
+
+    /**
+     * Records and prints one page's verdict.
+     *
+     * @return the id the children of this page hang under, or a placeholder where there is none
+     *         yet - a page that does not exist has no id to give them
+     */
+    private String report(Verdict verdict, String title, String id, String detail) {
+        verdicts.merge(verdict, 1, Integer::sum);
+        System.out.println("  " + verdict + title + (detail.isEmpty() ? "" : "   (" + detail + ")"));
+        return id;
     }
 
     private void publish(Map<?, ?> input, String file) {
@@ -223,11 +310,23 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
             // A title is unique per space, so an existing page under another parent is not ours to
             // move - and creating a second one of that title is refused by Confluence anyway.
             if (existing != null) {
+                if (dryRun) {
+                    // Reported rather than thrown: a dry run that stops at the first problem
+                    // hides the others, which is the opposite of what it is for.
+                    return report(Verdict.CONFLICT, title, NOT_CREATED,
+                            "a page of this title is already there, under another parent, id "
+                                    + existing.get("id"));
+                }
                 throw new IllegalArgumentException("Cannot create page, page with the same title="
                         + existing.get("title") + " with id=" + existing.get("id")
                         + " already exists in the space. A Confluence page title must be unique "
                         + "within a space, consider specifying a 'confluencePagePrefix' in "
                         + "ConfluenceConfig.groovy");
+            }
+            if (dryRun) {
+                return report(Verdict.CREATE, title, NOT_CREATED,
+                        built.uploads().isEmpty()
+                                ? "" : built.uploads().size() + " attachment(s) with it");
             }
             Map<?, ?> created = asMap(confluenceClient.createPage(
                     title, confluenceSpaceKey, body, versionComment(), parentId));
@@ -242,12 +341,19 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
         System.out.println("found existing page: " + id + " version " + version.get("number"));
 
         if (localHash.equals(remoteHashOf(page))) {
+            if (dryRun) {
+                return report(Verdict.UNCHANGED, title, id, "id " + id);
+            }
             System.out.println("page hasn't changed!");
             finish(id, built.uploads(), keywords);
             return id;
         }
 
         int nextVersion = Integer.parseInt(String.valueOf(version.get("number"))) + 1;
+        if (dryRun) {
+            return report(Verdict.UPDATE, title, id,
+                    "id " + id + ", version " + version.get("number") + " to " + nextVersion);
+        }
         confluenceClient.updatePage(id, title, confluenceSpaceKey, body, nextVersion,
                 versionComment(), parentId);
         System.out.println("> updated page " + id);
