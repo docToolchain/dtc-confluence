@@ -22,6 +22,11 @@ public class PublishCommand implements Callable<Integer> {
             description = "Say what publishing would change, and write nothing.")
     private boolean dryRun;
 
+    @Option(names = "--move",
+            description = "Move a page this publisher wrote when it hangs somewhere else, "
+                    + "instead of failing on the title that is already taken.")
+    private boolean moveExistingPages;
+
     private TaskFactory taskFactory = Asciidoc2ConfluenceTask::From;
 
     /** Visible for testing; see {@link TaskFactory}. */
@@ -32,10 +37,13 @@ public class PublishCommand implements Callable<Integer> {
     @Override
     public Integer call() throws Exception {
         ConfigObject config = options.load();
+        // Into the configuration rather than onto the task: the task is built through a factory
+        // that hands back the base type, and a build plugin reaches the same settings.
         if (dryRun) {
-            // Into the configuration rather than onto the task: the task is built through a
-            // factory that hands back the base type, and a build plugin reaches the same setting.
             confluenceSection(config).put("dryRun", true);
+        }
+        if (moveExistingPages) {
+            confluenceSection(config).put("moveExistingPages", true);
         }
         taskFactory.create(config, options.docDir()).execute();
         return 0;
