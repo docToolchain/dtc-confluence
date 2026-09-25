@@ -77,6 +77,11 @@ A dry run (`-n`) reads everything a real run reads and writes nothing.
 It reports one line per page - `would create`, `would update` (with the version it would write), `unchanged` (the page already carries the hash of this text), `would fail` (a page of that title exists under another parent, which Confluence refuses) - and ends with a count.
 Attachments and labels are not compared: they are written after the page they belong to, so a dry run only says how many would travel with a new page.
 
+`would fail` is the case worth knowing about, because a Confluence title is unique per space: a page of that title already exists somewhere else in the space, so the new one cannot be created beside it.
+The report says where that page hangs, links to it, and says whether this publisher wrote it - a page carrying the hash of an earlier run is almost certainly the same page, moved or renamed since.
+For that case `--move` (`confluence.moveExistingPages`) writes it back under the parent this document asks for, instead of failing.
+A page without that hash was written by somebody else and is never moved; rename the heading or set `confluence.pagePrefix` to keep the titles apart.
+
 `CONFLUENCE_CREDENTIALS=user:token` is the alternative where the instance wants basic authentication.
 
 Credentials are read from the environment rather than taken as options, which keeps them out of the process arguments - `ps` shows a command line to every user on the machine.

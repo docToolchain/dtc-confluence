@@ -70,6 +70,13 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
      */
     private final boolean dryRun;
 
+    /**
+     * Whether a page of the right title in the wrong place is moved rather than refused. Only ever
+     * a page this publisher wrote: moving somebody else's page because it happens to be called
+     * "Motivation" is not a thing a documentation build should do unasked.
+     */
+    private final boolean moveExistingPages;
+
     /** What a dry run counts, so the run can end with a sentence rather than a wall of lines. */
     private final Map<Verdict, Integer> verdicts = new EnumMap<>(Verdict.class);
 
@@ -94,9 +101,8 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
                 ? new ConfluenceClientV1(configService)
                 : new ConfluenceClientV2(configService);
         // Raw, because "dryRun = false" is a decision and Groovy truth would read it as absence.
-        Object configured = configService.getRawConfigProperty("confluence.dryRun");
-        this.dryRun = configured instanceof Boolean set
-                ? set : Boolean.parseBoolean(String.valueOf(configured));
+        this.dryRun = switched("confluence.dryRun");
+        this.moveExistingPages = switched("confluence.moveExistingPages");
     }
 
     /** What publishing would do to one page. */
@@ -110,6 +116,9 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
 
         /** The page is there and already carries this text, hash for hash. */
         UNCHANGED("unchanged      "),
+
+        /** The page is there but hangs somewhere else, and this run would re-parent it. */
+        MOVE("would move     "),
 
         /** A page of this title exists under another parent, and a title is unique per space. */
         CONFLICT("would fail     ");
@@ -173,11 +182,60 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
                 System.out.println("  " + verdict.name().toLowerCase(Locale.ROOT) + ": " + count);
             }
         }
-        int changes = verdicts.getOrDefault(Verdict.CREATE, 0) + verdicts.getOrDefault(Verdict.UPDATE, 0);
+        int changes = verdicts.getOrDefault(Verdict.CREATE, 0)
+                + verdicts.getOrDefault(Verdict.UPDATE, 0)
+                + verdicts.getOrDefault(Verdict.MOVE, 0);
         System.out.println(changes == 0
                 ? "nothing would change."
                 : changes + " page(s) would be written. Attachments and labels are not compared "
                         + "in a dry run; they are written after the page they belong to.");
+    }
+
+    /**
+     * Says what is in the way, where it is, and what can be done about it.
+     *
+     * <p>The old message named the title and the id and left the reader to find out the rest. What
+     * decides the next step is whether this publisher wrote that page - then moving it is what the
+     * author means - and where it currently hangs.</p>
+     */
+    private String conflict(String title, Map<?, ?> existing, String requestedParentId,
+                            boolean ours) {
+        String id = String.valueOf(existing.get("id"));
+        return "'" + title + "' cannot be created: a page of that title already exists in space "
+                + confluenceSpaceKey + " (id " + id + ", " + pageUrl(id) + "), and a Confluence "
+                + "title is unique per space."
+                + System.lineSeparator() + "    it hangs under " + existing.get("parentId")
+                + ", this document wants it under " + requestedParentId + "."
+                + System.lineSeparator() + "    " + (ours
+                        ? "It carries this publisher's hash, so it is a page of an earlier run: "
+                                + "publish with confluence.moveExistingPages (--move) to move it "
+                                + "here instead of failing."
+                        : "It carries no hash of this publisher, so it was written by somebody "
+                                + "else. Moving it is refused; rename the heading, or set "
+                                + "confluence.pagePrefix to keep this document's titles apart.");
+    }
+
+    /** @return where a reader can open that page, built from the API URL the run is using */
+    private String pageUrl(String pageId) {
+        return spaceUrl() + "/pages/" + pageId;
+    }
+
+    /**
+     * @return the space as a reader opens it. Built from the API URL, with the trailing slashes
+     *         taken off: "…/rest/api/" left one behind, and the link then carried "//spaces/".
+     */
+    private String spaceUrl() {
+        return String.valueOf(configService.getConfigProperty("confluence.api"))
+                .replace("rest/api/", "")
+                .replaceAll("/+$", "")
+                + "/spaces/" + confluenceSpaceKey;
+    }
+
+    /** @return the switch, read without Groovy truth so that an explicit false is a decision */
+    private boolean switched(String path) {
+        Object configured = configService.getRawConfigProperty(path);
+        return configured instanceof Boolean set
+                ? set : Boolean.parseBoolean(String.valueOf(configured));
     }
 
     /**
@@ -211,11 +269,24 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
 
         PageTree tree = new PageTreeBuilder(settings.footnoteLabel())
                 .build(dom, parentId, settings.subpagesForSections());
-        pushPages(tree.getPages(), tree.getAnchors(), tree.getPageAnchors(), keywords);
+        List<String> published =
+                pushPages(tree.getPages(), tree.getAnchors(), tree.getPageAnchors(), keywords);
 
-        String spaceUrl = String.valueOf(configService.getConfigProperty("confluence.api"))
-                .replace("rest/api/", "") + "/spaces/" + confluenceSpaceKey;
-        System.out.println("published to " + (parentId == null ? spaceUrl : spaceUrl + "/pages/" + parentId));
+        // The page this document starts at, which is what a reader wants to open. It used to name
+        // the ancestor it was published under, or the whole space where there was none - neither
+        // of which says where the document now is.
+        String start = published.stream()
+                .filter(id -> id != null && !NOT_CREATED.equals(id))
+                .findFirst()
+                .orElse(null);
+        if (start != null) {
+            System.out.println((dryRun ? "would publish to " : "published to ") + pageUrl(start));
+        } else if (dryRun) {
+            System.out.println("would publish to " + spaceUrl()
+                    + " (the pages do not exist yet, so they have no address)");
+        } else {
+            System.out.println("published to " + spaceUrl());
+        }
     }
 
     /**
@@ -272,15 +343,22 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
         return found;
     }
 
-    private void pushPages(List<Page> pages, Map<String, String> anchors,
-                           Map<String, String> pageAnchors, List<String> labels) {
+    /**
+     * @return the ids of the pages pushed at this level, so the caller can name where the document
+     *         now starts
+     */
+    private List<String> pushPages(List<Page> pages, Map<String, String> anchors,
+                                   Map<String, String> pageAnchors, List<String> labels) {
+        List<String> ids = new ArrayList<>();
         for (Page page : pages) {
             page.setTitle(page.getTitle().trim());
             System.out.println(page.getTitle());
             String id = pushToConfluence(page, anchors, pageAnchors, labels);
+            ids.add(id);
             page.getChildren().forEach(child -> child.setParent(id));
             pushPages(page.getChildren(), anchors, pageAnchors, labels);
         }
+        return ids;
     }
 
     /**
@@ -302,27 +380,34 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
         String body = decorate(built.storageFormat());
 
         Map<?, ?> existing = existingPage(title);
-        Map<?, ?> page = existing != null && hasRequestedParent(existing, parentId)
+        boolean elsewhere = existing != null && !hasRequestedParent(existing, parentId);
+        Map<?, ?> page = existing != null && !elsewhere
                 ? asMap(confluenceClient.retrieveFullPageById(String.valueOf(existing.get("id"))))
                 : null;
+        boolean moving = false;
 
-        if (page == null) {
-            // A title is unique per space, so an existing page under another parent is not ours to
-            // move - and creating a second one of that title is refused by Confluence anyway.
-            if (existing != null) {
+        if (elsewhere) {
+            // A title is unique per space, so this page cannot simply be created beside the one
+            // that holds the title. Either it is one of ours and can be moved here, or it belongs
+            // to somebody else and the run has to say so.
+            Map<?, ?> conflicting =
+                    asMap(confluenceClient.retrieveFullPageById(String.valueOf(existing.get("id"))));
+            boolean ours = !remoteHashOf(conflicting).isEmpty();
+            if (moveExistingPages && ours) {
+                page = conflicting;
+                moving = true;
+            } else {
+                String problem = conflict(title, existing, parentId, ours);
                 if (dryRun) {
                     // Reported rather than thrown: a dry run that stops at the first problem
                     // hides the others, which is the opposite of what it is for.
-                    return report(Verdict.CONFLICT, title, NOT_CREATED,
-                            "a page of this title is already there, under another parent, id "
-                                    + existing.get("id"));
+                    return report(Verdict.CONFLICT, title, NOT_CREATED, problem);
                 }
-                throw new IllegalArgumentException("Cannot create page, page with the same title="
-                        + existing.get("title") + " with id=" + existing.get("id")
-                        + " already exists in the space. A Confluence page title must be unique "
-                        + "within a space, consider specifying a 'confluencePagePrefix' in "
-                        + "ConfluenceConfig.groovy");
+                throw new IllegalArgumentException(problem);
             }
+        }
+
+        if (page == null) {
             if (dryRun) {
                 return report(Verdict.CREATE, title, NOT_CREATED,
                         built.uploads().isEmpty()
@@ -340,7 +425,9 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
         Map<?, ?> version = asMap(page.get("version"));
         System.out.println("found existing page: " + id + " version " + version.get("number"));
 
-        if (localHash.equals(remoteHashOf(page))) {
+        // A page that is being moved is written even where its text is unchanged: the ancestor
+        // travels with the update, so skipping the write would leave the page where it was.
+        if (!moving && localHash.equals(remoteHashOf(page))) {
             if (dryRun) {
                 return report(Verdict.UNCHANGED, title, id, "id " + id);
             }
@@ -351,12 +438,18 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
 
         int nextVersion = Integer.parseInt(String.valueOf(version.get("number"))) + 1;
         if (dryRun) {
-            return report(Verdict.UPDATE, title, id,
-                    "id " + id + ", version " + version.get("number") + " to " + nextVersion);
+            return report(moving ? Verdict.MOVE : Verdict.UPDATE, title, id,
+                    moving
+                            ? "id " + id + ", from parent " + existing.get("parentId")
+                                    + " to " + parentId
+                            : "id " + id + ", version " + version.get("number")
+                                    + " to " + nextVersion);
         }
         confluenceClient.updatePage(id, title, confluenceSpaceKey, body, nextVersion,
                 versionComment(), parentId);
-        System.out.println("> updated page " + id);
+        System.out.println(moving
+                ? "> moved page " + id + " to parent " + parentId
+                : "> updated page " + id);
         finish(id, built.uploads(), keywords);
         return id;
     }
