@@ -149,6 +149,53 @@ class PublishDryRunSpec extends Specification {
             printed.contains('do not exist yet')
     }
 
+    def 'a page left behind by a renamed heading is named'() {
+        given: '''A page is found by its title, so renaming a heading creates a new page and leaves
+                  the old one where it was - the space quietly grows a second copy, and nothing
+                  said so until somebody noticed it in Confluence.'''
+            def leftBehind = [id: '451975151', title: 'The Old Title', parentId: '1000']
+            def listing = [:]
+            client.fetchPagesBySpaceKey(_, _) >> listing
+            client.fetchPagesByAncestorId(_, _) >> listing
+            client.retrievePageIdByName(_, _) >> null
+            client.createPage(_, _, _, _, _) >>> [[id: '1000'], [id: '1001'], [id: '1002']]
+            // It is in the space, below the page this document starts at, and it carries the hash
+            // of the run that wrote it.
+            listing['the old title'] = leftBehind
+            client.retrieveFullPageById('451975151') >> [id  : '451975151', title: 'The Old Title',
+                                                         body: [storage: [value:
+                                                                 '<p>x</p><ac:placeholder>hash: #old#</ac:placeholder>']]]
+
+        when:
+            def printed = outputOf { taskFor(false).execute() }
+
+        then:
+            printed.contains('451975151')
+            printed.contains('The Old Title')
+            printed.contains('/spaces/SPACE/pages/451975151')
+            printed.contains('renamed heading leaves the old page behind')
+    }
+
+    def 'a page below the document that nobody here wrote is left alone'() {
+        given: 'no hash of this publisher in it, so it is not this run to talk about'
+            def listing = [:]
+            client.fetchPagesBySpaceKey(_, _) >> listing
+            client.fetchPagesByAncestorId(_, _) >> listing
+            client.retrievePageIdByName(_, _) >> null
+            client.createPage(_, _, _, _, _) >>> [[id: '1000'], [id: '1001'], [id: '1002']]
+            listing['somebody elses notes'] = [id: '999', title: 'Somebody elses notes',
+                                               parentId: '1000']
+            client.retrieveFullPageById('999') >> [id  : '999', title: 'Somebody elses notes',
+                                                   body: [storage: [value: '<p>hand written</p>']]]
+
+        when:
+            def printed = outputOf { taskFor(false).execute() }
+
+        then:
+            !printed.contains('999')
+            !printed.contains('written by an earlier run')
+    }
+
     /** The title the smoke document publishes its root page under. */
     private static final String TAKEN_TITLE = 'docToolchain Confluence Smoke Test'
 

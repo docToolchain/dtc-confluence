@@ -8,13 +8,17 @@ import java.net.URI;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Deque;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -79,6 +83,9 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
 
     /** What a dry run counts, so the run can end with a sentence rather than a wall of lines. */
     private final Map<Verdict, Integer> verdicts = new EnumMap<>(Verdict.class);
+
+    /** The pages this run wrote or confirmed, so that what it did not touch can be named. */
+    private final Set<String> written = new LinkedHashSet<>();
 
     private String confluenceSpaceKey;
     private String confluencePagePrefix = "";
@@ -287,6 +294,72 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
         } else {
             System.out.println("published to " + spaceUrl());
         }
+        reportLeftBehind(parentId, start);
+    }
+
+    /**
+     * Names the pages below this document that this run did not touch.
+     *
+     * <p>A page is found by its title, so renaming a heading does not rename the page: the new
+     * title creates a new page and the old one stays where it was, and the space quietly grows a
+     * second copy. Nothing reported that until it was noticed in Confluence.</p>
+     *
+     * <p>Only pages carrying this publisher's hash are named, and only below what this document
+     * owns - its own start page, and, where one is configured, the children of its ancestor. A
+     * page somebody else wrote is not this run's business.</p>
+     */
+    private void reportLeftBehind(String parentId, String start) {
+        Map<?, ?> listing = retrieveAllPages(confluenceSpaceKey);
+        List<String> candidates = new ArrayList<>();
+        for (String id : belowThisDocument(listing, parentId, start)) {
+            if (written.contains(id)) {
+                continue;
+            }
+            Map<?, ?> page = asMap(confluenceClient.retrieveFullPageById(id));
+            if (!remoteHashOf(page).isEmpty()) {
+                candidates.add(id + "  " + page.get("title") + "  " + pageUrl(id));
+            }
+        }
+        if (candidates.isEmpty()) {
+            return;
+        }
+        System.out.println();
+        System.out.println(">>> " + candidates.size() + " page(s) below this document were written "
+                + "by an earlier run and are not part of it any more.");
+        System.out.println(">>> A renamed heading leaves the old page behind, because a page is "
+                + "found by its title:");
+        candidates.forEach(candidate -> System.out.println(">>>   " + candidate));
+        System.out.println(">>> Move or delete them in Confluence; this run does not touch them.");
+    }
+
+    /**
+     * @return the ids this document owns: everything below its start page, and where an ancestor
+     *         is configured, that ancestor's other children - a renamed root page is left there
+     */
+    private Set<String> belowThisDocument(Map<?, ?> listing, String parentId, String start) {
+        Map<String, List<String>> childrenByParent = new LinkedHashMap<>();
+        for (Object entry : listing.values()) {
+            if (entry instanceof Map<?, ?> page) {
+                childrenByParent
+                        .computeIfAbsent(String.valueOf(page.get("parentId")), id -> new ArrayList<>())
+                        .add(String.valueOf(page.get("id")));
+            }
+        }
+        Set<String> owned = new LinkedHashSet<>();
+        Deque<String> queue = new ArrayDeque<>();
+        if (start != null) {
+            queue.addAll(childrenByParent.getOrDefault(start, List.of()));
+        }
+        if (parentId != null && !parentId.isEmpty()) {
+            queue.addAll(childrenByParent.getOrDefault(parentId, List.of()));
+        }
+        while (!queue.isEmpty()) {
+            String id = queue.poll();
+            if (owned.add(id)) {
+                queue.addAll(childrenByParent.getOrDefault(id, List.of()));
+            }
+        }
+        return owned;
     }
 
     /**
@@ -355,6 +428,7 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
             System.out.println(page.getTitle());
             String id = pushToConfluence(page, anchors, pageAnchors, labels);
             ids.add(id);
+            written.add(id);
             page.getChildren().forEach(child -> child.setParent(id));
             pushPages(page.getChildren(), anchors, pageAnchors, labels);
         }
