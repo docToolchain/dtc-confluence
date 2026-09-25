@@ -82,6 +82,11 @@ The report says where that page hangs, links to it, and says whether this publis
 For that case `--move` (`confluence.moveExistingPages`) writes it back under the parent this document asks for, instead of failing.
 A page without that hash was written by somebody else and is never moved; rename the heading or set `confluence.pagePrefix` to keep the titles apart.
 
+The other half of the same defect is a heading that *was* renamed: the new title creates a new page and the old one stays where it was, so the space ends up holding both.
+Every run - dry or not - now names the pages below the document that an earlier run wrote and this one did not touch, with a link to each.
+They are not deleted: what to do with them is a decision, and this tool is not the one to take it.
+Both halves go away once a page is identified by its id rather than by its title, which is what xref:docs/decisions.adoc[the publish manifest] is for.
+
 `CONFLUENCE_CREDENTIALS=user:token` is the alternative where the instance wants basic authentication.
 
 Credentials are read from the environment rather than taken as options, which keeps them out of the process arguments - `ps` shows a command line to every user on the machine.
