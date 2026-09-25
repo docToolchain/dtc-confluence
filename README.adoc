@@ -68,9 +68,14 @@ It is also the first name looked for when no `--config` is given; `.dtc-confluen
 # Read the token from wherever you keep it, rather than typing it:
 export CONFLUENCE_BEARER_TOKEN=$(pass show confluence/token)   # or op, gopass, security...
 
-dtc-confluence verify  -d docs   # check URL and credentials
-dtc-confluence publish -d docs   # publish the configured inputs
+dtc-confluence verify  -d docs        # check URL and credentials
+dtc-confluence publish -d docs --dry-run   # say what would change, write nothing
+dtc-confluence publish -d docs        # publish the configured inputs
 ----
+
+A dry run (`-n`) reads everything a real run reads and writes nothing.
+It reports one line per page - `would create`, `would update` (with the version it would write), `unchanged` (the page already carries the hash of this text), `would fail` (a page of that title exists under another parent, which Confluence refuses) - and ends with a count.
+Attachments and labels are not compared: they are written after the page they belong to, so a dry run only says how many would travel with a new page.
 
 `CONFLUENCE_CREDENTIALS=user:token` is the alternative where the instance wants basic authentication.
 
