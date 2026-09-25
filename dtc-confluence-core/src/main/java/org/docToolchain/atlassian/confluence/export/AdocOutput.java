@@ -24,6 +24,8 @@ final class AdocOutput {
     private static final Pattern ANCHOR = Pattern.compile("\\s*%%ANCHOR%%([^%]+)%%ANCHOR-END%%\\s*");
     private static final Pattern ROW_HEADER_TABLE = Pattern.compile(
             "%%TABLE-ROWHEADER-(\\d+)%%\\s*\\n+\\s*(?:\\[[^\\]]*\\]\\s*\\n)?\\|===");
+    private static final Pattern SOURCE_BLOCK =
+            Pattern.compile("%%SOURCE-BEGIN%%([^%]*)%%SOURCE-END%%");
     private static final Pattern STATUS = Pattern.compile(
             "%%STATUS-BEGIN-(\\w+)%%([\\s\\S]*?)%%STATUS-END%%");
 
@@ -45,6 +47,7 @@ final class AdocOutput {
                 .replaceAll("(?sm)^ [+] *$", "")
                 .replace("%7Bfilepath%7D", "{filepath}")
                 .replaceAll("\\s*%%DISCRETE%%\\s*", "\n\n[discrete]\n");
+        text = sourceBlocks(text);
         text = admonitions(text);
         text = collapsibles(text);
         text = anchors(text);
@@ -54,6 +57,11 @@ final class AdocOutput {
         // AsciiDoc needs "image::foo[]" for a block image. Anchored to the start of a line, so
         // that an image inside a sentence stays inline.
         return text.replaceAll("(?m)^(\\s*)image:(?!:)", "$1image::");
+    }
+
+    /** The attribute line of a source block, which pandoc would have escaped bracket by bracket. */
+    private static String sourceBlocks(String adoc) {
+        return replaceAll(SOURCE_BLOCK, adoc, matcher -> "[source, " + matcher.group(1) + "]");
     }
 
     /**

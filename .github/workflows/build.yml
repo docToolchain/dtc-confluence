@@ -33,6 +33,11 @@ jobs:
           distribution: temurin
           java-version: ${{ matrix.java }}
           cache: maven
+      # The export converts through pandoc, and the one test that runs the whole
+      # export end to end skips itself without it. A skipped test says nothing,
+      # and says it quietly.
+      - name: Install pandoc
+        run: pandoc --version || { sudo apt-get update && sudo apt-get install -y pandoc; }
       - run: ./mvnw -B -ntp verify
 
   sonar:

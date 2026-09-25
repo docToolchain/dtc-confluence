@@ -73,6 +73,9 @@ public class PageTreeWalker {
                 continue;
             }
             tree.getPages().put(entry.id(), describe(page, entry));
+            // The body came with the page that was just read. Keeping it here is what spares the
+            // export a second request per page.
+            tree.getBodies().put(entry.id(), storageOf(page));
 
             List<Map<?, ?>> children = reader.fetchChildPages(entry.id());
             List<String> childIds = new ArrayList<>();
@@ -89,6 +92,20 @@ public class PageTreeWalker {
             }
         }
         return tree;
+    }
+
+    /**
+     * @return the page's storage format, empty where the page has none - a page can be empty, and
+     *         an empty page is not a failure
+     */
+    private static String storageOf(Map<?, ?> page) {
+        if (!(page.get("body") instanceof Map<?, ?> body)) {
+            return "";
+        }
+        if (!(body.get("storage") instanceof Map<?, ?> storage)) {
+            return "";
+        }
+        return text(storage.get("value"));
     }
 
     private static Map<String, Object> spaceOf(Map<?, ?> rootPage, String rootPageId) {

@@ -12,8 +12,8 @@ import picocli.CommandLine.Spec;
         description = "Publish documentation to Confluence, and check what is there.",
         mixinStandardHelpOptions = true,
         versionProvider = ManifestVersionProvider.class,
-        subcommands = {InitCommand.class, PublishCommand.class, VerifyCommand.class,
-                WipeCommand.class})
+        subcommands = {InitCommand.class, PublishCommand.class, ExportCommand.class,
+                VerifyCommand.class, WipeCommand.class})
 public class ConfluenceCli implements Runnable {
 
     @Spec
