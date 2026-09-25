@@ -20,6 +20,9 @@ public class ExportedTree {
     /** Attachment id to its file name, version, page and download link. */
     private final Map<String, Map<String, Object>> attachments = new LinkedHashMap<>();
 
+    /** Page id to its storage format, as Confluence stores it. */
+    private final Map<String, String> bodies = new LinkedHashMap<>();
+
     /** Page id to the ids of its children, in the order Confluence returned them. */
     private final Map<String, List<String>> childrenByParent = new LinkedHashMap<>();
 
@@ -35,6 +38,15 @@ public class ExportedTree {
 
     public Map<String, Map<String, Object>> getAttachments() {
         return attachments;
+    }
+
+    /**
+     * The body is kept here rather than in the page map because the page map is what the converter
+     * reads, and it reads it once per page for every page - carrying a whole document in each
+     * entry of it would be paid for on every lookup.
+     */
+    public Map<String, String> getBodies() {
+        return bodies;
     }
 
     public Map<String, List<String>> getChildrenByParent() {

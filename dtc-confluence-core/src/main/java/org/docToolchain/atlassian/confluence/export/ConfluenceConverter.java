@@ -534,10 +534,13 @@ public class ConfluenceConverter {
                 .sorted(Comparator.comparing(page -> naturalKey(text(page.getValue().get("title")))))
                 .forEach(page -> {
                     List<String> folders = PageNaming.adocFolderStructure(pages, page.getKey());
+                    // joinPath, because a page at the root of the export sits in no folder and
+                    // "{jbake-root}/Root.adoc" is a path to nothing.
                     menu.append("*".repeat(folders.size() + 1))
-                            .append(" xref:{jbake-root}").append(String.join("/", folders))
-                            .append("/").append(adocNameOf(page.getValue())).append(".adoc[")
-                            .append(text(page.getValue().get("title"))).append("]\n")
+                            .append(" xref:{jbake-root}")
+                            .append(joinPath(String.join("/", folders),
+                                    adocNameOf(page.getValue()) + ".adoc"))
+                            .append("[").append(text(page.getValue().get("title"))).append("]\n")
                             .append(createMenu(pages, page.getKey()));
                 });
         return menu.toString();

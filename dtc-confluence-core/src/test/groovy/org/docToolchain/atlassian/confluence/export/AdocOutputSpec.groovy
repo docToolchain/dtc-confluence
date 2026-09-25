@@ -11,6 +11,21 @@ import spock.lang.Specification
  */
 class AdocOutputSpec extends Specification {
 
+    def 'a source block gets its attribute line back'() {
+        when: '''pandoc escapes a literal bracket in text: written as "[source, groovy]" the line
+                 arrives as "++[++source, groovy++]++", which is not a source block but four plus
+                 signs and a sentence'''
+            def adoc = AdocOutput.substitute('%%SOURCE-BEGIN%%groovy%%SOURCE-END%%')
+
+        then:
+            adoc == '[source, groovy]'
+    }
+
+    def 'a source block without a language keeps its shape'() {
+        expect:
+            AdocOutput.substitute('%%SOURCE-BEGIN%%%%SOURCE-END%%') == '[source, ]'
+    }
+
     def 'an admonition becomes a block, separated from what is above it'() {
         when:
             def adoc = AdocOutput.substitute('text%%ADMON-BEGIN-NOTE%%Worth knowing.%%ADMON-END%%')

@@ -379,8 +379,11 @@ class MacroTranslator {
         // wholeText rather than text: for the CDATA bodies Confluence writes the two are the
         // same, but a body without one would lose its line breaks.
         String code = Entities.escape(body == null ? "" : body.wholeText());
+        // The attribute line travels as a placeholder for the same reason an admonition does:
+        // pandoc escapes a literal bracket in text, and "++[++source, groovy++]++" is not a
+        // source block, it is four plus signs and a sentence.
         element.html("\n    <div class=\"code-wrapper\">\n"
-                + "    [source, " + language + "]%%CRLF%%\n"
+                + "    %%SOURCE-BEGIN%%" + language + "%%SOURCE-END%%%%CRLF%%\n"
                 + "    ----%%CRLF%%\n"
                 + "    " + code.replace("\n", "%%CRLF%%") + "%%CRLF%%\n"
                 + "    ----%%CRLF%%\n"

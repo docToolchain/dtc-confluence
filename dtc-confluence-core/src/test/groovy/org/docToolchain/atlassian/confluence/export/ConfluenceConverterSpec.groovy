@@ -255,6 +255,30 @@ class ConfluenceConverterSpec extends Specification {
                     '** xref:{jbake-root}Root/C10.adoc[Chapter 10]\n'
     }
 
+    def 'the menu of a page at the root of the export carries no empty folder'() {
+        given: '"{jbake-root}/Root.adoc" is a path to nothing'
+            def pages = ['1': [title: 'Root', filename: 'Root', adocFilename: 'Root',
+                               parentId: '0']]
+
+        expect:
+            converter.createMenu(pages, '0') == '* xref:{jbake-root}Root.adoc[Root]\n'
+    }
+
+    def 'a code macro hands its language on without brackets pandoc would escape'() {
+        given:
+            def storage = '<ac:structured-macro ac:name="code">' +
+                '<ac:parameter ac:name="language">groovy</ac:parameter>' +
+                '<ac:plain-text-body><![CDATA[def x = 1]]></ac:plain-text-body>' +
+                '</ac:structured-macro>'
+
+        when:
+            def html = convert(storage)
+
+        then: 'as a placeholder, spelled out again once pandoc has run'
+            html.contains('%%SOURCE-BEGIN%%groovy%%SOURCE-END%%')
+            !html.contains('[source, groovy]')
+    }
+
     def 'a root page is found by its title'() {
         expect:
             converter.findRootIdByTitle(['7': [title: 'The One']], 'The One') == '7'
