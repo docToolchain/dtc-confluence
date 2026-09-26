@@ -93,6 +93,42 @@ class ExportConfluenceTaskSpec extends Specification {
             !exported('Root/Child.html').exists()
     }
 
+    def 'two pages whose titles become the same file name both survive'() {
+        given: '''"A B" and "A-B" both sanitise to "A_B". Written under one name, the second page
+                  overwrites the first while the menu goes on naming both.'''
+            reader.fetchPage('1') >> page('1', 'Root', '<p>root</p>')
+            reader.fetchPage('2') >> page('2', 'A B', '<p>first</p>')
+            reader.fetchPage('3') >> page('3', 'A-B', '<p>second</p>')
+            reader.fetchChildPages('1') >> [[id: '2', title: 'A B'], [id: '3', title: 'A-B']]
+            reader.fetchChildPages('2') >> []
+            reader.fetchChildPages('3') >> []
+            reader.fetchAttachments(_) >> []
+
+        when:
+            taskFor().execute()
+
+        then: 'both documents are there, and one of them says which page it is'
+            exported('Root/A_B.adoc').text.contains('first')
+            exported('Root/A_B_3.adoc').text.contains('second')
+    }
+
+    def 'a profile macro whose user is unknown is reported rather than dropped'() {
+        given: '''The export carries no directory of users, so the name cannot be resolved. What
+                  it must not do is remove the content and say nothing.'''
+            reader.fetchPage('1') >> page('1', 'Root',
+                '<p><ac:structured-macro ac:name="profile"><ri:user ri:userkey="abc123"/>' +
+                    '</ac:structured-macro></p>')
+            reader.fetchChildPages('1') >> []
+            reader.fetchAttachments('1') >> []
+
+        when:
+            def task = taskFor()
+            task.execute()
+
+        then: 'the key reaches the document, and the tag is in the report'
+            exported('Root.adoc').text.contains('abc123')
+    }
+
     def 'an exported page carries its title, its attributes and its children'() {
         given:
             treeOfTwoPages()
@@ -126,9 +162,8 @@ class ExportConfluenceTaskSpec extends Specification {
             adoc.contains('.Worth knowing\n[NOTE]\n====')
             adoc.contains('The note body.')
 
-        and: 'a source block with its language'
-            adoc.contains('[source, groovy]')
-            adoc.contains('def hello = "world"')
+        and: 'a source block: the attribute line, the delimiters and the code, in that order'
+            adoc =~ /(?s)\[source, groovy\]\s*\n-{4,}\s*\ndef hello = "world"\s*\n-{4,}/
 
         and: 'nothing that pandoc escaped on the way'
             !adoc.contains('++[++')
