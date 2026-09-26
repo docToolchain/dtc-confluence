@@ -217,9 +217,14 @@ class PublishDryRunSpec extends Specification {
             client.retrievePageIdByName(_, _) >> null
             client.createPage(_, _, _, _, _) >>> [[id: '1000'], [id: '2000']]
             // Only the second space holds a page of an earlier run, below that space's ancestor.
-            client.fetchPagesByAncestorId(['99'], _) >> [:]
+            client.fetchPagesByAncestorId(['99'], _) >> ['forgotten': [id: '1234',
+                                                                        title: 'Forgotten One',
+                                                                        parentId: '99']]
             client.fetchPagesByAncestorId(['88'], _) >> ['old': [id: '4711', title: 'Old One',
                                                                   parentId: '88']]
+            client.retrieveFullPageById('1234') >> [id  : '1234', title: 'Forgotten One',
+                                                     body: [storage: [value:
+                                                             '<p>x</p><ac:placeholder>hash: #gone#</ac:placeholder>']]]
             client.retrieveFullPageById('4711') >> [id  : '4711', title: 'Old One',
                                                      body: [storage: [value:
                                                              '<p>x</p><ac:placeholder>hash: #old#</ac:placeholder>']]]
@@ -227,9 +232,12 @@ class PublishDryRunSpec extends Specification {
         when:
             def printed = outputOf { task.execute() }
 
-        then: 'named once, with the link into the space it actually lives in'
-            printed.contains('4711')
+        then: 'both are named, each with the link into the space it actually lives in'
+            printed.contains('/spaces/SPACE/pages/1234')
             printed.contains('/spaces/OTHER/pages/4711')
+
+        and: 'and neither is attributed to the other space'
+            !printed.contains('/spaces/OTHER/pages/1234')
             !printed.contains('/spaces/SPACE/pages/4711')
     }
 

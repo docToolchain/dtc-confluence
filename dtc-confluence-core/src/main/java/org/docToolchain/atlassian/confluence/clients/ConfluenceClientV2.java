@@ -36,9 +36,9 @@ public class ConfluenceClientV2 extends ConfluenceClient {
 
     private final String spaceKey;
 
-    private String spaceId;
 
-    private boolean spaceResolved;
+    /** Space key to its id, so that each key is looked up once and no other key is assumed. */
+    private final Map<String, String> spaceIds = new LinkedHashMap<>();
 
     public ConfluenceClientV2(ConfigService configService) {
         super(configService);
@@ -66,11 +66,25 @@ public class ConfluenceClientV2 extends ConfluenceClient {
      * space.</p>
      */
     public String getSpaceId() {
-        if (!spaceResolved) {
-            spaceId = fetchSpaceIdByKey(spaceKey);
-            spaceResolved = true;
+        return spaceIdOf(spaceKey);
+    }
+
+    /**
+     * @param key the space asked about, which a single input may override; the configured one
+     *            where it names none
+     * @return the id of that space, looked up once per key. Resolving the configured space
+     *         whatever was asked for is how a listing came back describing somewhere else.
+     */
+    String spaceIdOf(String key) {
+        String wanted = key == null || key.isEmpty() ? spaceKey : key;
+        // containsKey, not a null check: a key that resolves to nothing is remembered too, or a
+        // space that is not there would be asked about on every call.
+        if (spaceIds.containsKey(wanted)) {
+            return spaceIds.get(wanted);
         }
-        return spaceId;
+        String resolved = fetchSpaceIdByKey(wanted);
+        spaceIds.put(wanted, resolved);
+        return resolved;
     }
 
     final String fetchSpaceIdByKey(String spaceKey) {
@@ -128,13 +142,14 @@ public class ConfluenceClientV2 extends ConfluenceClient {
     }
 
     @Override
-    public Map<?, ?> fetchPagesBySpaceKey(String spaceKey, Integer pageLimit) {
+    public Map<?, ?> fetchPagesBySpaceKey(String requestedSpaceKey, Integer pageLimit) {
         Map<String, Object> allPages = new LinkedHashMap<>();
         String cursor = null;
         boolean morePages = true;
         while (morePages) {
             Object response = callApiAndFailIfNot20x(new HttpGet(
-                    pagedUri(API_V2_PATH + "/spaces/" + getSpaceId() + "/pages", pageLimit, cursor)));
+                    pagedUri(API_V2_PATH + "/spaces/" + spaceIdOf(requestedSpaceKey)
+                            + "/pages", pageLimit, cursor)));
             List<?> results = listAt(response, "results");
             String next = nextCursor(response);
             if (results.isEmpty() || next == null) {
@@ -202,23 +217,21 @@ public class ConfluenceClientV2 extends ConfluenceClient {
         return callApiAndFailIfNot20x(new HttpDelete(uri(API_V2_PATH + "/pages/" + id, Map.of(), List.of())));
     }
 
-    /**
-     * @param spaceKey unused: v2 addresses the space by the id resolved from the configured key
-     */
     @Override
     protected Object fetchPageIdByName(String name, String spaceKey) {
-        URI uri = uri(API_V2_PATH + "/spaces/" + getSpaceId() + "/pages",
+        // The space that was asked about, not the configured one: an input may name its own, and
+        // answering from somewhere else is how a page is created twice or updated in the wrong
+        // place.
+        URI uri = uri(API_V2_PATH + "/spaces/" + spaceIdOf(spaceKey) + "/pages",
                 Map.of("title", name, "status", "current"), List.of("title", "status"));
         return callApiAndReturnOrNull(new HttpGet(uri));
     }
 
-    /**
-     * @param confluenceSpaceKey unused: v2 addresses the space by id
-     */
     @Override
     public Object updatePage(String pageId, String title, String confluenceSpaceKey, Object localPage,
                              Integer pageVersion, String pageVersionComment, String parentId) {
-        Map<String, Object> requestBody = pageRequestBody(title, localPage, parentId);
+        Map<String, Object> requestBody =
+                pageRequestBody(title, localPage, parentId, confluenceSpaceKey);
         requestBody.put("id", pageId);
         requestBody.put("version", versionOf(pageVersion, pageVersionComment));
         HttpPut put = new HttpPut(API_V2_PATH + "/pages/" + pageId);
@@ -227,13 +240,11 @@ public class ConfluenceClientV2 extends ConfluenceClient {
         return callApiAndFailIfNot20x(put);
     }
 
-    /**
-     * @param confluenceSpaceKey unused: v2 addresses the space by id
-     */
     @Override
     public Object createPage(String title, String confluenceSpaceKey, Object localPage,
                              String pageVersionComment, String parentId) {
-        Map<String, Object> requestBody = pageRequestBody(title, localPage, parentId);
+        Map<String, Object> requestBody =
+                pageRequestBody(title, localPage, parentId, confluenceSpaceKey);
         requestBody.put("version", versionOf(1, pageVersionComment));
         HttpPost post = new HttpPost(API_V2_PATH + "/pages");
         post.setHeader("Content-Type", ContentType.APPLICATION_JSON);
@@ -241,7 +252,12 @@ public class ConfluenceClientV2 extends ConfluenceClient {
         return callApiAndFailIfNot20x(post);
     }
 
-    private Map<String, Object> pageRequestBody(String title, Object localPage, String parentId) {
+    /**
+     * @param spaceKey the space the page belongs in - v2 addresses it by id, and the id is
+     *                 resolved from this key rather than from the configured one
+     */
+    private Map<String, Object> pageRequestBody(String title, Object localPage, String parentId,
+                                                String spaceKey) {
         Map<String, Object> requestBody = new LinkedHashMap<>();
         requestBody.put("title", title);
         // editor and content-appearance are Cloud concepts, which is where v2 lives.
@@ -250,7 +266,7 @@ public class ConfluenceClientV2 extends ConfluenceClient {
                 "content-appearance-draft", Map.of("value", "full-width"),
                 "content-appearance-published", Map.of("value", "full-width"))));
         requestBody.put("status", "current");
-        requestBody.put("spaceId", getSpaceId());
+        requestBody.put("spaceId", spaceIdOf(spaceKey));
         requestBody.put("parentId", parentId == null || parentId.isEmpty() ? "" : parentId);
         requestBody.put("body", Map.of("value", localPage, "representation", "storage"));
         return requestBody;

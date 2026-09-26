@@ -96,18 +96,35 @@ class ConfluenceClientV2RequestSpec extends Specification {
             requests.first().uri == '/wiki/api/v2/spaces?keys=SPACE&status=current&limit=1'
     }
 
-    def 'the space is resolved once, not on every call'() {
+    def 'the space is resolved once per key, not on every call'() {
         given:
             responses.addAll([SPACE_LOOKUP, '{}', '{}'])
             def c = clientFor('SPACE')
 
         when:
-            c.fetchPageIdByName('One', 'IGNORED')
-            c.fetchPageIdByName('Two', 'IGNORED')
+            c.fetchPageIdByName('One', 'SPACE')
+            c.fetchPageIdByName('Two', 'SPACE')
 
         then: 'one lookup, then one request per call'
             requests.size() == 3
             requests.first().uri.startsWith('/wiki/api/v2/spaces?keys=SPACE')
+    }
+
+    def 'a call that names another space asks about that one'() {
+        given: '''An input may publish into a space of its own. Resolving the configured key
+                  whatever was asked for put the pages of one space into another.'''
+            responses.addAll([SPACE_LOOKUP, '{}', '{"results":[{"id":"OTHER-2"}]}', '{}'])
+            def c = clientFor('SPACE')
+
+        when:
+            c.fetchPageIdByName('One', 'SPACE')
+            c.fetchPageIdByName('Two', 'OTHER')
+
+        then: 'two lookups, one per key, and the second call addresses the second space'
+            requests*.uri.findAll { it.startsWith('/wiki/api/v2/spaces?keys=') } ==
+                    ['/wiki/api/v2/spaces?keys=SPACE&status=current&limit=1',
+                     '/wiki/api/v2/spaces?keys=OTHER&status=current&limit=1']
+            requests.last().uri.startsWith('/wiki/api/v2/spaces/OTHER-2/pages')
     }
 
     def 'a space key that resolves to nothing leaves the space id unset'() {
@@ -227,14 +244,14 @@ class ConfluenceClientV2RequestSpec extends Specification {
 
     def 'updatePage puts the new version under the page id'() {
         when:
-            spaceAddressingClient().updatePage('4711', 'Some Page', 'IGNORED', '<p>body</p>', 7, 'why', '99')
+            spaceAddressingClient().updatePage('4711', 'Some Page', 'SPACE', '<p>body</p>', 7, 'why', '99')
 
         then:
             sent().method == 'PUT'
             sent().uri == '/wiki/api/v2/pages/4711'
 
         and: """An update carries the space id too: createPage and updatePage share one request
-                 body builder, so the key is resolved for both."""
+                 body builder, and both resolve the key they were given."""
             requests.size() == 2
             requests.first().uri.startsWith('/wiki/api/v2/spaces?keys=SPACE')
 
