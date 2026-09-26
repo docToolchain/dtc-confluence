@@ -199,6 +199,40 @@ class PublishDryRunSpec extends Specification {
         return task
     }
 
+    def 'each space is reported against its own listing'() {
+        given: '''Two inputs, two spaces. Reported once with whichever space happened to be last,
+                  the pages of the other one would be measured against a listing they are not in.'''
+            def config = new ConfigObject()
+            config.docDir = RESOURCES
+            config.confluence.api = 'https://confluence.example/rest/api/'
+            config.confluence.credentials = 'x'
+            config.confluence.useV1Api = true
+            config.confluence.spaceKey = 'SPACE'
+            config.confluence.subpagesForSections = 0
+            config.confluence.input = [[file: 'smoke-input.html', ancestorId: '99'],
+                                       [file: 'smoke-input.html', spaceKey: 'OTHER',
+                                        ancestorId: '88']]
+            def task = Asciidoc2ConfluenceTask.From(config, RESOURCES)
+            task.confluenceClient = client
+            client.retrievePageIdByName(_, _) >> null
+            client.createPage(_, _, _, _, _) >>> [[id: '1000'], [id: '2000']]
+            // Only the second space holds a page of an earlier run, below that space's ancestor.
+            client.fetchPagesByAncestorId(['99'], _) >> [:]
+            client.fetchPagesByAncestorId(['88'], _) >> ['old': [id: '4711', title: 'Old One',
+                                                                  parentId: '88']]
+            client.retrieveFullPageById('4711') >> [id  : '4711', title: 'Old One',
+                                                     body: [storage: [value:
+                                                             '<p>x</p><ac:placeholder>hash: #old#</ac:placeholder>']]]
+
+        when:
+            def printed = outputOf { task.execute() }
+
+        then: 'named once, with the link into the space it actually lives in'
+            printed.contains('4711')
+            printed.contains('/spaces/OTHER/pages/4711')
+            !printed.contains('/spaces/SPACE/pages/4711')
+    }
+
     def 'pages of another input under the same ancestor are not called left behind'() {
         given: '''Both inputs hang under 99. Reported per input, the first run would name the
                   second input's page - written by an earlier run, carrying the hash, not yet
@@ -220,7 +254,8 @@ class PublishDryRunSpec extends Specification {
             def printed = outputOf { taskForTwoInputs().execute() }
 
         then: 'the page of the second input is written, not denounced'
-            printed.contains('> updated page 2000')
+            1 * client.updatePage('2000', 'Second docToolchain Confluence Smoke Test', 'SPACE',
+                    _, 2, _, '99')
             !printed.contains('not part of it any more')
             !printed.contains('Move or delete them')
     }

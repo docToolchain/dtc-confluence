@@ -87,11 +87,12 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
     /** The pages this run wrote or confirmed, so that what it did not touch can be named. */
     private final Set<String> written = new LinkedHashSet<>();
 
-    /** Where each input's document starts, collected until every input has been published. */
-    private final Set<String> documentRoots = new LinkedHashSet<>();
-
-    /** The ancestors the inputs publish under, which several of them may share. */
-    private final Set<String> ancestors = new LinkedHashSet<>();
+    /**
+     * Per space, the pages the inputs published at their top level and the ancestors they
+     * published under. Per space, because the listing a report reads is a listing of one space,
+     * and two inputs can name two different ones.
+     */
+    private final Map<String, Set<String>> ownedBySpace = new LinkedHashMap<>();
 
     private String confluenceSpaceKey;
     private String confluencePagePrefix = "";
@@ -307,11 +308,15 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
         } else {
             System.out.println("published to " + spaceUrl());
         }
-        if (start != null) {
-            documentRoots.add(start);
-        }
+        // Every page published at the top level, not only the first: a document can put several
+        // pages side by side, and the ones below them are just as much part of it.
+        Set<String> owned = ownedBySpace.computeIfAbsent(confluenceSpaceKey,
+                space -> new LinkedHashSet<>());
+        published.stream()
+                .filter(id -> id != null && !NOT_CREATED.equals(id))
+                .forEach(owned::add);
         if (parentId != null && !parentId.isEmpty()) {
-            ancestors.add(parentId);
+            owned.add(parentId);
         }
     }
 
@@ -327,12 +332,16 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
      * page somebody else wrote is not this run's business.</p>
      */
     private void reportLeftBehind() {
-        if (documentRoots.isEmpty() && ancestors.isEmpty()) {
-            return;
-        }
-        Map<?, ?> listing = retrieveAllPages(confluenceSpaceKey);
+        ownedBySpace.forEach(this::reportLeftBehindIn);
+    }
+
+    private void reportLeftBehindIn(String spaceKey, Set<String> owned) {
+        // The listing is per space, and so is the report: what hangs below a page of space A says
+        // nothing about space B.
+        confluenceSpaceKey = spaceKey;
+        Map<?, ?> listing = retrieveAllPages(spaceKey);
         List<String> candidates = new ArrayList<>();
-        for (String id : belowThisDocument(listing)) {
+        for (String id : belowThisDocument(listing, owned)) {
             if (written.contains(id)) {
                 continue;
             }
@@ -357,7 +366,7 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
      * @return the ids this document owns: everything below its start page, and where an ancestor
      *         is configured, that ancestor's other children - a renamed root page is left there
      */
-    private Set<String> belowThisDocument(Map<?, ?> listing) {
+    private Set<String> belowThisDocument(Map<?, ?> listing, Set<String> owned) {
         Map<String, List<String>> childrenByParent = new LinkedHashMap<>();
         for (Object entry : listing.values()) {
             if (entry instanceof Map<?, ?> page) {
@@ -366,21 +375,18 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
                         .add(String.valueOf(page.get("id")));
             }
         }
-        Set<String> owned = new LinkedHashSet<>();
+        Set<String> below = new LinkedHashSet<>();
         Deque<String> queue = new ArrayDeque<>();
-        for (String root : documentRoots) {
+        for (String root : owned) {
             queue.addAll(childrenByParent.getOrDefault(root, List.of()));
-        }
-        for (String ancestor : ancestors) {
-            queue.addAll(childrenByParent.getOrDefault(ancestor, List.of()));
         }
         while (!queue.isEmpty()) {
             String id = queue.poll();
-            if (owned.add(id)) {
+            if (below.add(id)) {
                 queue.addAll(childrenByParent.getOrDefault(id, List.of()));
             }
         }
-        return owned;
+        return below;
     }
 
     /**
