@@ -85,6 +85,11 @@ public class ExportConfluenceTask extends AbstractConfluenceTask {
         this.converter = converter;
     }
 
+    /** @return the converter this export ran, and with it the tags it could not translate */
+    public ConfluenceConverter getConverter() {
+        return converter;
+    }
+
     @Override
     public void execute() {
         File destDir = destinationDirectory();
@@ -137,7 +142,14 @@ public class ExportConfluenceTask extends AbstractConfluenceTask {
             if (first == null) {
                 continue;
             }
+            // The replacement is reserved too: a third page can be titled "A_B_2" and would
+            // otherwise take the name this one was just given.
+            String folders = path.substring(0, path.lastIndexOf('/') + 1);
             String distinct = nameOf(page.getValue()) + "_" + pageId;
+            for (int attempt = 2; takenBy.putIfAbsent(folders + distinct, pageId) != null;
+                    attempt++) {
+                distinct = nameOf(page.getValue()) + "_" + pageId + "_" + attempt;
+            }
             System.out.println(">>> WARN: '" + page.getValue().get("title") + "' and the page of "
                     + "id " + first + " both want to be written as " + path
                     + "; this one becomes " + distinct);

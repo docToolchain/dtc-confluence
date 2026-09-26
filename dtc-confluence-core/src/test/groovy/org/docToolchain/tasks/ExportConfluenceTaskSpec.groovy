@@ -125,8 +125,11 @@ class ExportConfluenceTaskSpec extends Specification {
             def task = taskFor()
             task.execute()
 
-        then: 'the key reaches the document, and the tag is in the report'
+        then: 'the key reaches the document'
             exported('Root.adoc').text.contains('abc123')
+
+        and: 'and the run names it among the tags it could not translate'
+            task.converter.unknownTagsStats.keySet().any { it.startsWith('ac:structured-macro profile') }
     }
 
     def 'an exported page carries its title, its attributes and its children'() {
