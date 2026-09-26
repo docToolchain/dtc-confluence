@@ -45,15 +45,16 @@ class PublishDryRunSpec extends Specification {
 
     def 'a dry run creates nothing, updates nothing and attaches nothing'() {
         given: 'a space where none of the pages exist yet'
-            client.fetchPagesBySpaceKey(_, _) >> [:]
-            client.fetchPagesByAncestorId(_, _) >> [:]
             client.retrievePageIdByName(_, _) >> null
 
         when:
             def task = taskFor(true)
             task.execute()
 
-        then: 'nothing is written, at all'
+        then: 'it does read what is there - a dry run that asks nothing answers nothing'
+            1 * client.fetchPagesByAncestorId(_, _) >> [:]
+
+        and: 'nothing is written, at all'
             0 * client.createPage(_, _, _, _, _)
             0 * client.updatePage(_, _, _, _, _, _, _)
             0 * client.createAttachment(_, _, _, _, _)
@@ -135,6 +136,39 @@ class PublishDryRunSpec extends Specification {
             !printed.contains('//spaces/')
     }
 
+    def 'the page link survives every spelling of the API URL'() {
+        given: '''An API URL is written with and without its trailing slash, and Cloud names its
+                  API differently. Only one of those used to lose the API path; the others left
+                  ".../rest/api/spaces/KEY" behind, which is a link to nothing.'''
+            def config = new ConfigObject()
+            config.docDir = RESOURCES
+            config.confluence.api = api
+            config.confluence.credentials = 'x'
+            config.confluence.useV1Api = true
+            config.confluence.spaceKey = 'SPACE'
+            config.confluence.subpagesForSections = 0
+            config.confluence.input = [[file: 'smoke-input.html']]
+            def task = Asciidoc2ConfluenceTask.From(config, RESOURCES)
+            task.confluenceClient = client
+            client.fetchPagesBySpaceKey(_, _) >> [:]
+            client.fetchPagesByAncestorId(_, _) >> [:]
+            client.retrievePageIdByName(_, _) >> null
+            client.createPage(_, _, _, _, _) >> [id: '1000']
+
+        when:
+            def printed = outputOf { task.execute() }
+
+        then:
+            printed.contains("published to ${expected}/spaces/SPACE/pages/1000")
+
+        where:
+            api                                        || expected
+            'https://confluence.example/rest/api/'     || 'https://confluence.example'
+            'https://confluence.example/rest/api'      || 'https://confluence.example'
+            'https://host/confluence/rest/api'         || 'https://host/confluence'
+            'https://example.atlassian.net/wiki/api/v2' || 'https://example.atlassian.net/wiki'
+    }
+
     def 'a dry run says where it would publish, and that there is nothing to open yet'() {
         given:
             client.fetchPagesBySpaceKey(_, _) >> [:]
@@ -147,6 +181,48 @@ class PublishDryRunSpec extends Specification {
         then:
             printed.contains('would publish to https://confluence.example/spaces/SPACE')
             printed.contains('do not exist yet')
+    }
+
+    private Asciidoc2ConfluenceTask taskForTwoInputs() {
+        def config = new ConfigObject()
+        config.docDir = RESOURCES
+        config.confluence.api = 'https://confluence.example/rest/api/'
+        config.confluence.credentials = 'x'
+        config.confluence.useV1Api = true
+        config.confluence.spaceKey = 'SPACE'
+        config.confluence.subpagesForSections = 0
+        config.confluence.input = [[file: 'smoke-input.html', ancestorId: '99'],
+                                   [file: 'smoke-input.html', pagePrefix: 'Second ',
+                                    ancestorId: '99']]
+        def task = Asciidoc2ConfluenceTask.From(config, RESOURCES)
+        task.confluenceClient = client
+        return task
+    }
+
+    def 'pages of another input under the same ancestor are not called left behind'() {
+        given: '''Both inputs hang under 99. Reported per input, the first run would name the
+                  second input's page - written by an earlier run, carrying the hash, not yet
+                  touched by this one - and tell the reader to delete a page this very run is
+                  about to rewrite.'''
+            def second = [id: '2000', title: 'Second docToolchain Confluence Smoke Test',
+                          parentId: '99']
+            def listing = ['second doctoolchain confluence smoke test': second]
+            client.fetchPagesBySpaceKey(_, _) >> listing
+            client.fetchPagesByAncestorId(_, _) >> listing
+            client.retrievePageIdByName(_, _) >> null
+            client.retrieveFullPageById('2000') >> [id      : '2000', version: [number: 1],
+                                                    ancestors: [[id: '99']],
+                                                    body    : [storage: [value:
+                                                            '<p>x</p><ac:placeholder>hash: #stale#</ac:placeholder>']]]
+            client.createPage(_, _, _, _, _) >> [id: '1000']
+
+        when:
+            def printed = outputOf { taskForTwoInputs().execute() }
+
+        then: 'the page of the second input is written, not denounced'
+            printed.contains('> updated page 2000')
+            !printed.contains('not part of it any more')
+            !printed.contains('Move or delete them')
     }
 
     def 'a page left behind by a renamed heading is named'() {

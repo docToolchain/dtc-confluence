@@ -87,6 +87,12 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
     /** The pages this run wrote or confirmed, so that what it did not touch can be named. */
     private final Set<String> written = new LinkedHashSet<>();
 
+    /** Where each input's document starts, collected until every input has been published. */
+    private final Set<String> documentRoots = new LinkedHashSet<>();
+
+    /** The ancestors the inputs publish under, which several of them may share. */
+    private final Set<String> ancestors = new LinkedHashSet<>();
+
     private String confluenceSpaceKey;
     private String confluencePagePrefix = "";
     private String confluencePageSuffix = "";
@@ -167,6 +173,10 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
             }
             publish(input, String.valueOf(file));
         }
+        // After every input, not after each one: two inputs can share an ancestor, and a report
+        // run in between would name the second input's pages - which this very run is about to
+        // rewrite - as pages to delete.
+        reportLeftBehind();
         if (dryRun) {
             summarise();
         }
@@ -232,10 +242,13 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
      *         taken off: "…/rest/api/" left one behind, and the link then carried "//spaces/".
      */
     private String spaceUrl() {
-        return String.valueOf(configService.getConfigProperty("confluence.api"))
-                .replace("rest/api/", "")
+        // The trailing slashes first: an API URL is written both as ".../rest/api" and as
+        // ".../rest/api/", and only the second used to lose its API path - the first produced
+        // ".../rest/api/spaces/KEY", which is not a link to anything.
+        String api = String.valueOf(configService.getConfigProperty("confluence.api"))
                 .replaceAll("/+$", "")
-                + "/spaces/" + confluenceSpaceKey;
+                .replaceAll("/(rest/api|api/v2)$", "");
+        return api + "/spaces/" + confluenceSpaceKey;
     }
 
     /** @return the switch, read without Groovy truth so that an explicit false is a decision */
@@ -294,7 +307,12 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
         } else {
             System.out.println("published to " + spaceUrl());
         }
-        reportLeftBehind(parentId, start);
+        if (start != null) {
+            documentRoots.add(start);
+        }
+        if (parentId != null && !parentId.isEmpty()) {
+            ancestors.add(parentId);
+        }
     }
 
     /**
@@ -304,14 +322,17 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
      * title creates a new page and the old one stays where it was, and the space quietly grows a
      * second copy. Nothing reported that until it was noticed in Confluence.</p>
      *
-     * <p>Only pages carrying this publisher's hash are named, and only below what this document
-     * owns - its own start page, and, where one is configured, the children of its ancestor. A
+     * <p>Only pages carrying this publisher's hash are named, and only below what this run owns -
+     * the start page of each input, and, where one is configured, the children of its ancestor. A
      * page somebody else wrote is not this run's business.</p>
      */
-    private void reportLeftBehind(String parentId, String start) {
+    private void reportLeftBehind() {
+        if (documentRoots.isEmpty() && ancestors.isEmpty()) {
+            return;
+        }
         Map<?, ?> listing = retrieveAllPages(confluenceSpaceKey);
         List<String> candidates = new ArrayList<>();
-        for (String id : belowThisDocument(listing, parentId, start)) {
+        for (String id : belowThisDocument(listing)) {
             if (written.contains(id)) {
                 continue;
             }
@@ -336,7 +357,7 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
      * @return the ids this document owns: everything below its start page, and where an ancestor
      *         is configured, that ancestor's other children - a renamed root page is left there
      */
-    private Set<String> belowThisDocument(Map<?, ?> listing, String parentId, String start) {
+    private Set<String> belowThisDocument(Map<?, ?> listing) {
         Map<String, List<String>> childrenByParent = new LinkedHashMap<>();
         for (Object entry : listing.values()) {
             if (entry instanceof Map<?, ?> page) {
@@ -347,11 +368,11 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
         }
         Set<String> owned = new LinkedHashSet<>();
         Deque<String> queue = new ArrayDeque<>();
-        if (start != null) {
-            queue.addAll(childrenByParent.getOrDefault(start, List.of()));
+        for (String root : documentRoots) {
+            queue.addAll(childrenByParent.getOrDefault(root, List.of()));
         }
-        if (parentId != null && !parentId.isEmpty()) {
-            queue.addAll(childrenByParent.getOrDefault(parentId, List.of()));
+        for (String ancestor : ancestors) {
+            queue.addAll(childrenByParent.getOrDefault(ancestor, List.of()));
         }
         while (!queue.isEmpty()) {
             String id = queue.poll();
