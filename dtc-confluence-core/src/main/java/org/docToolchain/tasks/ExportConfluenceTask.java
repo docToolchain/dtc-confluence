@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +19,7 @@ import org.docToolchain.atlassian.confluence.export.AttachmentDownloader;
 import org.docToolchain.atlassian.confluence.export.ConfluenceConverter;
 import org.docToolchain.atlassian.confluence.export.ConfluenceReader;
 import org.docToolchain.atlassian.confluence.export.ExportedTree;
+import org.docToolchain.atlassian.confluence.export.PageNaming;
 import org.docToolchain.atlassian.confluence.export.PageTreeWalker;
 
 /**
@@ -109,9 +111,45 @@ public class ExportConfluenceTask extends AbstractConfluenceTask {
                     + tree.getAttachments().size());
         }
 
+        keepNamesApart(tree);
         Set<String> unknownTags = writePages(tree, docsDir);
         writeMenu(tree, docsDir);
         report(tree, unknownTags);
+    }
+
+    /**
+     * Gives a page whose file name another page already took a name of its own.
+     *
+     * <p>A title becomes a file name by replacing everything a path stumbles over, so "A B" and
+     * "A-B" both become "A_B" - and the second page would be written over the first while the
+     * menu went on naming both. The page id is appended instead, which is ugly and unique.</p>
+     *
+     * <p>Before the attachments are fetched, so that the folders they are written into are the
+     * ones the documents refer to.</p>
+     */
+    private static void keepNamesApart(ExportedTree tree) {
+        Map<String, String> takenBy = new LinkedHashMap<>();
+        for (Map.Entry<String, Map<String, Object>> page : tree.getPages().entrySet()) {
+            String pageId = page.getKey();
+            String path = String.join("/", PageNaming.adocFolderStructure(tree.getPages(), pageId))
+                    + "/" + nameOf(page.getValue());
+            String first = takenBy.putIfAbsent(path, pageId);
+            if (first == null) {
+                continue;
+            }
+            String distinct = nameOf(page.getValue()) + "_" + pageId;
+            System.out.println(">>> WARN: '" + page.getValue().get("title") + "' and the page of "
+                    + "id " + first + " both want to be written as " + path
+                    + "; this one becomes " + distinct);
+            page.getValue().put("adocFilename", distinct);
+        }
+    }
+
+    private static String nameOf(Map<String, Object> page) {
+        Object adocFilename = page.get("adocFilename");
+        Object filename = page.get("filename");
+        return String.valueOf(adocFilename == null || String.valueOf(adocFilename).isEmpty()
+                ? filename : adocFilename);
     }
 
     private Set<String> writePages(ExportedTree tree, File docsDir) {

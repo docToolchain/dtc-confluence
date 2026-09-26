@@ -281,9 +281,15 @@ class MacroTranslator {
         if (user != null) {
             element.before("\nUser:: " + text(user.get("name")) + "%%CRLF%%\n"
                     + "// " + text(user.get("atlassianAccountId")) + "%%CRLF%%\n");
+        } else {
+            // Reported, because the page loses content here: the export carries no directory of
+            // users, so a profile can only be named by the key Confluence refers to it with. A
+            // silent removal is how a round trip loses things.
+            report("ac:structured-macro profile (no user for " + userkey + ")");
+            element.before("\nUser:: " + (userkey.isEmpty() ? "unknown" : userkey) + "%%CRLF%%\n");
         }
-        // Also where the user is not in the export: the macro itself has nothing to say, and
-        // leaving it in the document would spill its parameters into the text.
+        // The macro itself has nothing more to say, and leaving it in the document would spill
+        // its parameters into the text.
         element.remove();
     }
 
