@@ -45,6 +45,7 @@
   </issueManagement>
 
   <modules>
+    <module>dtc-confluence-html2adoc</module>
     <module>dtc-confluence-core</module>
     <module>dtc-confluence-cli</module>
   </modules>
@@ -131,6 +132,11 @@
       <dependency>
         <groupId>org.doctoolchain</groupId>
         <artifactId>dtc-confluence-core</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.doctoolchain</groupId>
+        <artifactId>dtc-confluence-html2adoc</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>

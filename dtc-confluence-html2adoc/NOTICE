@@ -1,0 +1,127 @@
+dtc-confluence-html2adoc
+Copyright 2025 the dtc-confluence authors
+
+This module is a derivative work. It is not MIT like the rest of this
+repository; it is licensed under the Apache License, Version 2.0, whose text is
+in LICENSE-APACHE-2.0.txt beside this file.
+
+================================================================================
+Origin
+================================================================================
+
+Upstream project: asciidoctorj-experiments, module html2adoc
+Upstream URL:     https://github.com/jmini/asciidoctorj-experiments
+Upstream author:  Jeremie Bresson (https://github.com/jmini)
+Upstream licence: Apache License, Version 2.0
+State taken:      the repository as of its last commit, 2019-02-22
+
+The upstream sources carry no per-file copyright notice and name no copyright
+years, so none are asserted here beyond the authorship above.
+
+================================================================================
+Modifications made for dtc-confluence
+================================================================================
+
+Most of src/main/java and src/test/groovy is derived from the upstream html2adoc
+module, and every such file carries a header saying so. The files that have no
+upstream counterpart were written here and say that instead; which file is which
+is recorded per file in src/test/resources/provenance/upstream-counterparts.txt,
+and ProvenanceSpec keeps that record and the headers in agreement.
+
+The changes to the derived files are:
+
+Packaging and build
+  * Package renamed from `html2adoc` to `org.docToolchain.html2adoc`.
+  * Maven coordinates, parent POM and dependency versions are this project's.
+    jsoup moves from 1.9.2 to the version the parent POM manages.
+  * The Guava dependency is dropped: its single use, `Strings.repeat`, is
+    `String.repeat` since Java 11.
+  * Reformatted to this project's four-space indentation, and javadoc that said
+    only `@param x` was either written out or removed.
+
+Code
+  * `AbstractConverter` gained `isBlankOrNoBreakSpace`, which also accepts the
+    empty string. Modern jsoup normalises a lone `&nbsp;` to a space and trims
+    it away in `Element.text()`, which jsoup 1.9.2 did not; without this, every
+    spacer paragraph in the input would be converted into a blank AsciiDoc
+    paragraph. `ParagraphConverter` and `ImageConverter` use it.
+  * `HeaderConverter` now requires the heading's `<a>` to carry a non-empty
+    `name`. The upstream test was `attr("name") != null`, which jsoup never
+    answers with null, so any heading wrapped in an ordinary link produced an
+    empty `[[]]` anchor.
+  * `LinkConverter`: the condition `isExternalLink(e) || isExternalLink(e)` is
+    stated once, and the redundant second `addSpaceIfNeeded` call in each
+    branch is gone - the first call already wrote the space.
+  * `ListingConverter`: the unused private `findFirstElement` is removed, the
+    `<code>` element must now actually contain text (`convert` read
+    `textNodes().get(0)` on a structure `canConvert` had not checked that far),
+    and the caption it matches on is a named constant, `CAPTION`.
+  * `ListItemConverter` rejects a list item outside any list with a message
+    instead of a `NullPointerException` on the switch.
+  * `Html2Adoc.CONVERTERS` is private and immutable; the class is final with a
+    private constructor.
+  * `Integer.valueOf` for an `int` became `Integer.parseInt`.
+  * `TextNodeConverter` escapes through the new `AdocText` instead of writing
+    every text node through unchanged, and leaves text alone where the new
+    `PreformattedConverter` says it is verbatim.
+  * `AbstractFormatConverter` asks `AdocText` which of AsciiDoc's two quoting
+    forms a span needs, instead of always writing the constrained one, and
+    writes nothing for an empty element.
+  * `AbstractConverter` gained `startBlock`, and `HeaderConverter`,
+    `ParagraphConverter`, `ListConverter` and the new `TableConverter` call it.
+    Upstream wrote a block's opening markup wherever the previous text ended,
+    which AsciiDoc reads as part of that text.
+  * `LinkConverter` converts every `<a>` that has a target. Upstream required a
+    `#` fragment for a link to another file and dropped the target of every link
+    without one, which is the shape a link to a sibling page or an attachment
+    has.
+  * The table converters were restructured. Upstream's `TableTbodyConverter`
+    opened the table on `<tbody>`, which leaves a `<thead>` row above the table
+    rather than in it, and counted the cells of the first row as the column
+    count. `TableConverter` replaces it: it owns the delimiters, and takes the
+    column count from the widest row through the new `Tables`, which knows what
+    a `colspan` and a `rowspan` do to a row's width. `TableTdConverter` writes
+    the cell specifier for those spans and the `a` style for a cell holding
+    blocks.
+
+Files written here, with no upstream counterpart
+  * `AdocText`, which escapes text so that AsciiDoc reads it as text: upstream
+    wrote every text node through unchanged, so a sentence containing `*`,
+    `{nbsp}`, `[[id]]` or a cell separator came out as markup.
+  * `Tables`, the table geometry the converters share: nesting depth, cell
+    separator, and the column count of a table with spans in it.
+  * `HorizontalRuleConverter`, for `<hr>`, which upstream's html2adoc did not
+    convert; it occurs in the corpus above every block of footnotes.
+  * `TransparentConverter`, for `<div>`, `<span>`, `<thead>` and `<tbody>`:
+    wrappers that are dropped without the separating space the unknown-element
+    fallback of `Html2Adoc` would owe the next text.
+  * `PreformattedConverter`, for `<pre>`, which stops the escaping so that a
+    code sample written between AsciiDoc listing delimiters keeps the characters
+    it was written with.
+
+Tests
+  * Ported from JUnit 4 to Spock, which is what this project tests with. Every
+    upstream case is kept; cases of one shape are now rows of a `where:` block,
+    so the upstream 13 test classes became 10 specifications.
+  * The JUnit 4 `AllTests` suite is dropped; Surefire discovers specifications.
+  * Two upstream expectations were changed, because jsoup changed and the
+    output is now better than the one upstream recorded:
+      - `<p><img/>&nbsp;</p>` no longer leaves a stray `&nbsp;` behind. The
+        upstream test expected it and carried a TODO saying it was wrong;
+      - an image inside a table no longer begins with two blank lines. Those
+        came from the empty paragraph jsoup 1.9.2 created when it closed `<p>`
+        before `<table>`; jsoup 1.23 nests the table instead.
+    Two further upstream cases - the `&nbsp;` paragraph, and a `&nbsp;`
+    paragraph before a heading - broke on the new jsoup and were fixed in the
+    code, not in the expectation.
+  * Added to the ported specifications: the localhost link case, which upstream
+    implemented and never tested; a heading holding a plain link; an empty
+    paragraph; a listing table with a different caption; and the link shapes
+    that carry no fragment.
+  * Specifications written here, for behaviour upstream did not have: the five
+    under `escape` for `AdocText`, including one that renders its output with
+    `asciidoctor` and reads the words back; `block/BlockStartSpec` for the
+    blank line a block needs in front of it; `table/TableCellSpec`,
+    `table/TableHeadSpec` and `table/TableSpanSpec`; `rule/HorizontalRuleSpec`;
+    `transparent/TransparentSpec`; `verbatim/PreformattedSpec`; and
+    `provenance/ProvenanceSpec`, which guards the record this NOTICE refers to.
