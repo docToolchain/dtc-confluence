@@ -40,31 +40,41 @@ cd release-0.1.0
 # 4. build everything the release ships, signed
 ./mvnw -P release clean verify
 
-# 5. the tag
+# 5. the commit and the signed tag
 git commit -am "Release 0.1.0"
 git tag -s v0.1.0 -m "dtc-confluence 0.1.0"
 
-# 6. the GitHub release, with install.zip and the jar attached
+# 6. push both BEFORE anything is published. A release that exists while its
+#    commit does not is the one state that cannot be repaired by repeating a step.
+git push --follow-tags origin develop
+
+# 7. the GitHub release, with install.zip and the jar attached
 ./mvnw -P release jreleaser:full-release
 
-# 7. only once the namespace is granted: stage and deploy the library
-./mvnw -P release deploy -DaltDeploymentRepository=local::file:./target/staging-deploy
+# 8. only once the namespace is granted: stage and deploy the library, signed
+./mvnw -P release -Dgpg.skip=false deploy \
+    -DaltDeploymentRepository=local::file:./target/staging-deploy
 ./mvnw -P release jreleaser:deploy -Djreleaser.deploy.active=ALWAYS
 
-# 8. publish the commit and the tag, then fast-forward main
-git push --follow-tags origin develop
+# 9. fast-forward main
 git push origin develop:main
 
-# 9. open develop for the next round
+# 10. open develop for the next round
 ./mvnw versions:set -DnewVersion=0.2.0-SNAPSHOT -DgenerateBackupPoms=false
 git commit -am "Open 0.2.0-SNAPSHOT"
 git push origin develop
 ----
 
-Step 8 is a fast-forward as long as nothing is committed to `main` directly.
+The tag is made here and not by JReleaser: `skipTag: true` in `jreleaser.yml` says so, because a signed tag is worth more than a convenient one.
+
+Signing is off unless it is asked for (`-Dgpg.skip=false`).
+A GitHub-only release needs no key, and a build that demands one from a machine that has none would fail at step 4 for nothing.
+Maven Central does need it, which is why it is on in step 8.
+
+Step 9 is a fast-forward as long as nothing is committed to `main` directly.
 `main` is the released state and has no commits of its own; Dependabot and every other update go to `develop`, which is the default branch.
 
-== What to check before step 6
+== What to check before step 7
 
 `./mvnw -P release jreleaser:config` prints the model JReleaser resolved, including the version it derived and the files it will attach.
 It needs the token, so it is also the cheapest check that the token is there.

@@ -24,6 +24,9 @@ release:
     owner: docToolchain
     name: dtc-confluence
     tagName: 'v{{projectVersion}}'
+    # The tag is made by hand, signed, before the release is published. Without
+    # this JReleaser would try to create it as well.
+    skipTag: true
     overwrite: true
     changelog:
       # Written by hand: the commit messages here are prose and a generated

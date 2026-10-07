@@ -247,6 +247,14 @@
     -->
     <profile>
       <id>release</id>
+      <properties>
+        <!--
+          Off unless a release is going to Maven Central, which is the only thing that requires a
+          signature. A GitHub-only release needs no key, and demanding one from a machine that has
+          none would fail the build for nothing. Turn it on with -Dgpg.skip=false.
+        -->
+        <gpg.skip>true</gpg.skip>
+      </properties>
       <build>
         <plugins>
           <plugin>
