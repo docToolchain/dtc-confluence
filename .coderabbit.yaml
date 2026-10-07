@@ -7,7 +7,7 @@
 # that is around one review per hour - measured: three pull requests opened
 # within ten minutes produced one review and two "Review rate limited".
 #
-# So the budget is the scarce thing, and there are three ways to spend it well:
+# So the budget is the scarce thing, and there are two ways to spend it well:
 #
 #   * Open pull requests as drafts (gh pr create --draft). A draft is not
 #     reviewed automatically - reviews.auto_review.drafts defaults to false -
@@ -16,8 +16,12 @@
 #   * Ask for a review when the hour has passed, by commenting
 #     "@coderabbitai full review" on the pull request. A rate-limited pull
 #     request is not retried on its own.
-#   * Keep documentation-only changes out of the budget with the
-#     "documentation" label - see reviews.auto_review.labels below.
+#
+# What is deliberately NOT done: excluding documentation from review. A
+# decision entry that claims something nobody measured is as expensive to
+# believe as a defect in the publisher, and the entries here are where the
+# measurements are recorded. Documentation is reviewed; see the path
+# instructions for what that means.
 
 language: en-GB
 
@@ -38,19 +42,6 @@ reviews:
     enabled: true
     base_branches:
       - develop
-    # Everything except what is labelled "documentation". A review of a
-    # decision entry costs the same hour as a review of the publisher, and the
-    # two findings that prevented data loss here came from the latter.
-    #
-    # A negative-only filter still reviews everything else, so this does not
-    # turn automatic reviews off. Where a documentation change does want a
-    # review, ask for one with "@coderabbitai full review".
-    #
-    # Not ignore_title_keywords: that matches on the title, and the titles here
-    # are prose without conventional-commit prefixes, so a list of "docs:" and
-    # "chore:" would match nothing at all.
-    labels:
-      - '!documentation'
 
   # Says which files were skipped and which comments were withheld, so a quiet
   # review can be told from one that had nothing to look at.
@@ -73,6 +64,19 @@ reviews:
         check for one shape of absence usually misses the other. Watch for that
         and for values coerced with "as String", which turns an unset entry into
         the literal "[:]".
+    - path: '**/*.adoc'
+      instructions: >-
+        These documents are the project's memory: decisions.adoc records what
+        was decided and why, releasing.adoc the procedure, README.adoc what the
+        tool does. Review them for claims rather than for prose. A sentence
+        that states a fact about the software - a version, a limit, a
+        measurement, an API's behaviour - either names how it was established
+        or should be challenged. Check that cross-references resolve, that an
+        instruction can be followed literally as written, and that nothing
+        contradicts an earlier entry; where an entry describes code, say so if
+        the code no longer does that. AsciiDoc conventions here: one sentence
+        per line, '*' for lists, 'xref:' between documents, four-hyphen source
+        blocks.
     - path: '**/*Spec.groovy'
       instructions: >-
         Ask whether each test would fail if the behaviour it describes were
