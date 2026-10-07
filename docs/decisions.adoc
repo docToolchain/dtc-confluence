@@ -436,3 +436,21 @@ It is the older path, but it is the one that has a chance of working on an insta
 
 And the transformers stay as they are until something actually needs a second backend.
 An emitter interface with one implementation is a layer that earns nothing; it earns its keep on the day a second implementation exists, and not a commit before.
+
+== Releases are cut by hand
+
+Not from CI, and not by a tag push triggering a workflow.
+The same way htmlSanityCheck does it, for the same reasons: a release is rare, it is irreversible once the tag is public, and the one person who decides it is the one at the keyboard.
+A pipeline that releases on a tag also needs the signing key and the publishing credentials in the repository's secrets, which is a larger surface than a key on one laptop.
+
+JReleaser does the mechanical half - the GitHub release, the notes from `CHANGELOG.md`, the staged deployment to Maven Central - and is invoked by hand.
+Its configuration lives in `jreleaser.yml` rather than in the POM, because the POM is XML and this is a list of names and paths.
+
+Measured on the way in: JReleaser 1.18.0 cannot read a *git worktree*.
+Where `.git` is a file rather than a directory it stops with "Could not determine git HEAD: repository not found", and with `git.root.search` enabled it fails one step later on the remote.
+Everything else here happens in worktrees, so the release is the exception that is cut from an ordinary clone.
+The procedure is in xref:releasing.adoc[Cutting a release].
+
+Maven Central rather than GitHub Packages for the library, because GitHub Packages demands authentication even to *read*: every consumer of `dtc-confluence` would need a token to resolve it, which for a library docToolchain is meant to depend on is disqualifying.
+The `org.doctoolchain` namespace belongs to docToolchain and write access has to be granted there, so until then a release is a GitHub release only and `deploy.active` stays `NEVER`.
+

@@ -1,0 +1,56 @@
+# JReleaser configuration. Releases are cut by hand, from a machine, the way
+# htmlSanityCheck does it - not from CI. See docs/releasing.adoc.
+project:
+  name: dtc-confluence
+  description: Confluence support for docs-as-code, extracted from docToolchain
+  longDescription: |
+    Publishes AsciiDoctor-generated HTML to Confluence and exports Confluence content back to
+    AsciiDoc. Usable as a library and as a command line tool. Publishing needs a JRE and a jar;
+    exporting also needs pandoc.
+  authors:
+    - Gerd Aschemann
+  license: MIT
+  inceptionYear: '2025'
+  links:
+    homepage: https://github.com/docToolchain/dtc-confluence
+  languages:
+    java:
+      groupId: org.doctoolchain
+      artifactId: dtc-confluence
+      version: '17'
+
+release:
+  github:
+    owner: docToolchain
+    name: dtc-confluence
+    tagName: 'v{{projectVersion}}'
+    overwrite: true
+    changelog:
+      # Written by hand: the commit messages here are prose and a generated
+      # changelog out of them is noise. CHANGELOG.md is the release notes.
+      external: CHANGELOG.md
+    prerelease:
+      enabled: true
+      pattern: '.*-rc\d+$'
+
+# Attached to the GitHub release. Not a JReleaser `distribution`, because a
+# distribution exists to feed packagers (SDKMAN, Homebrew) and no packager is
+# registered for this tool yet. The day one is, this becomes a distribution and
+# the zip gets a versioned name - see docs/releasing.adoc.
+files:
+  artifacts:
+    - path: dtc-confluence-cli/target/install.zip
+    - path: dtc-confluence-cli/target/dtc-confluence.jar
+
+deploy:
+  # NEVER until the org.doctoolchain namespace on Maven Central is settled - it
+  # belongs to docToolchain and needs write access granted there. Flip to
+  # ALWAYS, or pass -Djreleaser.deploy.active=ALWAYS for one run, once it is.
+  active: NEVER
+  maven:
+    mavenCentral:
+      sonatype:
+        active: RELEASE
+        url: https://central.sonatype.com/api/v1/publisher
+        stagingRepositories:
+          - target/staging-deploy
