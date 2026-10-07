@@ -1,5 +1,23 @@
 # Configuration for the CodeRabbit review app.
 # Reference: https://docs.coderabbit.ai/reference/yaml-template
+#
+# This repository is reviewed under CodeRabbit's open-source offering, which
+# grants Team features without a paid plan but rate-limits reviews per hour,
+# scaled by the repository's star count. For a repository as new as this one
+# that is around one review per hour - measured: three pull requests opened
+# within ten minutes produced one review and two "Review rate limited".
+#
+# So the budget is the scarce thing, and there are three ways to spend it well:
+#
+#   * Open pull requests as drafts (gh pr create --draft). A draft is not
+#     reviewed automatically - reviews.auto_review.drafts defaults to false -
+#     so CI runs while the budget stays untouched. Release them one at a time
+#     with gh pr ready <n>, most important first.
+#   * Ask for a review when the hour has passed, by commenting
+#     "@coderabbitai full review" on the pull request. A rate-limited pull
+#     request is not retried on its own.
+#   * Keep documentation-only changes out of the budget with the
+#     "documentation" label - see reviews.auto_review.labels below.
 
 language: en-GB
 
@@ -20,6 +38,19 @@ reviews:
     enabled: true
     base_branches:
       - develop
+    # Everything except what is labelled "documentation". A review of a
+    # decision entry costs the same hour as a review of the publisher, and the
+    # two findings that prevented data loss here came from the latter.
+    #
+    # A negative-only filter still reviews everything else, so this does not
+    # turn automatic reviews off. Where a documentation change does want a
+    # review, ask for one with "@coderabbitai full review".
+    #
+    # Not ignore_title_keywords: that matches on the title, and the titles here
+    # are prose without conventional-commit prefixes, so a list of "docs:" and
+    # "chore:" would match nothing at all.
+    labels:
+      - '!documentation'
 
   # Says which files were skipped and which comments were withheld, so a quiet
   # review can be told from one that had nothing to look at.
