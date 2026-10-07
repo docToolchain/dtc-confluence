@@ -332,13 +332,25 @@ A file called `my report.pdf` lands on disk as `2_my_report.pdf`, and the link t
 A `profile` macro naming a user who is not in the export is removed rather than left in the document.
 It was left there only when the user was unknown, which is exactly when its parameters leaked into the text.
 
-== ADF as the format for Cloud: the direction, and what it waits for
+== ADF for Cloud: an intention, not yet a decision
+
+What is established, and what is merely intended, are separated here on purpose.
+The intention is to write ADF to Cloud rather than storage format - but nobody here has published to a Cloud instance even once, so calling it decided would dress an assumption up as a measurement.
+
+=== What is established
 
 Confluence Cloud stores a page as *ADF* - the Atlassian Document Format, a JSON tree of typed nodes (`{type, content, attrs, marks}`) with a schema, derived from ProseMirror.
-Storage format still works there, and is what this project writes today: `ConfluenceClientV2` sends `representation: "storage"`, the same body the v1 client sends.
-Data Center knows nothing of ADF; measured against ASF cwiki 9.2.21, `body-format` accepts no such value.
+Data Center knows nothing of it: measured against ASF cwiki 9.2.21, no `body-format` or `representation` of that name exists.
 
-The direction taken: *where Cloud is supported, ADF is the format to write*, not a second rendering of storage format.
+This project writes storage format to both.
+`ConfluenceClientV2` sends `representation: "storage"`, the same body the v1 client sends - which is worth stating plainly, because it had never been written down and is easy to assume otherwise.
+
+Storage format on Cloud is the older of two paths Atlassian maintains there.
+Its editor, its mobile clients and its newer endpoints speak ADF; the API specs carry no Markdown at all and the 2026 notes move internals towards ADF rather than away from it.
+That is a reading of a vendor's direction, not a measurement of our software, and it can turn out wrong.
+
+=== Why the intention, beyond following a vendor
+
 Two reasons, and neither is fashion.
 
 Atlassian invests in ADF and not in storage format on Cloud.
@@ -354,7 +366,7 @@ Macro mapping is mechanical, which is what makes this worth doing rather than re
 `ac:structured-macro` with `ac:parameter` children corresponds to ADF's `extension` and `bodiedExtension` with their parameters in `attrs`.
 The transformers know which macro a construct becomes; they do not need to know how it is spelled.
 
-=== What it waits for
+=== What would turn the intention into a decision
 
 Three things, in this order.
 
@@ -372,6 +384,48 @@ The body producer needs the seam the Asciidoctor-backend entry already names.
 Today the page tree and the string building are tangled together; one producer per format needs them apart.
 The same seam serves both, which is an argument for cutting it once, deliberately, rather than twice by accident.
 
+=== Consequence for the transformers
+
+The question "what does this do to the transformers" has a measurable answer, so here it is rather than a guess.
+Every transformer does two things: it *recognises* a construct in AsciiDoctor's HTML (a CSS selector) and it *emits* markup for it (a string template or DOM surgery).
+Recognition is backend-neutral and stays whatever the target format is.
+Emission is the coupling, and it is not spread evenly:
+
+[cols="h,1,1"]
+|===
+|Transformer |Lines |Lines mentioning `ac:`
+
+|DescriptionListTransformer |90 |0
+|MarkTransformer |16 |0
+|HtmlTransformer |92 |1
+|AdmonitionTransformer |45 |4
+|CollapsibleTransformer |49 |4
+|OpenApiTransformer |126 |6
+|LinkTransformer |96 |8
+|CodeBlockTransformer |297 |13
+|===
+
+Two of the eight emit no Confluence markup at all - they rewrite HTML into HTML and are already neutral.
+Four carry a single macro template each: what they know is "this is an admonition of kind X with title T and body B", and the storage spelling of that is four lines.
+`LinkTransformer` is a middle case, because a link has two spellings (`ac:link` with `ri:page`, and a plain anchor) rather than one.
+
+`CodeBlockTransformer` is where the work is, and part of its bulk is storage-format tax that ADF simply does not charge.
+CDATA escaping, the nested-CDATA repair, and entity escaping exist because a code sample has to survive being embedded in XHTML and re-parsed.
+An ADF `codeBlock` carries its text as a JSON string: no CDATA, no entities, no re-parse.
+The callout logic - marker style, comment syntax per language, the line-continuation rule - is real knowledge and survives untouched.
+
+So the honest estimate is: seven of eight transformers are a template swap behind an emitter interface, and the eighth gets *smaller* in the ADF direction while keeping its hard part.
+
+=== Three shapes the architecture could take
+
+* *An intermediate document model with two renderers.* AsciiDoctor HTML into a block/inline model of our own, then storage XHTML or ADF out of it. The cleanest, and the most work: the model has to express everything eight transformers currently express before anything can be rendered at all.
+* *A storage-format to ADF translator.* Change nothing, add one class that walks the storage format we already produce and emits ADF nodes. Cheapest by far, and the mapping is mechanical. But it keeps the string-and-reparse detour and adds a third hop, so every escaping defect we have had stays - and the ADF output inherits whatever the storage format already mangled.
+* *A recognition/emission split.* The transformers keep their selectors and stop emitting markup; they call an emitter - `macro(name, parameters, body)`, `codeBlock(language, text, callouts)`, `link(target, anchor, text)` - with one implementation per format. Smaller than a full document model, because only the constructs we actually emit need a method, and it puts escaping in one place instead of in eight.
+
+The third is the one to aim at, and it is the same seam the Asciidoctor-backend entry above asks for: that entry wants the page tree separated from the string building, and this one wants the emission separated from the recognition.
+They are two cuts in the same place.
+Worth noting against the second option: an emitter interface would have prevented the three defects named above outright, because none of them is about which macro to emit.
+
 === What stays as it is
 
 Export keeps reading storage format on both deployments.
@@ -379,3 +433,6 @@ Cloud still serves `storage` on read, so an ADF reader is a second parser for no
 
 Writing storage format to Cloud stays the behaviour until the three points above are answered.
 It is the older path, but it is the one that has a chance of working on an instance nobody has tried yet.
+
+And the transformers stay as they are until something actually needs a second backend.
+An emitter interface with one implementation is a layer that earns nothing; it earns its keep on the day a second implementation exists, and not a commit before.
