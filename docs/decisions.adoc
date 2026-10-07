@@ -331,3 +331,51 @@ A file called `my report.pdf` lands on disk as `2_my_report.pdf`, and the link t
 
 A `profile` macro naming a user who is not in the export is removed rather than left in the document.
 It was left there only when the user was unknown, which is exactly when its parameters leaked into the text.
+
+== ADF as the format for Cloud: the direction, and what it waits for
+
+Confluence Cloud stores a page as *ADF* - the Atlassian Document Format, a JSON tree of typed nodes (`{type, content, attrs, marks}`) with a schema, derived from ProseMirror.
+Storage format still works there, and is what this project writes today: `ConfluenceClientV2` sends `representation: "storage"`, the same body the v1 client sends.
+Data Center knows nothing of ADF; measured against ASF cwiki 9.2.21, `body-format` accepts no such value.
+
+The direction taken: *where Cloud is supported, ADF is the format to write*, not a second rendering of storage format.
+Two reasons, and neither is fashion.
+
+Atlassian invests in ADF and not in storage format on Cloud.
+Storage format on Cloud is a compatibility surface; the editor, the mobile clients and the API's own newer endpoints speak ADF.
+A library that writes storage format to Cloud is writing to the older of two paths, and the difference will grow rather than shrink.
+
+A tree with a schema removes a class of defect this project keeps paying for.
+Every body is built here as *markup in a string*: `BodyBuilder` returns storage XHTML, the transformers mutate a Jsoup `Element` and re-parse fragments, `PageDecorator` concatenates.
+The defects that followed are all the same defect: a file name with a quote in it closed an attribute and cut the name short, a `[source, groovy]` line came back as `++[++source, groovy++]++`, a nested collapsible was read by `details.html()` while its inner macro was still raw text.
+A node is appended to a tree or it is not; there is nothing to escape and nothing to re-parse.
+
+Macro mapping is mechanical, which is what makes this worth doing rather than rewriting from scratch.
+`ac:structured-macro` with `ac:parameter` children corresponds to ADF's `extension` and `bodiedExtension` with their parameters in `attrs`.
+The transformers know which macro a construct becomes; they do not need to know how it is spelled.
+
+=== What it waits for
+
+Three things, in this order.
+
+Cloud has never been verified against a real instance.
+That is recorded above and has not changed.
+Making ADF the primary format for a deployment nobody here has published to once would be building on an assumption; the first step is a verified Cloud run *with storage format*, which is what the code already does.
+
+The content hash needs a carrier in ADF.
+`PageDecorator` hides `hash: #...#` in an `<ac:placeholder>`, and that marker carries more weight than its size suggests: it is how "page hasn't changed!" avoids rewriting an untouched page, and how the left-behind report tells a page this publisher wrote from one somebody else wrote.
+ADF has no placeholder node and no comments.
+The candidates are an `extension` node of our own, a *content property* beside the body (`/pages/{id}/properties`, which survives body replacement and is arguably where a fingerprint belonged all along), or the publish manifest recorded above, which would make the in-page marker unnecessary.
+This has to be decided before anything writes ADF, because it is the page-identity mechanism and not a detail of rendering.
+
+The body producer needs the seam the Asciidoctor-backend entry already names.
+Today the page tree and the string building are tangled together; one producer per format needs them apart.
+The same seam serves both, which is an argument for cutting it once, deliberately, rather than twice by accident.
+
+=== What stays as it is
+
+Export keeps reading storage format on both deployments.
+Cloud still serves `storage` on read, so an ADF reader is a second parser for no gain until something actually publishes ADF.
+
+Writing storage format to Cloud stays the behaviour until the three points above are answered.
+It is the older path, but it is the one that has a chance of working on an instance nobody has tried yet.
