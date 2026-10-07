@@ -8,7 +8,7 @@ import spock.lang.Specification
  * The CLI ships as a fat jar built by {@code jar-with-dependencies}, which unpacks every dependency
  * into one tree. Same-path files overwrite each other there, so {@code META-INF/NOTICE} ends up
  * being whichever dependency was unpacked last - for a while an Apache HttpComponents notice of
- * 190 bytes, with the notice naming the upstream author of dtc-confluence-html2adoc gone from the
+ * 190 bytes, with the notice naming the upstream author of html2adoc gone from the
  * only artifact anyone installs. The notice therefore also travels under the name of its own
  * module, where nothing else can land on it, and this is the assertion that it does.
  *
@@ -18,7 +18,7 @@ import spock.lang.Specification
  */
 class AttributionSpec extends Specification {
 
-    private static final String NOTICES = 'META-INF/notices/dtc-confluence-html2adoc'
+    private static final String NOTICES = 'META-INF/notices/html2adoc'
 
     def 'the notice of the derived module travels under a path no dependency shares'() {
         when:

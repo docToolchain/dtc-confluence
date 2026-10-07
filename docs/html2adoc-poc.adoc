@@ -6,7 +6,7 @@ The export turns Confluence storage format into AsciiDoc in two steps.
 `ConfluenceConverter.fixBody` prepares XHTML, and something then writes AsciiDoc from it.
 That something has always been pandoc, started as a child process.
 
-`dtc-confluence-html2adoc` is a proof of concept for doing it in process, seeded from the `html2adoc` module of https://github.com/jmini/asciidoctorj-experiments[asciidoctorj-experiments].
+`html2adoc` is a proof of concept for doing it in process, seeded from the `html2adoc` module of https://github.com/jmini/asciidoctorj-experiments[asciidoctorj-experiments].
 `HtmlToAsciidoc` puts both behind one interface, and `confluence.export.converter` picks between `pandoc` (the default) and `native`.
 
 This page is the measurement.
@@ -14,7 +14,7 @@ A proof of concept that cannot be compared against what it would replace proves 
 
 == How this was produced
 
-`ConverterComparisonSpec` runs both converters over every file of `dtc-confluence-html2adoc/src/test/resources/corpus`, applies `AdocOutput.substitute` to each result - which is what an export does next - and leaves both answers in `dtc-confluence-core/target/html2adoc-comparison`:
+`ConverterComparisonSpec` runs both converters over every file of `html2adoc/src/test/resources/corpus`, applies `AdocOutput.substitute` to each result - which is what an export does next - and leaves both answers in `dtc-confluence-core/target/html2adoc-comparison`:
 
 [source,bash]
 ----
@@ -476,7 +476,7 @@ What native cannot do yet: every defect above, on a page where all of them occur
 === What the native converter already does better
 
 *Links survive.*
-This is the one difference that changes whether the export is usable.
+This is the one difference that changes whether the export is usable - and it did not hold up against real pages; see the correction at the end of this document.
 `fixBody` and `Footnotes` write real `xref:` directives into the HTML as text, and pandoc escapes them into prose: 12 `xref:` directives across the corpus, 0 of them a link.
 Native writes the same 12, of which 8 render as links and 4 are corrupted by the escaping problem described under `smoke-subpages-1-Second_Page.html`.
 Nothing in `AdocOutput` repairs the pandoc ones, so 0 against 8 is a defect in the shipping export that the PoC fixes by construction - not completely, but by an order of magnitude.
@@ -562,3 +562,41 @@ Neither is exercised by a corpus page, so both are specified directly instead - 
 A spec is weaker evidence than an exported page, and the right answer is still to export a page that has them.
 
 Closing that gap means exporting a page that has them, not writing more HTML by hand.
+
+== Measured again, against real pages
+
+Everything above was measured against the corpus: six pages, derived from this project's own golden files.
+The export was then run against 43 pages of the ASF `MAVEN` space (root page 2853526, "Maven 3.x", read-only, attachments off), once with each converter.
+What that showed matters more than the corpus did, and it contradicts the corpus on the one point that had looked decisive.
+
+=== The link finding does not survive
+
+On the corpus, pandoc escaped all 12 `xref:` directives into prose and native kept 8 of them.
+On 43 real pages both converters wrote **52** `xref:` directives and each corrupted exactly **one**.
+
+The corpus has `xref:` only where `fixBody` writes one into the HTML as text, and three of its six pages carry footnote cross-references, which is a density no real page has.
+So the 0-against-8 was an artefact of the input, not a property of pandoc.
+The claim above is left standing with this correction beside it rather than quietly edited, because the measurement that produced it was honest and the conclusion drawn from it was not.
+
+=== What the real pages showed instead
+
+Native is not better than pandoc here.
+It is wrong in different places, and two of its differences change the words on the page:
+
+* *A missing space before a link.* `…GenericVersion.java[…]in link:…` - the text node's trailing whitespace is dropped, which is gap 2 above, seen in prose rather than in a fixture.
+* *Bold becomes a literal asterisk.* `issue tracked as *https://…[MNG-3010]*` turns into `* link:https://…[MNG-3010]*`: the opening `*` is separated from its text, so the span is not bold any more and a stray asterisk is on the page. That is gap 7.
+* *Heading levels.* `== Improve default support for version schemes` from pandoc, `= Improve …` from native - a level-0 section inside a page that is included elsewhere. Gap 3, and these pages are full of it.
+* *AsciiDoc attributes for characters that need them.* pandoc writes `{nbsp}` and `{plus}`; native leaves a literal no-break space and writes a bare `+`, which AsciiDoc reads as markup.
+* *Redundant `link:`.* Native writes `link:https://…[text]` where pandoc writes `https://…[text]`. Both render; only the diff is noisier.
+
+=== Two macros the corpus never contained
+
+The run reported 111 `ac:emoticon` and 15 `ac:structured-macro noformat`, neither of which occurs in the corpus and both of which the translation drops with only a count.
+An emoticon is probably not worth carrying across; a `noformat` block is a code block without a language and is.
+Both are translation work in `MacroTranslator`, not converter work, and neither is affected by which converter runs.
+
+=== Timing
+
+pandoc 20.9 s, native 18.9 s, for the same 43 pages.
+As predicted from the per-invocation measurement recorded in the decisions, the conversion is not what an export spends its time on: three REST requests per page are.
+Replacing pandoc buys about two seconds in twenty, and the argument for it has to stand on the other grounds.

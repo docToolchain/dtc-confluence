@@ -28,7 +28,7 @@ class ConverterComparisonSpec extends Specification {
 
     /** The corpus, in the module it is read from; see its INVENTORY.md for where it comes from. */
     private static final File CORPUS =
-            new File('../dtc-confluence-html2adoc/src/test/resources/corpus')
+            new File('../html2adoc/src/test/resources/corpus')
 
     /** Where both answers are left for the report to cite. Under target: evidence, not a fixture. */
     private static final File EVIDENCE = new File('target/html2adoc-comparison')

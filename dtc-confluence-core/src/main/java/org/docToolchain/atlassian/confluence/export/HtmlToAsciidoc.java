@@ -9,7 +9,7 @@ import java.util.List;
  *
  * <p>There are two answers to that, which is why it is an interface. {@link PandocHtmlToAsciidoc}
  * shells out to pandoc - what the export has always done, and what works today.
- * {@link NativeHtmlToAsciidoc} calls {@code dtc-confluence-html2adoc}, which runs in process and
+ * {@link NativeHtmlToAsciidoc} calls {@code html2adoc}, which runs in process and
  * needs nothing installed, and is a proof of concept. {@code confluence.export.converter} picks
  * one; see {@code docs/html2adoc-poc.adoc} for what the two produce on the same input.</p>
  *
@@ -22,7 +22,7 @@ public interface HtmlToAsciidoc {
     /** The setting that shells out to pandoc. The default, because it is what is proven. */
     String PANDOC = "pandoc";
 
-    /** The setting that converts in process, through {@code dtc-confluence-html2adoc}. */
+    /** The setting that converts in process, through {@code html2adoc}. */
     String NATIVE = "native";
 
     /**
