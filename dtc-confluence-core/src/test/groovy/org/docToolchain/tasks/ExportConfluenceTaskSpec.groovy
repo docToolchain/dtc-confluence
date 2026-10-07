@@ -141,7 +141,9 @@ class ExportConfluenceTaskSpec extends Specification {
             def adoc = exported('Root.adoc').getText('utf-8')
 
         then: 'the title as a section, not as a document header - the page is included elsewhere'
-            adoc.contains('== Root')
+            // A whole line: a section title is only one at the start of an unindented line, and an
+            // indented "== Root" renders as a literal block with the markup shown.
+            adoc.readLines().contains('== Root')
 
         and: 'the attributes the microsite reads'
             adoc.readLines().contains(':jbake-status: published')

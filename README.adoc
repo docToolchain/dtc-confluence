@@ -99,7 +99,7 @@ The other way round, `export` fetches a page and everything below it and writes 
 
 [source,bash]
 ----
-dtc-confluence export -d docs    # needs pandoc on the PATH
+dtc-confluence export -d docs    # needs pandoc on the PATH, unless converter: native
 ----
 
 It reads its settings from `confluence.export`:
@@ -113,10 +113,20 @@ confluence:
     downloadAttachments: true          # the default
     stripChapterNumbering: true        # "5.2.4. Title" becomes "Title"
     stripPagePrefixRegex: ''           # shortens file names, e.g. '^PROJ_'
+    converter: pandoc                  # the default; or 'native', see below
 ----
 
 Below `destDir` it writes `docs/` with one file per page in folders mirroring the page tree, `docs/images/` with the attachments, and the `_menu.adoc` and `_config.adoc` a microsite reads.
-Publishing needs a JRE and the jar; exporting needs pandoc as well, because the conversion back to AsciiDoc goes through it.
+
+`converter` picks what turns the Confluence HTML into AsciiDoc:
+
+`pandoc`:: The default.
+Shells out to `pandoc`, which has to be on the PATH, and is what the export has always done.
+`native`:: Converts in process through `dtc-confluence-html2adoc`, so that an export needs a JRE and the jar and nothing else - which is what publishing already needs.
+A proof of concept: it gets some things right that pandoc gets wrong and some things wrong that pandoc gets right.
+What each produces on the same input, construct by construct, is in xref:docs/html2adoc-poc.adoc[the comparison].
+
+An unknown value is refused rather than quietly replaced by the default, because a typo would otherwise be answered with output produced by the other converter.
 
 The last command, `wipe`, deletes every page in the configured space and refuses to run without `--yes-delete-every-page`.
 

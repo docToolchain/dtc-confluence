@@ -22,6 +22,8 @@ final class AdocOutput {
     private static final Pattern COLLAPSIBLE = Pattern.compile(
             "\\s*(?:%%EXPAND-TITLE%%([\\s\\S]*?)%%EXPAND-TITLE-END%%\\s*)?%%EXPAND-BEGIN%%\\s*");
     private static final Pattern ANCHOR = Pattern.compile("\\s*%%ANCHOR%%([^%]+)%%ANCHOR-END%%\\s*");
+    private static final Pattern BLOCK_TITLE =
+            Pattern.compile("\\s*%%BLOCK-TITLE%%([^%]+)%%BLOCK-TITLE-END%%\\s*");
     private static final Pattern ROW_HEADER_TABLE = Pattern.compile(
             "%%TABLE-ROWHEADER-(\\d+)%%\\s*\\n+\\s*(?:\\[[^\\]]*\\]\\s*\\n)?\\|===");
     private static final Pattern SOURCE_BLOCK =
@@ -51,6 +53,7 @@ final class AdocOutput {
         text = admonitions(text);
         text = collapsibles(text);
         text = anchors(text);
+        text = blockTitles(text);
         text = rowHeaderTables(text);
         text = statusBadges(text);
         // Pandoc writes "image:foo[]" even where the image stands on a line of its own, and
@@ -91,6 +94,16 @@ final class AdocOutput {
                 // Leading underscore because AsciiDoc wants an id to start with a letter or one,
                 // and any "++_++" pandoc wrote into the name spelled back as an underscore.
                 "\n\n[[_" + matcher.group(1).replace("++_++", "_") + "]]\n");
+    }
+
+    /**
+     * The title of the block below it.
+     *
+     * <p>A blank line above, so that the title is separated from whatever block precedes it, and a
+     * single newline after, so that AsciiDoc keeps it attached to the block it titles.</p>
+     */
+    private static String blockTitles(String adoc) {
+        return replaceAll(BLOCK_TITLE, adoc, matcher -> "\n\n." + matcher.group(1).trim() + "\n");
     }
 
     /**
