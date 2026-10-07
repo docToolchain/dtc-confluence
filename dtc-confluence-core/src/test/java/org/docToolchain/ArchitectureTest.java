@@ -48,7 +48,7 @@ class ArchitectureTest {
                     + "without any HTTP in sight");
 
     /**
-     * Cycles inside {@code dtc-confluence-html2adoc} are not measured here.
+     * Cycles inside {@code html2adoc} are not measured here.
      *
      * <p>It shares the {@code org.docToolchain} prefix and is on this module's classpath because
      * the export can convert through it, but it is a module of its own, seeded from an Apache-2.0

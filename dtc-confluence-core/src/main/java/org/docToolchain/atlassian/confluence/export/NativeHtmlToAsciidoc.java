@@ -12,7 +12,7 @@ import org.jsoup.nodes.Element;
 import org.jsoup.nodes.TextNode;
 
 /**
- * Converts in process, through {@code dtc-confluence-html2adoc}.
+ * Converts in process, through {@code html2adoc}.
  *
  * <p>Needs nothing installed, which is the whole point of it: an export becomes a JRE and the jar,
  * like publishing already is. It is a proof of concept and not yet the default - what it does

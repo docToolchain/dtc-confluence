@@ -44,7 +44,7 @@
          is MIT, which is allowed in this direction and not in the other; see README.adoc. -->
     <dependency>
       <groupId>org.doctoolchain</groupId>
-      <artifactId>dtc-confluence-html2adoc</artifactId>
+      <artifactId>html2adoc</artifactId>
     </dependency>
 
     <dependency>

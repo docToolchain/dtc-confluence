@@ -458,7 +458,7 @@ The `org.doctoolchain` namespace belongs to docToolchain and write access has to
 
 == Converting HTML to AsciiDoc in process: a proof of concept
 
-`dtc-confluence-html2adoc` converts HTML to AsciiDoc in process, seeded from the `html2adoc` module of https://github.com/jmini/asciidoctorj-experiments[asciidoctorj-experiments] by Jeremie Bresson, which is Apache-2.0.
+`html2adoc` converts HTML to AsciiDoc in process, seeded from the `html2adoc` module of https://github.com/jmini/asciidoctorj-experiments[asciidoctorj-experiments] by Jeremie Bresson, which is Apache-2.0.
 It is a proof of concept and it is not the default.
 `confluence.export.converter` chooses between `pandoc`, which is what the export has always done, and `native`.
 
@@ -475,7 +475,7 @@ Everything else in that space is either a JavaScript library or pandoc.
 
 Because our input is not the web.
 A general HTML-to-AsciiDoc converter has to survive anything; this one has to survive what `fixBody` produces out of the storage format *this project itself publishes*.
-That is a narrow subset, it is written down in `dtc-confluence-html2adoc/src/test/resources/corpus/INVENTORY.md`, and it is a subset we control from both ends.
+That is a narrow subset, it is written down in `html2adoc/src/test/resources/corpus/INVENTORY.md`, and it is a subset we control from both ends.
 
 And because we already own the problem that makes pandoc expensive.
 pandoc escapes AsciiDoc punctuation indiscriminately, which is why the translation hides every construct it writes behind `%%SOURCE-BEGIN%%`, `%%ANCHOR%%`, `%%ADMON-BEGIN%%` and the rest, and why `AdocOutput` carries repairs for what comes back escaped anyway.

@@ -17,7 +17,7 @@ That code is Groovy and is being ported to Java class by class; the Spock test s
 == Modules
 
 `dtc-confluence-core`:: The library, with no binding to any build tool.
-`dtc-confluence-html2adoc`:: Converts HTML to AsciiDoc.
+`html2adoc`:: Converts HTML to AsciiDoc.
 Knows nothing about Confluence and does not depend on the core module; jsoup is its only runtime dependency.
 A proof of concept, seeded from an existing project - see <<apache-module>>.
 `dtc-confluence-cli`:: Command line tool.
@@ -122,7 +122,7 @@ Below `destDir` it writes `docs/` with one file per page in folders mirroring th
 
 `pandoc`:: The default.
 Shells out to `pandoc`, which has to be on the PATH, and is what the export has always done.
-`native`:: Converts in process through `dtc-confluence-html2adoc`, so that an export needs a JRE and the jar and nothing else - which is what publishing already needs.
+`native`:: Converts in process through `html2adoc`, so that an export needs a JRE and the jar and nothing else - which is what publishing already needs.
 A proof of concept: it gets some things right that pandoc gets wrong and some things wrong that pandoc gets right.
 What each produces on the same input, construct by construct, is in xref:docs/html2adoc-poc.adoc[the comparison].
 
@@ -166,7 +166,7 @@ The code originates from docToolchain and keeps its license.
 [[apache-module]]
 === One module is Apache-2.0
 
-`dtc-confluence-html2adoc` is licensed under the Apache License, Version 2.0, and not under MIT.
+`html2adoc` is licensed under the Apache License, Version 2.0, and not under MIT.
 
 It is a derivative work of the `html2adoc` module of https://github.com/jmini/asciidoctorj-experiments[asciidoctorj-experiments] by Jeremie Bresson, which is Apache-2.0.
 Apache-2.0 is permissive, but it does require its terms, its attribution and a notice of modification to travel with a derived work, so the module keeps that licence rather than being relabelled MIT.
@@ -176,10 +176,10 @@ That upstream module is a jsoup-based converter with one small class per HTML el
 
 What this means in practice:
 
-* `dtc-confluence-html2adoc/LICENSE-APACHE-2.0.txt` holds the licence text, and `dtc-confluence-html2adoc/NOTICE` names the upstream, its author and every change made here.
+* `html2adoc/LICENSE-APACHE-2.0.txt` holds the licence text, and `html2adoc/NOTICE` names the upstream, its author and every change made here.
 * Every file in the module carries a header naming its licence and saying whether it is derived from the upstream or was written here.
-Which it is is recorded per file in `dtc-confluence-html2adoc/src/test/resources/provenance/upstream-counterparts.txt`, and `ProvenanceSpec` keeps that record and the headers in agreement - a file that has no upstream counterpart must not credit the upstream author for it.
-* Both files also travel inside the jar under `META-INF/notices/dtc-confluence-html2adoc/`, which is where the CLI's fat jar can carry them: that packaging unpacks every dependency into one tree, and a second `META-INF/NOTICE` would replace this module's.
+Which it is is recorded per file in `html2adoc/src/test/resources/provenance/upstream-counterparts.txt`, and `ProvenanceSpec` keeps that record and the headers in agreement - a file that has no upstream counterpart must not credit the upstream author for it.
+* Both files also travel inside the jar under `META-INF/notices/html2adoc/`, which is where the CLI's fat jar can carry them: that packaging unpacks every dependency into one tree, and a second `META-INF/NOTICE` would replace this module's.
 * The module's own `pom.xml` declares Apache-2.0, so the published artifact says so too.
 * Apache-2.0 is compatible with MIT in the direction that matters here: an MIT module may depend on an Apache-2.0 one.
 The reverse - moving this code into `dtc-confluence-core` and calling it MIT - is not allowed, so the converter stays in its own module.

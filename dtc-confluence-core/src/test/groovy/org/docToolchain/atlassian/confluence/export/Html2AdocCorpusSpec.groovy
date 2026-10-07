@@ -3,7 +3,7 @@ package org.docToolchain.atlassian.confluence.export
 import spock.lang.Specification
 
 /**
- * Keeps the HTML corpus of dtc-confluence-html2adoc equal to what this project really produces.
+ * Keeps the HTML corpus of html2adoc equal to what this project really produces.
  *
  * The corpus is the input half of the round trip: the publisher's golden transcripts are the
  * storage format docToolchain writes, and {@link ConfluenceConverter#fixBody} is what an export
@@ -24,7 +24,7 @@ class Html2AdocCorpusSpec extends Specification {
 
     /** Where the corpus is read: the test resources of the module under measurement. */
     private static final String CORPUS =
-            '../dtc-confluence-html2adoc/src/test/resources/corpus'
+            '../html2adoc/src/test/resources/corpus'
 
     /** The transcripts to convert, in the order their pages are numbered. */
     private static final List<String> SOURCES =

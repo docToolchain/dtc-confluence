@@ -10,9 +10,9 @@
     <version>0.1.0-SNAPSHOT</version>
   </parent>
 
-  <artifactId>dtc-confluence-html2adoc</artifactId>
+  <artifactId>html2adoc</artifactId>
 
-  <name>dtc-confluence-html2adoc</name>
+  <name>html2adoc</name>
   <description>Converts HTML to AsciiDoc; knows nothing about Confluence</description>
 
   <!--
