@@ -25,6 +25,10 @@ publisher verified against a real instance (ASF cwiki, Confluence Data Center 9.
 
 - `export` fetches a page and everything below it and writes AsciiDoc, with attachments, a menu
   and a report of the macros it could not translate. Needs pandoc on the PATH.
+- `confluence.export.converter` chooses what turns the HTML into AsciiDoc: `pandoc` (the default)
+  or `native`, which converts in process and needs nothing installed. `native` is a proof of
+  concept — it is the only one whose footnote links work, and it still gets nested lists and block
+  images wrong. `docs/html2adoc-poc.adoc` compares the two construct by construct.
 
 ### Configuration and tooling
 
@@ -41,4 +45,5 @@ publisher verified against a real instance (ASF cwiki, Confluence Data Center 9.
 - A page is identified by its title, so renaming a heading creates a new page and leaves the old
   one behind. The run reports it; it does not fix it.
 - The public API still exposes Groovy's `ConfigObject`.
-- Exporting needs pandoc; publishing does not.
+- Exporting needs pandoc unless `confluence.export.converter` is set to `native`, which is not
+  yet good enough to be the default; publishing needs neither.

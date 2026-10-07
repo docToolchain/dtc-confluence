@@ -30,8 +30,8 @@ import org.jsoup.select.Elements;
  * <p>The conversion has two halves. This one prepares the XHTML: it repairs what the storage
  * format spells awkwardly, translates the Confluence macros ({@link MacroTranslator}), and reports
  * the tags it did not recognise - which is where a round trip loses things quietly. The other half
- * is pandoc, which writes the AsciiDoc, and {@link AdocOutput}, which spells out afterwards what
- * pandoc would have escaped.</p>
+ * is a {@link HtmlToAsciidoc}, which writes the AsciiDoc, and {@link AdocOutput}, which spells out
+ * afterwards what that step would have escaped.</p>
  *
  * <p>Moved in behaviour from docToolchain's scripts/confluenceConverter.groovy, where it was a set
  * of closures shared between two drivers through a Gradle binding, so that the conversion can be
@@ -56,6 +56,9 @@ public class ConfluenceConverter {
 
     /** Where discovered LucidChart references are logged; null to log none. */
     private File lucidInfoFile;
+
+    /** What writes the AsciiDoc. Pandoc unless the export was configured otherwise. */
+    private HtmlToAsciidoc htmlToAsciidoc = new PandocHtmlToAsciidoc();
 
     /**
      * A chapter number at the start of a heading, which AsciiDoc numbers itself.
@@ -101,6 +104,14 @@ public class ConfluenceConverter {
 
     public void setLucidInfoFile(File lucidInfoFile) {
         this.lucidInfoFile = lucidInfoFile;
+    }
+
+    public HtmlToAsciidoc getHtmlToAsciidoc() {
+        return htmlToAsciidoc;
+    }
+
+    public void setHtmlToAsciidoc(HtmlToAsciidoc htmlToAsciidoc) {
+        this.htmlToAsciidoc = htmlToAsciidoc;
     }
 
     public boolean isStripChapterNumbering() {
@@ -205,9 +216,9 @@ public class ConfluenceConverter {
     }
 
     /**
-     * Prepares one page of storage format for pandoc.
+     * Prepares one page of storage format for the HTML to AsciiDoc step.
      *
-     * @return the XHTML pandoc reads, and the tags this conversion has no translation for
+     * @return the XHTML that step reads, and the tags this conversion has no translation for
      */
     public ConvertedBody fixBody(String pageId,
                                  String body,
@@ -242,8 +253,13 @@ public class ConfluenceConverter {
                 .replaceAll("[/][#][/]", "/\\\\#/")
                 .replace("<p></p><strong><br />", "<strong>")
                 .replace("<strong><br /></strong>", "<br />")
-                .replaceAll("<div><div class=\"title\">([^<]+)</div></div>", ".$1")
-                .replaceAll("<strong><br />[.]([^<]+)</strong>", ".$1");
+                // Through a placeholder, like every other piece of AsciiDoc this translation
+                // writes: a bare ".Title" line is markup to AsciiDoc and text to a converter,
+                // and the in-process one protects it as text. Spelled out in AdocOutput.
+                .replaceAll("<div><div class=\"title\">([^<]+)</div></div>",
+                        "%%BLOCK-TITLE%%$1%%BLOCK-TITLE-END%%")
+                .replaceAll("<strong><br />(%%BLOCK-TITLE%%[^<]+%%BLOCK-TITLE-END%%|[.][^<]+)</strong>",
+                        "$1");
         if (stripChapterNumbering) {
             html = html.replaceAll(CHAPTER_NUMBER.pattern(), "$1");
         }
@@ -292,8 +308,8 @@ public class ConfluenceConverter {
             if (columns < 2) {
                 continue;
             }
-            // Read again once pandoc has run. Hyphens as separators, because pandoc escapes an
-            // underscore.
+            // Read again by AdocOutput once the AsciiDoc has been written. Hyphens as
+            // separators, because pandoc escapes an underscore.
             table.before("<p>%%TABLE-ROWHEADER-" + columns + "%%</p>");
             for (Element row : rows) {
                 for (Element header : row.select("th")) {
@@ -371,8 +387,9 @@ public class ConfluenceConverter {
     }
 
     /**
-     * Converts one page and writes it: the XHTML through {@link #fixBody}, pandoc over that, then
-     * the placeholders, the file header, the includes of its children and its attachments.
+     * Converts one page and writes it: the XHTML through {@link #fixBody}, the configured
+     * {@link HtmlToAsciidoc} over that, then the placeholders, the file header, the includes of
+     * its children and its attachments.
      *
      * @return the tags this page carried that the conversion did not recognise
      */
@@ -403,7 +420,7 @@ public class ConfluenceConverter {
             Files.writeString(outFile.toPath(), converted.html(), StandardCharsets.UTF_8);
             File adocFile = new File(outFile.getCanonicalPath()
                     .substring(0, outFile.getCanonicalPath().length() - ".html".length()) + ".adoc");
-            if (!toAsciidoc(outFile, adocFile)) {
+            if (!htmlToAsciidoc.convert(outFile, adocFile)) {
                 return converted.unknownTags();
             }
             System.out.println(deepFilename);
@@ -423,31 +440,6 @@ public class ConfluenceConverter {
             throw new UncheckedIOException("could not write " + deepFilename, e);
         }
         return converted.unknownTags();
-    }
-
-    /**
-     * Runs pandoc over the prepared XHTML.
-     *
-     * @return whether it wrote a document; a warning is printed where it did not
-     */
-    private static boolean toAsciidoc(File html, File adoc) throws IOException {
-        ProcessBuilder pandoc = new ProcessBuilder("pandoc", "--wrap", "preserve",
-                "-f", "html", "-t", "asciidoc", "-s",
-                html.getCanonicalPath(), "-o", adoc.getCanonicalPath());
-        pandoc.inheritIO();
-        try {
-            // Above 1, because pandoc reports a document it had to guess at with 1 and still
-            // writes it.
-            if (pandoc.start().waitFor() > 1) {
-                System.out.println("couldn't convert " + html.getCanonicalPath());
-                return false;
-            }
-            return true;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            System.out.println("couldn't convert " + html.getCanonicalPath());
-            return false;
-        }
     }
 
     /**
