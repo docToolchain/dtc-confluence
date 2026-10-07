@@ -13,6 +13,8 @@
   <description>Confluence support for docs-as-code, extracted from docToolchain</description>
   <url>https://github.com/docToolchain/dtc-confluence</url>
 
+  <inceptionYear>2025</inceptionYear>
+
   <licenses>
     <license>
       <name>MIT License</name>
@@ -20,6 +22,27 @@
       <distribution>repo</distribution>
     </license>
   </licenses>
+
+  <!-- Maven Central refuses a POM without these; they are metadata, not configuration. -->
+  <developers>
+    <developer>
+      <id>ascheman</id>
+      <name>Gerd Aschemann</name>
+      <url>https://github.com/ascheman</url>
+    </developer>
+  </developers>
+
+  <scm>
+    <connection>scm:git:https://github.com/docToolchain/dtc-confluence.git</connection>
+    <developerConnection>scm:git:git@github.com:docToolchain/dtc-confluence.git</developerConnection>
+    <url>https://github.com/docToolchain/dtc-confluence</url>
+    <tag>HEAD</tag>
+  </scm>
+
+  <issueManagement>
+    <system>GitHub Issues</system>
+    <url>https://github.com/docToolchain/dtc-confluence/issues</url>
+  </issueManagement>
 
   <modules>
     <module>dtc-confluence-core</module>
@@ -61,6 +84,11 @@
     <maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
     <maven-surefire-plugin.version>3.6.0</maven-surefire-plugin.version>
     <maven-assembly-plugin.version>3.7.1</maven-assembly-plugin.version>
+    <!-- Release only; see the `release` profile and docs/releasing.adoc. -->
+    <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
+    <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
+    <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
+    <jreleaser-maven-plugin.version>1.18.0</jreleaser-maven-plugin.version>
   </properties>
 
   <dependencyManagement>
@@ -207,4 +235,68 @@
       </plugins>
     </pluginManagement>
   </build>
+
+  <profiles>
+    <!--
+      Everything a release needs and a normal build does not: the sources and javadoc jars Maven
+      Central requires, the signatures it requires, and JReleaser.
+
+      Kept in a profile so that `mvn verify` stays what it is - javadoc on 59 files and a GPG
+      round trip are not worth paying for on every push, and signing would fail on any machine
+      without the key.
+    -->
+    <profile>
+      <id>release</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-source-plugin</artifactId>
+            <version>${maven-source-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>attach-sources</id>
+                <goals>
+                  <goal>jar-no-fork</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-javadoc-plugin</artifactId>
+            <version>${maven-javadoc-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>attach-javadocs</id>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-gpg-plugin</artifactId>
+            <version>${maven-gpg-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>sign-artifacts</id>
+                <phase>verify</phase>
+                <goals>
+                  <goal>sign</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.jreleaser</groupId>
+            <artifactId>jreleaser-maven-plugin</artifactId>
+            <version>${jreleaser-maven-plugin.version}</version>
+            <!-- Configuration lives in jreleaser.yml, which is readable. -->
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>

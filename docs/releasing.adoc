@@ -1,0 +1,79 @@
+= Cutting a release
+:toc: left
+
+Releases are cut by hand, from a machine, not from CI.
+See the decision below for why; this page is the procedure.
+
+== Once, before the first release
+
+A GitHub token for JReleaser, with `repo` scope, as `JRELEASER_GITHUB_TOKEN` in the environment or in `~/.jreleaser/config.yml`.
+
+A GPG key, if the release is to go to Maven Central: Central refuses unsigned artifacts.
+`maven-gpg-plugin` picks it up from the agent, so `gpg --full-generate-key` and a published public key are enough.
+
+Write access to the `org.doctoolchain` namespace on Maven Central.
+The namespace belongs to docToolchain rather than to this repository, so it has to be granted - until then `deploy.active` in `jreleaser.yml` stays `NEVER` and a release is a GitHub release only.
+
+== Not from a worktree
+
+Run the release from an ordinary clone.
+Measured with JReleaser 1.18.0: in a worktree, where `.git` is a file rather than a directory, it stops with `Could not determine git HEAD: repository not found`, and with `-Djreleaser.git.root.search=true` it gets one step further and fails with `Could not determine remote`.
+The same configuration in a normal clone validates down to the missing token.
+
+Everything else in this project is done in worktrees.
+The release is the exception, and it is cheaper to clone once than to argue with JGit.
+
+== The procedure
+
+[source,bash]
+----
+# 1. a clone, not a worktree, on the commit to be released
+git clone git@github.com:docToolchain/dtc-confluence.git release-0.1.0
+cd release-0.1.0
+
+# 2. the version, without -SNAPSHOT
+./mvnw versions:set -DnewVersion=0.1.0 -DgenerateBackupPoms=false
+
+# 3. the release notes: move the "unreleased" section of CHANGELOG.md to the version
+#    and date it. JReleaser reads this file as the release body.
+
+# 4. build everything the release ships, signed
+./mvnw -P release clean verify
+
+# 5. the tag
+git commit -am "Release 0.1.0"
+git tag -s v0.1.0 -m "dtc-confluence 0.1.0"
+
+# 6. the GitHub release, with install.zip and the jar attached
+./mvnw -P release jreleaser:full-release
+
+# 7. only once the namespace is granted: stage and deploy the library
+./mvnw -P release deploy -DaltDeploymentRepository=local::file:./target/staging-deploy
+./mvnw -P release jreleaser:deploy -Djreleaser.deploy.active=ALWAYS
+
+# 8. publish the commit and the tag, then fast-forward main
+git push --follow-tags origin develop
+git push origin develop:main
+
+# 9. open develop for the next round
+./mvnw versions:set -DnewVersion=0.2.0-SNAPSHOT -DgenerateBackupPoms=false
+git commit -am "Open 0.2.0-SNAPSHOT"
+git push origin develop
+----
+
+Step 8 is a fast-forward as long as nothing is committed to `main` directly.
+`main` is the released state and has no commits of its own; Dependabot and every other update go to `develop`, which is the default branch.
+
+== What to check before step 6
+
+`./mvnw -P release jreleaser:config` prints the model JReleaser resolved, including the version it derived and the files it will attach.
+It needs the token, so it is also the cheapest check that the token is there.
+
+== Known rough edges
+
+The release assets are called `install.zip` and `dtc-confluence.jar`, without a version in the name.
+That is enough for a GitHub release, where the tag says which version they belong to, and it is not enough for a packager.
+The day SDKMAN or Homebrew is added, the assembly gets a versioned name and `files:` in `jreleaser.yml` becomes a proper `distributions:` block with a `JAVA_BINARY` layout.
+
+SDKMAN would be the natural first channel, because docToolchain itself ships that way and its users already have it.
+It needs a registered candidate name, which is a request to the SDKMAN maintainers rather than a configuration setting.
