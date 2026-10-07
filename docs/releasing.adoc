@@ -2,14 +2,17 @@
 :toc: left
 
 Releases are cut by hand, from a machine, not from CI.
-See the decision below for why; this page is the procedure.
+Why is recorded in xref:decisions.adoc[the design decisions]; this page is the procedure.
 
 == Once, before the first release
 
 A GitHub token for JReleaser, with `repo` scope, as `JRELEASER_GITHUB_TOKEN` in the environment or in `~/.jreleaser/config.yml`.
 
-A GPG key, if the release is to go to Maven Central: Central refuses unsigned artifacts.
-`maven-gpg-plugin` picks it up from the agent, so `gpg --full-generate-key` and a published public key are enough.
+A GPG key.
+Maven Central refuses unsigned artifacts, and `maven-gpg-plugin` picks the key up from the agent - so `gpg --full-generate-key` and a published public key are enough.
+
+A GitHub-only release needs no signed *artifacts*, but step 5 still signs the *tag* (`git tag -s`).
+Either keep a key for that, or drop the `-s` and lose the signature; what must not happen is discovering it at step 5, after the version has been bumped and the changelog edited.
 
 Write access to the `org.doctoolchain` namespace on Maven Central.
 The namespace belongs to docToolchain rather than to this repository, so it has to be granted - until then `deploy.active` in `jreleaser.yml` stays `NEVER` and a release is a GitHub release only.
@@ -67,9 +70,9 @@ git push origin develop
 
 The tag is made here and not by JReleaser: `skipTag: true` in `jreleaser.yml` says so, because a signed tag is worth more than a convenient one.
 
-Signing is off unless it is asked for (`-Dgpg.skip=false`).
-A GitHub-only release needs no key, and a build that demands one from a machine that has none would fail at step 4 for nothing.
-Maven Central does need it, which is why it is on in step 8.
+Artifact signing is off unless it is asked for (`-Dgpg.skip=false`), so a build on a machine without a key does not fail at step 4 for nothing.
+Maven Central does need it, which is why step 8 turns it on.
+The tag is a separate matter: `git tag -s` in step 5 needs a key whatever the release goes to.
 
 Step 9 is a fast-forward as long as nothing is committed to `main` directly.
 `main` is the released state and has no commits of its own; Dependabot and every other update go to `develop`, which is the default branch.

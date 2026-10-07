@@ -27,25 +27,30 @@ Two measured constraints shape the versions:
 * Groovy 3.0.13, which docToolchain pins, cannot compile on JDK 25 ("Unsupported class file major version 69").
 * Spock has no Groovy 5 build, so Groovy is capped at 4.x for as long as Spock is used.
 
-== YAML as the primary configuration format, TOML shipped alongside
+== YAML as the primary configuration format
 
 docToolchain configures itself through `docToolchainConfig.groovy`, which `ConfigSlurper` *executes*.
 That file is code, not data.
-Anyone able to supply it can run arbitrary code in the build, and it ties the configuration to Groovy, which blocks the Java port.
+Anyone able to supply it can run arbitrary code in the build.
 
-The configuration is therefore a typed model bound by Jackson.
-YAML is the primary format because `confluence.input` is a list of records, which YAML expresses in two lines while TOML needs array-of-tables.
-TOML and JSON come from the same model at the cost of one line in the loader.
+YAML is therefore the primary format, read by `YamlConfigReader` with snakeyaml's `SafeConstructor`: data, with no execution and no object graph the file can choose.
+It is YAML rather than TOML because `confluence.input` is a list of records, which YAML expresses in two lines while TOML needs array-of-tables.
+
+A `docToolchainConfig.groovy` is still read, through `ConfigSlurper`, so an existing docToolchain project keeps working unconverted.
+`ConfigBuilder` picks the reader by file extension; only `.yaml` and `.yml` take the YAML path.
 
 Secrets never belong in the configuration file.
-Resolution order is command line argument, then environment variable, then file, then default.
+They are read from the environment - `CONFLUENCE_BEARER_TOKEN` or `CONFLUENCE_CREDENTIALS` - and the CLI never accepts them as options, which keeps them out of `ps` output.
 
-docToolchain keeps its `ConfigSlurper` and maps its `ConfigObject` onto the typed model, so existing users change nothing.
+What this entry claimed for a while, and what is not true: that the configuration is a typed model bound by Jackson, and that TOML and JSON come from the same model.
+Neither exists.
+Both readers converge on Groovy's `ConfigObject`, which is why `groovy` is still a compile-scope dependency of a library whose production code is otherwise entirely Java, and why `ConfigService` has to carry two reads - one that applies Groovy truth and one that does not.
+A typed model remains worth building; this entry is not evidence that it was.
 
 == Legacy configuration options are dropped
 
 `allInOnePage` and `createSubpages` were superseded by `subpagesForSections` in docToolchain and are still read there.
-They are not carried into the typed model.
+They are not read here - and not silently: `PublishSettings.refuseRemovedOptions` aborts the run and names the replacement, because a configuration that is quietly ignored publishes the wrong thing.
 
 == Package names are kept
 
@@ -81,7 +86,7 @@ Deferred, for three reasons:
 
 * An AsciidoctorJ converter drags JRuby into the library. The core has no Asciidoctor dependency at all today, which keeps it small for CI use.
 * A converter emits one string per node, while publishing produces a *tree* of pages driven by `subpagesForSections`. That is buildable but is not the converter API's normal path.
-* The HTML path cannot be retired anyway: `inputHtmlFolder` and `url` inputs accept HTML that Asciidoctor never produced.
+* The HTML path cannot be retired anyway: `inputHtmlFolder` accepts HTML that Asciidoctor never produced.
 
 === What it would and would not buy for round-trips
 
@@ -99,15 +104,16 @@ The backend makes that merge *tractable* rather than unnecessary, because stable
 === Consequence for the ongoing port
 
 The core must take a **page tree** - titles, storage-format bodies, ancestors, attachments, labels - not an HTML file.
-Today that model is tangled together with the Jsoup scraping inside `Asciidoc2ConfluenceTask`.
-Separating the two is what makes those 823 lines portable in pieces, and it is the same seam a converter would later plug into as an additional producer.
+That separation has since happened: `PageTreeBuilder` returns a `PageTree` of `Page` objects, and `BodyBuilder` produces the storage format.
+What is still missing for a second producer is narrower than it was: a `Page` carries its body as a Jsoup HTML element rather than as a finished body, so the tree is not yet format-neutral.
 
 == Idea: partial updates that preserve inline comments
 
 Not planned for a particular release, recorded so the reasoning is not redone.
 
 Confluence offers no partial update.
-`PUT /rest/api/content/{id}` replaces the body wholesale; there is no section-level patch in the Data Center v1 API.
+`PUT /rest/api/content/{id}` replaces the body wholesale, which is what `ConfluenceClientV1.updatePage` sends.
+Whether the Data Center v1 API offers any section-level patch was not established; nothing in its documentation was found, and no instance was asked.
 "Partial" therefore has to be a client-side merge.
 
 Publishing already skips unchanged pages by content hash, so page-level granularity exists.
@@ -145,26 +151,24 @@ Attachments are affected twice over, because their content is read as text befor
 Changing it to UTF-8 would be correct and would cost one rewrite of everything ever published by docToolchain.
 That is a decision with a migration attached, not a detail to fix inside a port.
 
-== Collapsible blocks lose their fold
+== Collapsible blocks become the expand macro
 
 AsciiDoc marks a block collapsible with `[%collapsible]`, and Asciidoctor renders that as `details` with a `summary`.
-Neither survives: the elements are unwrapped, the summary is left as bare text with no markup at all, and the content stands open on the page.
+Neither used to survive publishing: the elements were unwrapped, the summary was left as bare text, and the content stood open on the page.
+arc42 templates lean on collapsible blocks for guidance text, so an arc42 document carried every hint it meant to hide.
 
-arc42 templates lean on collapsible blocks for guidance text, so an arc42 document published today carries every hint it meant to hide.
+`CollapsibleTransformer` maps `details` onto the `expand` macro: the `summary` becomes the macro title, the rest its rich text body.
+The transformation runs innermost first, because the macro is built from `details.html()` and a nested block therefore has to be a macro already by the time its parent is read.
 
-The publisher can already produce the macro that would fix this:
+Two things were decided along the way and are still true.
 
-[source,groovy]
-----
-body.select('div.arc42help').select('.content')
-    .wrap('<ac:structured-macro ac:name="expand"></ac:structured-macro>')
-----
+`[%collapsible%open]` has no equivalent, because a Confluence expand macro is always folded.
+The fold itself matters more than the initial state, so the state is dropped rather than the fold.
 
-It applies that only to `div.arc42help`, a class from one particular template, while the language's own `[%collapsible]` runs past it.
-That is a gap rather than a decision: the same effect, supported through one spelling and dropped through the other.
+A `summary` that is present but empty gets the default title `Details`, because an expand macro with an empty title is a bar with no label.
 
-Mapping `details` onto the `expand` macro is the fix: the `summary` becomes the macro title and the rest its rich text body.
-`[%collapsible%open]` has no equivalent - a Confluence expand macro is always folded - which is a loss worth accepting rather than a reason to leave the rest broken.
+Separately, `BodyBuilder.transformArc42Help` wraps `div.arc42help` in an expand *and* an info macro with an `arc42` title.
+That is a second spelling of nearly the same thing, kept because the arc42 guidance text is recognisable by that class and reads better with the admonition around it.
 
 == Callouts in code blocks: three ways, chosen by configuration
 
@@ -207,12 +211,14 @@ References on later pages resolve through the anchor map and link across, so a d
 
 A footnote in a *section heading* cannot be carried over.
 The heading becomes the Confluence page title, and a page title is plain text - there is no body for a reference to point into.
-The reference is dropped, and because nothing on any page then refers to that definition, it is not published either.
+The reference is dropped, and where nothing else refers to that definition it is not published either.
+Where the same footnote is used again in a page body, the definition is published and only its dangling back-link is removed.
 The page stays self-consistent; the footnote is simply gone.
 
 The number is stripped from the title rather than left in it, because it would otherwise turn `Architecture` into `Architecture1` - and since the title also decides page identity, adding a footnote to a heading would rename the page and orphan the old one.
 
 Carrying such a footnote into the page body was considered and rejected for now: it would have to appear somewhere the author did not write it, and no placement is obviously right.
+
 == The export needs pandoc; the publisher does not
 
 The conversion from Confluence storage format back to AsciiDoc does not do the conversion itself.
@@ -239,10 +245,11 @@ The alternative remains open: should the export become as important as publishin
 This project already has `RestClient`, built on Apache HttpClient 5, which does the same things for publishing - bearer and basic authentication, the rate limit, the proxy, JSON parsing, and the error handling that says what went wrong.
 
 Carrying both would mean two places to fix every authentication or proxy problem, and two behaviours for the same configuration.
-The driver is therefore to be rewritten onto the existing client rather than moved across as it stands.
+The driver was therefore rewritten onto the existing client rather than moved across as it stands: `ConfluenceReader` asks its questions through `RestClient`, and no second HTTP stack is left.
 
 That is a rewrite, not a move, so it does not share the safety of the converter port: there the closures became methods with the behaviour untouched, and the characterisation tests mean something.
 Here the tests have to be written against what the driver produces - the pages, attachments and space maps the converter expects - before the fetching underneath them changes.
+
 == An explicit `false` is not the same as an unset value
 
 `ConfigService.getConfigProperty` mirrors Groovy truth, which the original implementation relied on: an empty map, an empty string, a zero and a `false` all answer `null`.
@@ -380,16 +387,17 @@ ADF has no placeholder node and no comments.
 The candidates are an `extension` node of our own, a *content property* beside the body (`/pages/{id}/properties`, which survives body replacement and is arguably where a fingerprint belonged all along), or the publish manifest recorded above, which would make the in-page marker unnecessary.
 This has to be decided before anything writes ADF, because it is the page-identity mechanism and not a detail of rendering.
 
-The body producer needs the seam the Asciidoctor-backend entry already names.
-Today the page tree and the string building are tangled together; one producer per format needs them apart.
-The same seam serves both, which is an argument for cutting it once, deliberately, rather than twice by accident.
+The body producer needs one more cut than the Asciidoctor-backend entry above already got.
+That entry asked for the page tree to be separated from the string building, and it was: `PageTreeBuilder` builds the tree, `BodyBuilder` the body.
+What is missing is the next seam in: a `Page` still carries HTML rather than a finished body, and the transformers still emit markup as strings instead of calling an emitter.
+Both producers would plug in there, which is an argument for cutting it once, deliberately, rather than twice by accident.
 
 === Consequence for the transformers
 
 The question "what does this do to the transformers" has a measurable answer, so here it is rather than a guess.
 Every transformer does two things: it *recognises* a construct in AsciiDoctor's HTML (a CSS selector) and it *emits* markup for it (a string template or DOM surgery).
 Recognition is backend-neutral and stays whatever the target format is.
-Emission is the coupling, and it is not spread evenly:
+Emission is the coupling, and it is not spread evenly - counted over the `atlassian.transformer` package:
 
 [cols="h,1,1"]
 |===
@@ -414,7 +422,8 @@ CDATA escaping, the nested-CDATA repair, and entity escaping exist because a cod
 An ADF `codeBlock` carries its text as a JSON string: no CDATA, no entities, no re-parse.
 The callout logic - marker style, comment syntax per language, the line-continuation rule - is real knowledge and survives untouched.
 
-So the honest estimate is: seven of eight transformers are a template swap behind an emitter interface, and the eighth gets *smaller* in the ADF direction while keeping its hard part.
+So the honest estimate is: seven of these eight are a template swap behind an emitter interface, and the eighth gets *smaller* in the ADF direction while keeping its hard part.
+`ImageTransformer` sits in `atlassian.confluence.publish` rather than in that package and is a ninth case, closer to the four simple ones: it emits one `ac:image` and knows where an attachment came from.
 
 === Three shapes the architecture could take
 
@@ -436,6 +445,16 @@ It is the older path, but it is the one that has a chance of working on an insta
 
 And the transformers stay as they are until something actually needs a second backend.
 An emitter interface with one implementation is a layer that earns nothing; it earns its keep on the day a second implementation exists, and not a commit before.
+
+== Sonar runs on main, not on pull requests
+
+A pull request can change the build.
+A workflow that runs SonarQube on `pull_request` hands `SONAR_TOKEN` to whatever that build does, and guarding on an empty secret does not isolate untrusted code - so the analysis runs on pushes to `main` only.
+
+`main` now carries the released state rather than the working stream, which means the analysis happens at release time.
+Whether that is often enough is worth revisiting; `develop` would be the branch to add.
+
+`.github/workflows/build.yml` points here for this reasoning, which is the reason this entry exists.
 
 == Releases are cut by hand
 
