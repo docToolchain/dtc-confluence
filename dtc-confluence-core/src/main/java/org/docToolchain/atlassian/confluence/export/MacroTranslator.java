@@ -30,6 +30,15 @@ import org.jsoup.nodes.Entities;
  */
 class MacroTranslator {
 
+    /**
+     * The class on the {@code <div>} that holds a code macro's listing block: the attribute line,
+     * the two delimiters, and the code between them.
+     *
+     * <p>Read by {@link NativeHtmlToAsciidoc}, which has to tell the in-process converter that the
+     * text in there is a code sample and not prose.</p>
+     */
+    static final String CODE_WRAPPER_CLASS = "code-wrapper";
+
     /** What an admonition macro is called here, and what it is called in AsciiDoc. */
     private static final Map<String, String> ADMONITIONS = Map.of(
             "info", "NOTE",
@@ -388,7 +397,7 @@ class MacroTranslator {
         // The attribute line travels as a placeholder for the same reason an admonition does:
         // pandoc escapes a literal bracket in text, and "++[++source, groovy++]++" is not a
         // source block, it is four plus signs and a sentence.
-        element.html("\n    <div class=\"code-wrapper\">\n"
+        element.html("\n    <div class=\"" + CODE_WRAPPER_CLASS + "\">\n"
                 + "    %%SOURCE-BEGIN%%" + language + "%%SOURCE-END%%%%CRLF%%\n"
                 + "    ----%%CRLF%%\n"
                 + "    " + code.replace("\n", "%%CRLF%%") + "%%CRLF%%\n"

@@ -40,6 +40,12 @@
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
     </dependency>
+    <!-- The in-process alternative to pandoc, behind HtmlToAsciidoc. Apache-2.0 while this module
+         is MIT, which is allowed in this direction and not in the other; see README.adoc. -->
+    <dependency>
+      <groupId>org.doctoolchain</groupId>
+      <artifactId>html2adoc</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>org.spockframework</groupId>

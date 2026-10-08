@@ -5,6 +5,8 @@ import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 
+import static com.tngtech.archunit.base.DescribedPredicate.alwaysTrue;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
@@ -45,8 +47,19 @@ class ArchitectureTest {
             .because("transformers turn markup into markup and must remain testable "
                     + "without any HTTP in sight");
 
+    /**
+     * Cycles inside {@code html2adoc} are not measured here.
+     *
+     * <p>It shares the {@code org.docToolchain} prefix and is on this module's classpath because
+     * the export can convert through it, but it is a module of its own, seeded from an Apache-2.0
+     * project: its element converters call back into {@code Html2Adoc} to convert what is inside
+     * the node they took, which is how a recursive-descent converter is built and not a decision
+     * this project recorded. A dependency the other way is kept out by its pom, which names no
+     * dependency on the core at all.</p>
+     */
     @ArchTest
     static final ArchRule packagesAreFreeOfCycles = slices()
             .matching("org.docToolchain.(**)")
-            .should().beFreeOfCycles();
+            .should().beFreeOfCycles()
+            .ignoreDependency(resideInAPackage("org.docToolchain.html2adoc.."), alwaysTrue());
 }

@@ -19,6 +19,7 @@ import org.docToolchain.atlassian.confluence.export.AttachmentDownloader;
 import org.docToolchain.atlassian.confluence.export.ConfluenceConverter;
 import org.docToolchain.atlassian.confluence.export.ConfluenceReader;
 import org.docToolchain.atlassian.confluence.export.ExportedTree;
+import org.docToolchain.atlassian.confluence.export.HtmlToAsciidoc;
 import org.docToolchain.atlassian.confluence.export.PageNaming;
 import org.docToolchain.atlassian.confluence.export.PageTreeWalker;
 
@@ -36,7 +37,8 @@ import org.docToolchain.atlassian.confluence.export.PageTreeWalker;
  *   <li>{@code docs/_menu.adoc} and {@code docs/_config.adoc} - what the microsite reads</li>
  * </ul>
  *
- * <p>Needs pandoc on the PATH; the publisher does not.</p>
+ * <p>With the default converter it needs pandoc on the PATH; the publisher does not. See
+ * {@code confluence.export.converter} for the alternative that does not.</p>
  */
 public class ExportConfluenceTask extends AbstractConfluenceTask {
 
@@ -95,9 +97,15 @@ public class ExportConfluenceTask extends AbstractConfluenceTask {
         File destDir = destinationDirectory();
         String rootPageId = rootPageId();
         converter.setStripChapterNumbering(flag("stripChapterNumbering", true));
+        String converterName = text("converter");
+        converter.setHtmlToAsciidoc(HtmlToAsciidoc.named(converterName));
 
         System.out.println("exporting page " + rootPageId + " and everything below it");
         System.out.println("destination:           " + destDir.getAbsolutePath());
+        // Named even where it is the default: the two write different AsciiDoc, so which one ran
+        // is the first thing to know about an export that reads oddly.
+        System.out.println("html to asciidoc:      "
+                + (converterName.isEmpty() ? HtmlToAsciidoc.PANDOC : converterName));
         ExportedTree tree = new PageTreeWalker(reader, text("stripPagePrefixRegex")).walk(rootPageId);
         System.out.println("pages found:           " + tree.getPages().size());
         if (!tree.getUnreadable().isEmpty()) {
@@ -281,6 +289,10 @@ public class ExportConfluenceTask extends AbstractConfluenceTask {
                 ? set : Boolean.parseBoolean(String.valueOf(configured));
     }
 
+    /**
+     * A string below {@code confluence.export}. Groovy truth is no danger here: it calls only the
+     * empty string empty, and an empty setting is an absent one for every key read this way.
+     */
     private String text(String key) {
         Object configured = configService.getConfigProperty("confluence.export." + key);
         return configured == null ? "" : String.valueOf(configured);
