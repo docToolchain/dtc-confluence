@@ -115,8 +115,8 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
                 ? new ConfluenceClientV1(configService)
                 : new ConfluenceClientV2(configService);
         // Raw, because "dryRun = false" is a decision and Groovy truth would read it as absence.
-        this.dryRun = switched("confluence.dryRun");
-        this.moveExistingPages = switched("confluence.moveExistingPages");
+        this.dryRun = configService.isSwitchedOn("confluence.dryRun");
+        this.moveExistingPages = configService.isSwitchedOn("confluence.moveExistingPages");
     }
 
     /** What publishing would do to one page. */
@@ -250,13 +250,6 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
                 .replaceAll("/+$", "")
                 .replaceAll("/(rest/api|api/v2)$", "");
         return api + "/spaces/" + confluenceSpaceKey;
-    }
-
-    /** @return the switch, read without Groovy truth so that an explicit false is a decision */
-    private boolean switched(String path) {
-        Object configured = configService.getRawConfigProperty(path);
-        return configured instanceof Boolean set
-                ? set : Boolean.parseBoolean(String.valueOf(configured));
     }
 
     /**

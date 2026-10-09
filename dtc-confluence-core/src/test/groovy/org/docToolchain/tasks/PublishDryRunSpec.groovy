@@ -31,8 +31,8 @@ class PublishDryRunSpec extends Specification {
         config.confluence.spaceKey = 'SPACE'
         config.confluence.subpagesForSections = 1
         config.confluence.input = [[file: 'smoke-input.html', ancestorId: '99']]
-        if (dryRun) {
-            config.confluence.dryRun = true
+        if (dryRun != null) {
+            config.confluence.dryRun = dryRun
         }
         if (move) {
             config.confluence.moveExistingPages = true
@@ -129,7 +129,7 @@ class PublishDryRunSpec extends Specification {
      * the checked-in test resources: the first version of this spec deleted a stray PNG that an
      * earlier test had left there and committed.
      */
-    private Asciidoc2ConfluenceTask taskWithEmbeddedImage(Path docDir, boolean dryRun) {
+    private Asciidoc2ConfluenceTask taskWithEmbeddedImage(Path docDir, Object dryRun) {
         new File(docDir.toFile(), 'embedded.html').text = EMBEDDED
         def config = new ConfigObject()
         config.docDir = docDir.toString()
@@ -139,8 +139,8 @@ class PublishDryRunSpec extends Specification {
         config.confluence.spaceKey = 'SPACE'
         config.confluence.subpagesForSections = 0
         config.confluence.input = [[file: 'embedded.html', ancestorId: '99']]
-        if (dryRun) {
-            config.confluence.dryRun = true
+        if (dryRun != null) {
+            config.confluence.dryRun = dryRun
         }
         def task = Asciidoc2ConfluenceTask.From(config, docDir.toString())
         client.fetchPagesBySpaceKey(_, _) >> [:]
@@ -170,9 +170,24 @@ class PublishDryRunSpec extends Specification {
             documents.toFile().list() as Set == ['embedded.html'] as Set
     }
 
+    def 'a dry run configured as text writes nothing either'() {
+        given: """A setting arrives from a YAML file, a Groovy file or the command line, and only
+                  the first of those necessarily carries a type. The task reads "true" as a dry
+                  run; a second reading that took Boolean alone let the run write its images
+                  while reporting that it would write nothing."""
+            def task = taskWithEmbeddedImage(documents, 'true')
+
+        when:
+            task.execute()
+
+        then:
+            task.verdicts[Asciidoc2ConfluenceTask.Verdict.CREATE] == 1
+            documents.toFile().list() as Set == ['embedded.html'] as Set
+    }
+
     def 'a real run does write the embedded image'() {
         when: 'the same document without the flag, so the difference is the flag alone'
-            taskWithEmbeddedImage(documents, false).execute()
+            taskWithEmbeddedImage(documents, null).execute()
 
         then:
             new File(documents.toFile(), 'confluence/images').listFiles()

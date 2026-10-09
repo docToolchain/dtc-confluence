@@ -70,8 +70,7 @@ public class BodyBuilder {
 
         // A dry run still needs the body - the hash it compares is the hash of what a real run
         // would send - but it must not leave the embedded images on disk.
-        boolean writing = !(configService.getRawConfigProperty("confluence.dryRun")
-                instanceof Boolean dry && dry);
+        boolean writing = !configService.isSwitchedOn("confluence.dryRun");
         uploads.addAll(new ImageTransformer(baseUrl, imageDirs(), writing).transformImages(body));
         uploads.addAll(transformAttachmentLinks(body));
 
