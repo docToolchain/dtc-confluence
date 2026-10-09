@@ -76,6 +76,28 @@ class ConfluenceConverterSpec extends Specification {
             !html.contains('5.2.4')
     }
 
+    def 'a heading that starts with a year keeps it'() {
+        given: """A chapter number and a year look alike to a regular expression, and the page
+                  "2024 Roadmap" came back titled "Roadmap". A number spelled out over four
+                  digits and without a dot is a year, not the fourth level of a chapter."""
+        expect:
+            convert('<h2>2024 Roadmap</h2>').contains('2024 Roadmap')
+            convert('<h1>1999 in review</h1>').contains('1999 in review')
+    }
+
+    def 'a chapter number is still stripped in the shapes a document writes it'() {
+        expect:
+            !convert(heading).contains(number)
+
+        where:
+            heading                        | number
+            '<h2>5.2.4. Deployment</h2>'   | '5.2.4'
+            '<h2>5.2 Deployment</h2>'      | '5.2'
+            '<h2>5. Deployment</h2>'       | '5.'
+            '<h2>5 Deployment</h2>'        | '5 '
+            '<h2>12 Deployment</h2>'       | '12'
+    }
+
     def 'chapter numbering is kept where the document means it'() {
         given:
             converter.stripChapterNumbering = false
