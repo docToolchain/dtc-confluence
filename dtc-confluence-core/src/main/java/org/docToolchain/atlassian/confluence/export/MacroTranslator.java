@@ -495,7 +495,10 @@ class MacroTranslator {
      *         slash - an absolute path to nothing.
      */
     private String imageTarget(String fileName) {
-        return joinPath(folders(pageId, "filename").isEmpty() ? "" : "{filepath}", fileName);
+        // {filepath} for the folders of the page - the document carries them as that attribute -
+        // and then the page's own folder, which is what keeps two siblings' attachments apart.
+        return joinPath(folders(pageId, "filename").isEmpty() ? "" : "{filepath}",
+                PageNaming.ownFolder(pages, pageId), fileName);
     }
 
     /** @return the segments as a path, skipping the ones that are not there */

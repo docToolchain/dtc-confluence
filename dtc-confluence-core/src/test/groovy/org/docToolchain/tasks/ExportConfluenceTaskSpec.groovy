@@ -173,6 +173,48 @@ class ExportConfluenceTaskSpec extends Specification {
             !adoc.contains('%%')
     }
 
+    def 'two pages with an attachment of the same name keep both files'() {
+        given: """The path named the ancestors of a page but not the page itself, so two children
+                  of one parent shared a directory. Two files called diagram.png at version 1
+                  became one, and whichever page was walked last decided what both documents
+                  showed."""
+            def image = '<p><ac:image><ri:attachment ri:filename="diagram.png"/></ac:image></p>'
+            reader.fetchPage('1') >> page('1', 'Root', '<p>root</p>')
+            reader.fetchPage('2') >> page('2', 'First', image)
+            reader.fetchPage('3') >> page('3', 'Second', image)
+            reader.fetchChildPages('1') >> [[id: '2', title: 'First'], [id: '3', title: 'Second']]
+            reader.fetchChildPages('2') >> []
+            reader.fetchChildPages('3') >> []
+            reader.fetchAttachments('1') >> []
+            reader.fetchAttachments('2') >> [[id: 'a2', title: 'diagram.png', version: [number: 1],
+                                              _links: [download: '/download/2/diagram.png']]]
+            reader.fetchAttachments('3') >> [[id: 'a3', title: 'diagram.png', version: [number: 1],
+                                              _links: [download: '/download/3/diagram.png']]]
+            reader.download({ it.contains('/2/') }) >> 'FIRSTBYTES'.bytes
+            reader.download({ it.contains('/3/') }) >> 'SECONDBYTES'.bytes
+
+        when:
+            taskFor().execute()
+
+        then: 'both files are on disk, neither having overwritten the other'
+            def written = []
+            new File(destination.toFile(), 'docs/images').eachFileRecurse { written << it }
+            written.findAll { it.isFile() }*.bytes*.toString() as Set ==
+                    ['FIRSTBYTES'.bytes.toString(), 'SECONDBYTES'.bytes.toString()] as Set
+
+        and: 'and each document refers to its own'
+            def first = exported('Root/First.adoc').getText('utf-8')
+            def second = exported('Root/Second.adoc').getText('utf-8')
+            first.contains('image::')
+            second.contains('image::')
+            targetIn(first) != targetIn(second)
+    }
+
+    private static String targetIn(String adoc) {
+        def matcher = adoc =~ /image::([^\[]+)\[/
+        return matcher ? matcher[0][1] : null
+    }
+
     def 'an attachment is written and referred to where the document can find it'() {
         given:
             treeOfTwoPages()
@@ -180,11 +222,13 @@ class ExportConfluenceTaskSpec extends Specification {
         when:
             taskFor().execute()
 
-        then: 'named by its version, below images/, as the file header points imagesdir'
-            new File(destination.toFile(), 'docs/images/3_diagram.png').bytes == 'PNGBYTES'.bytes
+        then: '''named by its version, in a folder of its page below images/, as the file header
+                 points imagesdir'''
+            new File(destination.toFile(), 'docs/images/Root/3_diagram.png').bytes ==
+                    'PNGBYTES'.bytes
 
         and:
-            exported('Root.adoc').getText('utf-8').contains('3_diagram.png')
+            exported('Root.adoc').getText('utf-8').contains('image::Root/3_diagram.png[')
     }
 
     def 'the menu names every page of the export'() {
