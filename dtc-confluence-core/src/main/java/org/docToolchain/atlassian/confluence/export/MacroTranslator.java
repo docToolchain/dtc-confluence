@@ -254,9 +254,7 @@ class MacroTranslator {
         String version = element.select("ri|attachment").attr("ri:version-at-save");
         // .text(), or the whole parameter element would land in the attribute.
         String height = firstOf(element.select("ac|parameter[ac:name=height]").text(), "400");
-        List<String> folders = folders(pageId, "filename");
-        String path = "../".repeat(folders.size()) + "images/" + String.join("/", folders);
-        String file = path + "/" + firstOf(version, "1") + "_" + fileName(filename);
+        String file = attachmentPath(firstOf(version, "1") + "_" + fileName(filename));
         String name = filename.toLowerCase(Locale.ROOT);
         if (name.endsWith(".pdf")) {
             element.before("\n<div>\n++++%%CRLF%%\n"
@@ -494,6 +492,17 @@ class MacroTranslator {
      *         page where it has any. A root page has none, and naming them would leave a leading
      *         slash - an absolute path to nothing.
      */
+    /**
+     * @return the file below the image directory, as a path from where this document sits - for
+     *         what AsciiDoc does not resolve against imagesdir itself: a link, or the src of an
+     *         iframe. The same folders the downloader writes to, by way of
+     *         {@link PageNaming#attachmentFolders}.
+     */
+    private String attachmentPath(String fileName) {
+        return "../".repeat(folders(pageId, "filename").size()) + "images/"
+                + String.join("/", PageNaming.attachmentFolders(pages, pageId)) + "/" + fileName;
+    }
+
     private String imageTarget(String fileName) {
         // {filepath} for the folders of the page - the document carries them as that attribute -
         // and then the page's own folder, which is what keeps two siblings' attachments apart.

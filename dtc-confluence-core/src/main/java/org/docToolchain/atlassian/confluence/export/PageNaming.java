@@ -71,11 +71,38 @@ public final class PageNaming {
     }
 
     /**
-     * @return the last segment of {@link #attachmentFolders}, for the document side, which names
-     *         the folders of the page as the {@code {filepath}} attribute rather than in full
+     * The last folder of {@link #attachmentFolders}: the page itself.
+     *
+     * <p>The sanitised title is not unique - "A B" and "A-B" both become "A_B" - and the export
+     * disambiguates only the name the AsciiDoc file is written under, not this one. So where
+     * another page would name the same folder, every page in that group carries its id: a folder
+     * is named after one page or it is not a folder per page, and the attachments of two
+     * siblings overwrite each other again.</p>
+     *
+     * <p>Decided from the page map alone, so that the downloader and the document agree without
+     * either telling the other.</p>
      */
     public static String ownFolder(Map<?, ?> pages, String pageId) {
-        return nameOf(pages.get(pageId), "filename");
+        String name = nameOf(pages.get(pageId), "filename");
+        return name.isEmpty() || !isSharedWithAnotherPage(pages, pageId, name)
+                ? name
+                : name + "_" + pageId;
+    }
+
+    /** Whether another page sits in the same folders under the same name. */
+    private static boolean isSharedWithAnotherPage(Map<?, ?> pages, String pageId, String name) {
+        List<String> folders = folderStructure(pages, pageId);
+        for (Map.Entry<?, ?> entry : pages.entrySet()) {
+            String otherId = String.valueOf(entry.getKey());
+            if (otherId.equals(pageId)) {
+                continue;
+            }
+            if (name.equals(nameOf(entry.getValue(), "filename"))
+                    && folders.equals(folderStructure(pages, otherId))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
