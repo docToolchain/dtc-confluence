@@ -40,7 +40,9 @@ cd release-0.1.0
 # 3. the release notes: move the "unreleased" section of CHANGELOG.md to the version
 #    and date it. JReleaser reads this file as the release body.
 
-# 4. build everything the release ships, signed
+# 4. build everything the release ships. Artifacts are NOT signed here: the
+#    release profile defaults gpg.skip to true, and only step 8 turns it off,
+#    because Maven Central is the only thing that requires a signature.
 ./mvnw -P release clean verify
 
 # 5. the commit and the signed tag
