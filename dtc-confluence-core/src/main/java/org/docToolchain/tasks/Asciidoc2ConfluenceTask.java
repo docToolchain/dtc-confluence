@@ -666,12 +666,7 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
     }
 
     private Object retrievePageIdByName(String name) {
-        Map<?, ?> data = asMap(confluenceClient.retrievePageIdByName(name, confluenceSpaceKey));
-        Object results = data.get("results");
-        if (results instanceof List<?> list && !list.isEmpty() && list.get(0) instanceof Map<?, ?> first) {
-            return first.get("id");
-        }
-        return null;
+        return confluenceClient.retrievePageIdByName(name, confluenceSpaceKey);
     }
 
     /**

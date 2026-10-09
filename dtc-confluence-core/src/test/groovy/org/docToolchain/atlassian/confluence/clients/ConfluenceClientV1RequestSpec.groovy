@@ -111,6 +111,37 @@ class ConfluenceClientV1RequestSpec extends Specification {
             client().attachmentHasChanged(remote, 'def456')
     }
 
+    def 'retrievePageIdByName answers the id, not the search result'() {
+        given: '''The method is named after an id. It used to hand back the whole response and
+                  leave the extraction to each caller - the publisher did it, the export did not
+                  and asked Confluence for a page whose id was a printed map.'''
+            responseBody = '{"results":[{"id":"4711","title":"The Root"}],"size":1}'
+
+        when:
+            def id = client().retrievePageIdByName('The Root', 'SPACE')
+
+        then:
+            id == '4711'
+
+        and: 'asked for by title and space'
+            sent().uri.contains('title=The%20Root')
+            sent().uri.contains('spaceKey=SPACE')
+
+        cleanup:
+            responseBody = '{}'
+    }
+
+    def 'retrievePageIdByName answers nothing where no page carries the title'() {
+        given:
+            responseBody = '{"results":[],"size":0}'
+
+        expect:
+            client().retrievePageIdByName('Nowhere', 'SPACE') == null
+
+        cleanup:
+            responseBody = '{}'
+    }
+
     def 'fetchPageByPageId asks for the body, the version and the ancestors'() {
         when:
             client().fetchPageByPageId('4711')
