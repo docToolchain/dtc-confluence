@@ -61,6 +61,22 @@ class ImageTransformerSpec extends Specification {
             body.html().contains('ac:width="360"')
     }
 
+    def 'a plus in a file name is a plus, not a space'() {
+        given: """URLDecoder decodes an HTML form field, where "+" means a space. An image target
+                  is a path, where it means itself. A file called "C++ guide.png" was uploaded
+                  under the name "C   guide.png" - a name no file on disk has, so the attachment
+                  the page then points at is never there."""
+            def body = bodyOf('<img src="images/C++%20guide.png">')
+
+        when:
+            def uploads = transformer().transformImages(body)
+
+        then: 'the escape is still decoded, and the plus is left alone'
+            uploads*.fileName() == ['C++ guide.png']
+            uploads*.url() == ['docs/images/C++ guide.png']
+            body.html().contains('ri:filename="C++ guide.png"')
+    }
+
     def 'an image without a width gets the one Confluence would use anyway'() {
         given:
             def body = bodyOf('<img src="a.png">')

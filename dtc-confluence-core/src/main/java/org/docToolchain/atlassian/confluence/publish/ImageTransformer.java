@@ -1,8 +1,6 @@
 package org.docToolchain.atlassian.confluence.publish;
 
 import java.io.UnsupportedEncodingException;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -76,9 +74,9 @@ public class ImageTransformer {
             fileName = stored.fileName();
         } else {
             url = directory + source;
-            fileName = decode(source.substring(source.lastIndexOf('/') + 1));
+            fileName = SourcePath.decode(source.substring(source.lastIndexOf('/') + 1));
         }
-        url = decode(url);
+        url = SourcePath.decode(url);
         System.out.println("    image: " + url);
         // Escaped, because the fragment is parsed again: a quote in the name - the data-URI
         // branch takes it from the alt text - would close the attribute and cut the name short,
@@ -89,14 +87,6 @@ public class ImageTransformer {
         return new Upload(url, fileName, "automatically uploaded");
     }
 
-    private static String decode(String value) {
-        try {
-            return URLDecoder.decode(value, StandardCharsets.UTF_8);
-        } catch (IllegalArgumentException notEncoded) {
-            // A per-cent sign that is not an escape: the name means itself.
-            return value;
-        }
-    }
 
     private static String valueOr(String value, String fallback) {
         return value == null || value.isEmpty() ? fallback : value;
