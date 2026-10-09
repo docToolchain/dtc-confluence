@@ -173,6 +173,32 @@ class ExportConfluenceTaskSpec extends Specification {
             !adoc.contains('%%')
     }
 
+    def 'the attachment list of a page links to the files that were written'() {
+        given: '''An attachments macro becomes a list of links, and that list builds its path
+                  separately from the image references. Both have to name the same place, or the
+                  list points at files that are not there.'''
+            reader.fetchPage('1') >> page('1', 'Root', '<p>root</p>')
+            reader.fetchPage('2') >> page('2', 'Child',
+                '<p><ac:structured-macro ac:name="attachments"/></p>')
+            reader.fetchChildPages('1') >> [[id: '2', title: 'Child']]
+            reader.fetchChildPages('2') >> []
+            reader.fetchAttachments('1') >> []
+            reader.fetchAttachments('2') >> [[id: 'a2', title: 'notes.pdf', version: [number: 2],
+                                              _links: [download: '/download/2/notes.pdf']]]
+            reader.download(_) >> 'PDFBYTES'.bytes
+
+        when:
+            taskFor().execute()
+            def adoc = exported('Root/Child.adoc').getText('utf-8')
+
+        then: 'the link, read from where the document sits, reaches the file on disk'
+            def target = (adoc =~ /link:([^\[]+)\[/)[0][1]
+            new File(exported('Root/Child.adoc').parentFile, target).canonicalFile.exists()
+
+        and:
+            adoc.contains('notes.pdf (v2)')
+    }
+
     def 'two pages with an attachment of the same name keep both files'() {
         given: """The path named the ancestors of a page but not the page itself, so two children
                   of one parent shared a directory. Two files called diagram.png at version 1
