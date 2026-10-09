@@ -76,7 +76,9 @@ class MinimalConfigurationSpec extends Specification {
 
         cleanup:
             new File("${RESOURCES}/embedded-input.html").delete()
-            new File("${RESOURCES}/images").deleteDir()
+            // confluence/images, not images: this is where ImageStore writes an embedded image,
+            // and deleting the wrong path is how a stray PNG came to be committed here.
+            new File("${RESOURCES}/confluence").deleteDir()
     }
 
     def 'a footnote label that was deliberately emptied stays empty'() {
