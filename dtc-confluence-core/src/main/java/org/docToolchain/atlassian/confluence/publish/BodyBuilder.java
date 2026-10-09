@@ -68,7 +68,11 @@ public class BodyBuilder {
         body.select("div.title").wrap("<strong></strong>").before("<br />").wrap("<div></div>");
         body.select("div.listingblock").wrap("<p></p>").unwrap();
 
-        uploads.addAll(new ImageTransformer(baseUrl, imageDirs()).transformImages(body));
+        // A dry run still needs the body - the hash it compares is the hash of what a real run
+        // would send - but it must not leave the embedded images on disk.
+        boolean writing = !(configService.getRawConfigProperty("confluence.dryRun")
+                instanceof Boolean dry && dry);
+        uploads.addAll(new ImageTransformer(baseUrl, imageDirs(), writing).transformImages(body));
         uploads.addAll(transformAttachmentLinks(body));
 
         new MarkTransformer().transformMarks(body);
