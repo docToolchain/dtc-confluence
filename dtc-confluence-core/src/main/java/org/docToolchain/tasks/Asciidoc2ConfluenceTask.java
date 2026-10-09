@@ -446,10 +446,6 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
     }
 
     /**
-     * @return the ids of the pages pushed at this level, so the caller can name where the document
-     *         now starts
-     */
-    /**
      * Refuses a document whose own pages would collide with each other.
      *
      * <p>A Confluence title is unique per space, so two sections carrying the same heading want
@@ -464,12 +460,12 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
      * @throws IllegalStateException naming every colliding title and where it comes from
      */
     private void refuseDuplicateTitles(List<Page> pages, String file) {
-        Map<String, List<String>> origins = new LinkedHashMap<>();
+        Map<String, Collision> origins = new LinkedHashMap<>();
         collectTitles(pages, "", origins);
-        String collisions = origins.entrySet().stream()
-                .filter(entry -> entry.getValue().size() > 1)
-                .map(entry -> "    '" + entry.getKey() + "' is wanted by:" + System.lineSeparator()
-                        + entry.getValue().stream()
+        String collisions = origins.values().stream()
+                .filter(collision -> collision.origins().size() > 1)
+                .map(entry -> "    '" + entry.title() + "' is wanted by:" + System.lineSeparator()
+                        + entry.origins().stream()
                                 .map(where -> "        " + where)
                                 .collect(Collectors.joining(System.lineSeparator())))
                 .collect(Collectors.joining(System.lineSeparator()));
@@ -484,16 +480,42 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
                 + "help: both are applied to every page of the document equally.");
     }
 
-    /** Collects the title each page would be published under, with the headings it came from. */
-    private void collectTitles(List<Page> pages, String path, Map<String, List<String>> origins) {
+    /**
+     * Collects the title each page would be published under, with the headings it came from.
+     *
+     * <p>Keyed in lower case, because that is how the publish path compares a title:
+     * {@link #existingPage} looks one up in lower case and the clients key the pages they fetched
+     * the same way. So "Purpose" and "purpose" want one and the same page. The first spelling an
+     * author wrote is kept for the message - a lowercased key is not a heading anyone can search
+     * the document for.</p>
+     */
+    private void collectTitles(List<Page> pages, String path, Map<String, Collision> origins) {
         for (Page page : pages) {
             String heading = page.getTitle().trim();
             String here = path.isEmpty() ? heading : path + " > " + heading;
-            origins.computeIfAbsent(realTitle(heading), title -> new ArrayList<>()).add(here);
+            String title = realTitle(heading);
+            origins.computeIfAbsent(title.toLowerCase(Locale.ROOT), key -> new Collision(title))
+                    .origins().add(here);
             collectTitles(page.getChildren(), here, origins);
         }
     }
 
+    /**
+     * The pages that want one title.
+     *
+     * @param title   the first spelling the document used, for the message
+     * @param origins the heading path of every page that wants it
+     */
+    private record Collision(String title, List<String> origins) {
+        Collision(String title) {
+            this(title, new ArrayList<>());
+        }
+    }
+
+    /**
+     * @return the ids of the pages pushed at this level, so the caller can name where the document
+     *         now starts
+     */
     private List<String> pushPages(List<Page> pages, Map<String, String> anchors,
                                    Map<String, String> pageAnchors, List<String> labels) {
         List<String> ids = new ArrayList<>();

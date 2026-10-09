@@ -28,10 +28,14 @@ class DuplicateSectionTitleSpec extends Specification {
 </div></div>
 </div></body></html>'''
 
+    /** The same, with the second heading differing in case alone. */
+    private static final String REPEATED_IN_ANOTHER_CASE =
+        REPEATED_SUBSECTIONS.replace('<h3 id="_pb">Purpose</h3>', '<h3 id="_pb">purpose</h3>')
+
     private ConfluenceClient client = Mock(ConfluenceClient)
 
-    private Asciidoc2ConfluenceTask taskFor(Map extra = [:]) {
-        new File("${RESOURCES}/repeated-input.html").text = REPEATED_SUBSECTIONS
+    private Asciidoc2ConfluenceTask taskFor(Map extra = [:], String document = REPEATED_SUBSECTIONS) {
+        new File("${RESOURCES}/repeated-input.html").text = document
         def config = new ConfigObject()
         config.docDir = RESOURCES
         config.confluence.api = 'https://confluence.example/rest/api/'
@@ -78,6 +82,25 @@ class DuplicateSectionTitleSpec extends Specification {
         then:
             def e = thrown(IllegalStateException)
             e.message.contains('PROJ Purpose (v2)')
+    }
+
+    def 'two titles that differ in case alone are the same title'() {
+        when: """The publish path is case-insensitive: existingPage looks a title up in lower
+                 case, and the clients key the pages they fetched the same way. So "Purpose" and
+                 "purpose" want one page just as much as two spellings that match, and a check
+                 that compares them case-sensitively lets through exactly what it is for."""
+            taskFor([:], REPEATED_IN_ANOTHER_CASE).execute()
+
+        then:
+            def e = thrown(IllegalStateException)
+            e.message.contains('Building Block A')
+            e.message.contains('Building Block B')
+
+        and: 'the message shows a spelling the author wrote, rather than a lowercased key'
+            e.message.contains("'Purpose' is wanted by")
+
+        and:
+            0 * client.createPage(_, _, _, _, _)
     }
 
     def 'the same titles at a level that stays on one page are no collision'() {

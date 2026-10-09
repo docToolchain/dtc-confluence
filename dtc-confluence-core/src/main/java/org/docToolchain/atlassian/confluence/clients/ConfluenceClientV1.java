@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Locale;
 
 import groovy.json.JsonBuilder;
 import org.apache.hc.client5.http.classic.methods.HttpDelete;
@@ -227,8 +228,13 @@ public class ConfluenceClientV1 extends ConfluenceClient {
         }
     }
 
+    /**
+     * Locale.ROOT, because the key is compared against one built the same way rather than shown
+     * to anyone: with a Turkish default locale, "TITLE".toLowerCase() is "tıtle" and a page the
+     * run just fetched would not be found again.
+     */
     private static String titleKey(Map<?, ?> match) {
-        return String.valueOf(match.get("title")).toLowerCase();
+        return String.valueOf(match.get("title")).toLowerCase(Locale.ROOT);
     }
 
     /** Confluence page titles are unique within a space, so the title serves as the key. */
