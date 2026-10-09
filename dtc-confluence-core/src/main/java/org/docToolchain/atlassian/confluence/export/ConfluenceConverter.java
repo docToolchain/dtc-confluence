@@ -398,7 +398,8 @@ public class ConfluenceConverter {
             System.out.println(deepFilename);
             System.out.println(text(metaData.get("title")));
             String adoc = AdocOutput.substitute(Files.readString(adocFile.toPath()));
-            adoc = withAttachments(adoc, pageId, attachments, folderStructure);
+            adoc = withAttachments(adoc, pageId, attachments, folderStructure,
+                    PageNaming.attachmentFolders(pages, pageId));
             Files.writeString(adocFile.toPath(),
                     fileHeader(metaData, adocFilename, folderStructure, adocFolderStructure)
                             + "== " + text(metaData.get("title")) + "\n\n"
@@ -498,17 +499,27 @@ public class ConfluenceConverter {
                 + "\nendif::includeChildren[]\n";
     }
 
-    /** Replaces the attachment marker, where the page carried one, with a list of its files. */
+    /**
+     * Replaces the attachment marker, where the page carried one, with a list of its files.
+     *
+     * @param folderStructure   the folders the document sits in, which say how far up the image
+     *                          directory is
+     * @param attachmentFolders the folders the files were written to, which is the same path plus
+     *                          one named after the page - this list and the one the downloader
+     *                          uses come from {@link PageNaming#attachmentFolders}, so a link
+     *                          here cannot name a place no file was written to
+     */
     private static String withAttachments(String adoc,
                                           String pageId,
                                           Map<String, Map<String, Object>> attachments,
-                                          List<String> folderStructure) {
+                                          List<String> folderStructure,
+                                          List<String> attachmentFolders) {
         if (!adoc.contains("%%attachments%%")) {
             return adoc;
         }
         StringBuilder list = new StringBuilder("\n.Attachments\n\n");
         String prefix = "../".repeat(folderStructure.size()) + "images/"
-                + String.join("/", folderStructure) + "/";
+                + String.join("/", attachmentFolders) + "/";
         attachments.values().stream()
                 .filter(attachment -> pageId.equals(text(attachment.get("pageId"))))
                 .forEach(attachment -> {
