@@ -3,6 +3,9 @@ package org.docToolchain.tasks
 import org.docToolchain.atlassian.confluence.clients.ConfluenceClient
 import org.docToolchain.util.TestUtils
 import spock.lang.Specification
+import spock.lang.TempDir
+
+import java.nio.file.Path
 
 /**
  * States that a dry run reads everything and writes nothing, and what it says about each page.
@@ -13,6 +16,9 @@ import spock.lang.Specification
 class PublishDryRunSpec extends Specification {
 
     private static final String RESOURCES = "${TestUtils.TEST_RESOURCES_DIR}/publisher"
+
+    @TempDir
+    Path documents
 
     private ConfluenceClient client = Mock(ConfluenceClient)
 
@@ -104,6 +110,73 @@ class PublishDryRunSpec extends Specification {
             dry.verdicts[Asciidoc2ConfluenceTask.Verdict.UNCHANGED] > 0
             dry.verdicts[Asciidoc2ConfluenceTask.Verdict.CREATE] == null
             0 * client.updatePage(_, _, _, _, _, _, _)
+    }
+
+    /** A one-pixel PNG inlined as a data URI, which is the path that reaches the image store. */
+    private static final String EMBEDDED = '''<!DOCTYPE html>
+<html lang=""><head><meta charset="UTF-8"><title>Embedded</title></head><body class="article">
+<div id="header"><h1>Embedded</h1></div>
+<div id="content"><div class="sect1"><h2 id="_s">S</h2><div class="sectionbody">
+<div class="imageblock"><div class="content">
+<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==" alt="Dot">
+</div></div>
+</div></div></div></body></html>'''
+
+    /**
+     * A document of its own, in a directory of its own.
+     *
+     * The embedded image is written below the document directory, so these cases must not run in
+     * the checked-in test resources: the first version of this spec deleted a stray PNG that an
+     * earlier test had left there and committed.
+     */
+    private Asciidoc2ConfluenceTask taskWithEmbeddedImage(Path docDir, boolean dryRun) {
+        new File(docDir.toFile(), 'embedded.html').text = EMBEDDED
+        def config = new ConfigObject()
+        config.docDir = docDir.toString()
+        config.confluence.api = 'https://confluence.example/rest/api/'
+        config.confluence.credentials = 'x'
+        config.confluence.useV1Api = true
+        config.confluence.spaceKey = 'SPACE'
+        config.confluence.subpagesForSections = 0
+        config.confluence.input = [[file: 'embedded.html', ancestorId: '99']]
+        if (dryRun) {
+            config.confluence.dryRun = true
+        }
+        def task = Asciidoc2ConfluenceTask.From(config, docDir.toString())
+        client.fetchPagesBySpaceKey(_, _) >> [:]
+        client.fetchPagesByAncestorId(_, _) >> [:]
+        client.retrievePageIdByName(_, _) >> null
+        client.retrieveFullPageById(_) >> [:]
+        client.createPage(_, _, _, _, _) >> [id: '1000']
+        client.addLabel(_, _) >> [:]
+        task.confluenceClient = client
+        return task
+    }
+
+    def 'a dry run leaves no files behind, having said it would write nothing'() {
+        given: '''The body has to be built even for a dry run, because the hash it compares is the
+                  hash of the body a real run would send - and building it names every embedded
+                  image. Naming one is computation: the name is the hash of the content. Writing
+                  it is not.'''
+            def task = taskWithEmbeddedImage(documents, true)
+
+        when:
+            task.execute()
+
+        then: 'the page was judged, so the body was built and the image was named'
+            task.verdicts[Asciidoc2ConfluenceTask.Verdict.CREATE] == 1
+
+        and: 'and the document directory holds nothing but the document'
+            documents.toFile().list() as Set == ['embedded.html'] as Set
+    }
+
+    def 'a real run does write the embedded image'() {
+        when: 'the same document without the flag, so the difference is the flag alone'
+            taskWithEmbeddedImage(documents, false).execute()
+
+        then:
+            new File(documents.toFile(), 'confluence/images').listFiles()
+                    .findAll { it.name.endsWith('.png') }.size() == 1
     }
 
     private String outputOf(Closure work) {

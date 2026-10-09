@@ -35,9 +35,21 @@ public class ImageTransformer {
      * @param baseUrl   the HTML file the images are relative to
      * @param imageDirs where to look for an image, and where to write an embedded one
      */
+    /** Whether an embedded image that is not on disk yet is written there. */
+    private final boolean writing;
+
     public ImageTransformer(String baseUrl, List<String> imageDirs) {
+        this(baseUrl, imageDirs, true);
+    }
+
+    /**
+     * @param writing false for a dry run, which needs the names of the embedded images to build
+     *                the body it compares and must not leave the files behind
+     */
+    public ImageTransformer(String baseUrl, List<String> imageDirs, boolean writing) {
         this.baseUrl = baseUrl;
         this.imageDirs = imageDirs;
+        this.writing = writing;
     }
 
     /**
@@ -70,8 +82,9 @@ public class ImageTransformer {
             EmbeddedImage embedded = EmbeddedImage.parse(source);
             String extension = embedded.fileExtension();
             String named = image.attr("alt").replaceAll("\\s+", "_") + "." + extension;
+            ImageStore store = writing ? new ImageStore(imageDirs) : ImageStore.readOnly(imageDirs);
             ImageStore.StoredImage stored =
-                    new ImageStore(imageDirs).store(directory, named, extension, embedded.content());
+                    store.store(directory, named, extension, embedded.content());
             url = stored.filePath();
             fileName = stored.fileName();
         } else {
