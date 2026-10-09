@@ -21,6 +21,14 @@ class ConfluenceClientV1RequestSpec extends Specification {
     @Shared
     String responseBody = '{}'
 
+    /**
+     * Answers for consecutive requests, where one body is not enough: the paginating methods ask
+     * until a response comes back with no results, so a single body repeated would loop forever.
+     * Consumed in order; once it is empty, responseBody answers again.
+     */
+    @Shared
+    List<String> responseBodies = []
+
     def setupSpec() {
         server = HttpServer.create(new InetSocketAddress('127.0.0.1', 0), 0)
         server.createContext('/') { exchange ->
@@ -29,7 +37,7 @@ class ConfluenceClientV1RequestSpec extends Specification {
                 uri   : exchange.requestURI.toString(),
                 body  : exchange.requestBody.text
             ]
-            byte[] payload = responseBody.bytes
+            byte[] payload = (responseBodies.isEmpty() ? responseBody : responseBodies.remove(0)).bytes
             exchange.sendResponseHeaders(200, payload.length)
             exchange.responseBody.withStream { it.write(payload) }
         }
@@ -43,6 +51,7 @@ class ConfluenceClientV1RequestSpec extends Specification {
     def setup() {
         requests.clear()
         responseBody = '{}'
+        responseBodies.clear()
     }
 
     private ConfluenceClientV1 client() {
@@ -190,5 +199,25 @@ class ConfluenceClientV1RequestSpec extends Specification {
             properties.editor.value == 'v1'
             properties['content-appearance-draft'].value == 'full-width'
             properties['content-appearance-published'].value == 'full-width'
+    }
+
+    def 'the pages are keyed in a way the lookup can reproduce in any locale'() {
+        given: """The task looks a title up as title.toLowerCase(Locale.ROOT). Keyed with the
+                  default locale, a Turkish one turns "TITLE" into "tıtle" with a dotless i, and
+                  a page the run had just fetched would not be found again - it would be created
+                  a second time, or the run would fail on the uniqueness rule."""
+            def previous = Locale.default
+            Locale.default = Locale.forLanguageTag('tr')
+            responseBodies = ['{"results":[{"id":"4711","title":"TITLE","ancestors":[]}]}',
+                              '{"results":[]}']
+
+        when:
+            def pages = client().fetchPagesBySpaceKey('SPACE', 100)
+
+        then:
+            pages.containsKey('TITLE'.toLowerCase(Locale.ROOT))
+
+        cleanup:
+            Locale.default = previous
     }
 }
