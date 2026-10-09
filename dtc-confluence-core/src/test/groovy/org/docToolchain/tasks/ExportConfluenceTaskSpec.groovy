@@ -173,6 +173,24 @@ class ExportConfluenceTaskSpec extends Specification {
             !adoc.contains('%%')
     }
 
+    def 'an image embedded from a URL reaches the document as that URL'() {
+        given: 'nothing to download and nothing to name: the image lives elsewhere'
+            reader.fetchPage('1') >> page('1', 'Root',
+                '<p><ac:image><ri:url ri:value="https://example.com/chart.png"/></ac:image></p>')
+            reader.fetchChildPages('1') >> []
+            reader.fetchAttachments('1') >> []
+
+        when:
+            taskFor().execute()
+            def adoc = exported('Root.adoc').getText('utf-8')
+
+        then:
+            adoc.contains('image::https://example.com/chart.png[')
+
+        and: 'not a reference to a file that was never written'
+            !adoc.contains('image::1_[')
+    }
+
     def 'an attachment is written and referred to where the document can find it'() {
         given:
             treeOfTwoPages()

@@ -147,6 +147,16 @@ class MacroTranslator {
     private void image(Element element) {
         String alignment = element.attr("ac:align");
         String width = element.attr("ac:width");
+        // An ac:image names either an attachment of the page or, with ri:url, an image somewhere
+        // else. Only the attachment was read, so an embedded URL became "1_" - a reference to a
+        // file that was never there. The publisher writes ri:url for any source starting with
+        // http, so this is the other half of that round trip.
+        String riUrl = element.select("ri|url").attr("ri:value");
+        if (!riUrl.isEmpty()) {
+            element.before(img(riUrl, alignment, width));
+            element.remove();
+            return;
+        }
         String riFilename = element.select("ri|attachment").attr("ri:filename");
         String riVersion = element.select("ri|attachment").attr("ri:version-at-save");
         // Through the attachment map, so that a drawio diagram merged into a single file - the
@@ -159,9 +169,26 @@ class MacroTranslator {
         String version = attachment == null
                 ? firstOf(riVersion, "1")
                 : firstOf(text(attachment.get("version")), riVersion, "1");
-        element.before("<img src='" + imageTarget(version + "_" + fileName(filename))
-                + "' align='" + alignment + "' width='" + width + "' />");
+        element.before(img(imageTarget(version + "_" + fileName(filename)), alignment, width));
         element.remove();
+    }
+
+    /**
+     * An img element, built rather than written out.
+     *
+     * <p>Written as a fragment, the values were parsed again as markup: jsoup decodes
+     * {@code ri:value} before this runs, so a stored URL carrying {@code &apos;} closed the
+     * {@code src} attribute, and everything after it was read as further attributes - a page
+     * could add an {@code onerror} to the exported HTML. The same holds for an attachment whose
+     * file name carries a quote. Set through the attribute API, a value is escaped when the
+     * document is serialised and means itself.</p>
+     */
+    private static Element img(String source, String alignment, String width) {
+        Element img = new Element("img");
+        img.attr("src", source);
+        img.attr("align", alignment);
+        img.attr("width", width);
+        return img;
     }
 
     private void link(Element element) {
