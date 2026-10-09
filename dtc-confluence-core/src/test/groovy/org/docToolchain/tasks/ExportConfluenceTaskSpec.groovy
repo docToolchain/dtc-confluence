@@ -166,11 +166,44 @@ class ExportConfluenceTaskSpec extends Specification {
             adoc.contains('The note body.')
 
         and: 'a source block: the attribute line, the delimiters and the code, in that order'
-            adoc =~ /(?s)\[source, groovy\]\s*\n-{4,}\s*\ndef hello = "world"\s*\n-{4,}/
+            adoc =~ /(?s)\[source,\s*groovy\]\s*\n-{4,}\s*\ndef hello = "world"\s*\n-{4,}/
 
         and: 'nothing that pandoc escaped on the way'
             !adoc.contains('++[++')
             !adoc.contains('%%')
+    }
+
+    def 'a code sample reaches the document as it was written'() {
+        given: """A docker-compose sample came back as "image:: nginx:1.25" - the block-image
+                  promotion fired on a line of YAML - and an indented sample came back flush
+                  left, because the marker for the sample's own line breaks swallowed the spaces
+                  after it. Inside a listing block AsciiDoc substitutes nothing, so neither may
+                  the export."""
+            reader.fetchPage('1') >> page('1', 'Root',
+                '<ac:structured-macro ac:name="code">' +
+                    '<ac:parameter ac:name="language">yaml</ac:parameter>' +
+                    '<ac:plain-text-body><![CDATA[services:\n' +
+                    '  web:\n' +
+                    '    image: nginx:1.25\n' +
+                    '    command: %%CRLF%%]]></ac:plain-text-body>' +
+                    '</ac:structured-macro>')
+            reader.fetchChildPages('1') >> []
+            reader.fetchAttachments('1') >> []
+
+        when:
+            taskFor().execute()
+            def adoc = exported('Root.adoc').getText('utf-8')
+
+        then: 'the YAML key keeps its single colon'
+            adoc.contains('image: nginx:1.25')
+            !adoc.contains('image:: nginx:1.25')
+
+        and: 'every line keeps the indentation that is its meaning'
+            adoc.readLines().contains('  web:')
+            adoc.readLines().contains('    image: nginx:1.25')
+
+        and: 'and a line that only looks like a placeholder is left as the sample wrote it'
+            adoc.contains('command: %%CRLF%%')
     }
 
     def 'an attachment is written and referred to where the document can find it'() {

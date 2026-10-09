@@ -11,19 +11,53 @@ import spock.lang.Specification
  */
 class AdocOutputSpec extends Specification {
 
-    def 'a source block gets its attribute line back'() {
-        when: '''pandoc escapes a literal bracket in text: written as "[source, groovy]" the line
-                 arrives as "++[++source, groovy++]++", which is not a source block but four plus
-                 signs and a sentence'''
-            def adoc = AdocOutput.substitute('%%SOURCE-BEGIN%%groovy%%SOURCE-END%%')
+    def 'a listing block is left alone by every substitution'() {
+        given: '''AsciiDoc substitutes nothing inside a listing block, so neither may this. A code
+                  sample is the one place where text that looks like markup is not markup.'''
+            def adoc = '''[source,yaml]
+----
+services:
+  web:
+    image: nginx:1.25
+    command: sh -c "echo done"
+----
+'''
 
-        then:
-            adoc == '[source, groovy]'
+        expect: 'the docker-compose line keeps its single colon'
+            AdocOutput.substitute(adoc) == adoc
     }
 
-    def 'a source block without a language keeps its shape'() {
+    def 'a line that only looks like a placeholder is not substituted inside a listing'() {
+        given: 'a sample about this very conversion, which a page of ours could well contain'
+            def adoc = '''[source,text]
+----
+%%ANCHOR%%name%%ANCHOR-END%%
+%%CRLF%%
+----
+'''
+
         expect:
-            AdocOutput.substitute('%%SOURCE-BEGIN%%%%SOURCE-END%%') == '[source, ]'
+            AdocOutput.substitute(adoc) == adoc
+    }
+
+    def 'a literal block is left alone as well'() {
+        given: """pandoc writes "...." rather than "----" for a sample whose language Confluence
+                  did not record, and a language-less sample is no less verbatim"""
+            def adoc = '''....
+services:
+  web:
+    image: nginx:1.25
+....
+'''
+
+        expect:
+            AdocOutput.substitute(adoc) == adoc
+    }
+
+    def 'outside a listing block the substitutions still run'() {
+        expect: 'the guard must not switch the conversion off for the rest of the document'
+            AdocOutput.substitute('image:pic.png[]') == 'image::pic.png[]'
+            AdocOutput.substitute('a%%CRLF%%b') == 'a\nb'
     }
 
     def 'an admonition becomes a block, separated from what is above it'() {
