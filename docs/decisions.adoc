@@ -111,9 +111,9 @@ What is still missing for a second producer is narrower than it was: a `Page` ca
 
 Not planned for a particular release, recorded so the reasoning is not redone.
 
-Confluence offers no partial update.
-`PUT /rest/api/content/{id}` replaces the body wholesale, which is what `ConfluenceClientV1.updatePage` sends.
-Whether the Data Center v1 API offers any section-level patch was not established; nothing in its documentation was found, and no instance was asked.
+The way this project writes a page offers no partial update.
+`ConfluenceClientV1.updatePage` sends the complete body with a whole-body `PUT /rest/api/content/{id}`, so everything that was on the page is replaced by everything the document produced.
+Whether the Data Center v1 API offers a section-level patch at all was not established; nothing in its documentation was found, and no instance was asked - so this entry is about what we do, not about what Confluence cannot do.
 "Partial" therefore has to be a client-side merge.
 
 Publishing already skips unchanged pages by content hash, so page-level granularity exists.
