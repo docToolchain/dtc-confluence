@@ -385,15 +385,13 @@ class MacroTranslator {
         // wholeText rather than text: for the CDATA bodies Confluence writes the two are the
         // same, but a body without one would lose its line breaks.
         String code = Entities.escape(body == null ? "" : body.wholeText());
-        // The attribute line travels as a placeholder for the same reason an admonition does:
-        // pandoc escapes a literal bracket in text, and "++[++source, groovy++]++" is not a
-        // source block, it is four plus signs and a sentence.
-        element.html("\n    <div class=\"code-wrapper\">\n"
-                + "    %%SOURCE-BEGIN%%" + language + "%%SOURCE-END%%%%CRLF%%\n"
-                + "    ----%%CRLF%%\n"
-                + "    " + code.replace("\n", "%%CRLF%%") + "%%CRLF%%\n"
-                + "    ----%%CRLF%%\n"
-                + "    </div>\n    ");
+        // Handed to pandoc as code rather than as text. Written as text it was reflowed like a
+        // paragraph: a YAML sample lost the indentation that is its meaning, its brackets and
+        // underscores came back escaped as "++[++", and "image: nginx:1.25" was promoted to a
+        // block image. A <pre><code> is a code block to pandoc, which writes it out verbatim -
+        // delimiters and "[source, yaml]" line included, so no placeholder is needed for either.
+        String opening = language.isEmpty() ? "<code>" : "<code class=\"language-" + language + "\">";
+        element.html("<pre>" + opening + code + "</code></pre>");
         element.unwrap();
     }
 
