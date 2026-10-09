@@ -282,6 +282,24 @@ class ConfluenceClientV2RequestSpec extends Specification {
             pages.beta == [title: 'Beta', id: '2', parentId: '1']
     }
 
+    def 'the pages are keyed in a way the lookup can reproduce in any locale'() {
+        given: """The task looks a title up as title.toLowerCase(Locale.ROOT). Keyed with the
+                  default locale, a Turkish one turns "TITLE" into "tıtle" with a dotless i, and
+                  a page the run had just fetched would not be found again."""
+            def previous = Locale.default
+            Locale.default = Locale.forLanguageTag('tr')
+
+        when:
+            def pages = spaceAddressingClient(['{"results":[{"id":"1","title":"TITLE"}]}'])
+                    .fetchPagesBySpaceKey('SPACE', 25)
+
+        then:
+            pages.containsKey('TITLE'.toLowerCase(Locale.ROOT))
+
+        cleanup:
+            Locale.default = previous
+    }
+
     def 'fetchPagesByAncestorId walks into the children it discovered'() {
         given:
             def parent = '{"results":[{"id":"10","title":"Child"}]}'
