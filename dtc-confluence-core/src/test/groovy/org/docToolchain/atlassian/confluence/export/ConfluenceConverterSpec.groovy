@@ -343,18 +343,19 @@ class ConfluenceConverterSpec extends Specification {
             !html.contains("2_my report.pdf")
     }
 
-    def 'an image of a root page is where imagesdir already points'() {
+    def 'an image of a root page is named by the folder of that page alone'() {
         given: """AsciiDoc resolves an image target against imagesdir, and the file header points
-                  that at the images directory. A root page sits in no folder, so naming
-                  {filepath} would leave a leading slash, and naming the directory again would
-                  resolve to images/images/... - neither is where the attachment was written."""
+                  that at the images directory. A root page sits in no folder of its own
+                  ancestors, so naming {filepath} would leave a leading slash and naming the
+                  directory again would resolve to images/images/... - but the attachments of the
+                  page do sit in a folder named after it."""
             def attachments = ['a': [pageId: '1', filename: 'shot.png', version: '3']]
 
         when:
             def html = converter.fixBody('1', storage, NO_USERS, PAGES, attachments, SPACE).html()
 
         then:
-            html.contains('src="3_shot.png"')
+            html.contains('src="A_Page/3_shot.png"')
 
         where:
             storage << [
@@ -375,8 +376,9 @@ class ConfluenceConverterSpec extends Specification {
         when:
             def html = converter.fixBody('2', storage, NO_USERS, pages, attachments, SPACE).html()
 
-        then: 'through {filepath}, which the file header sets to the folders of the page'
-            html.contains('src="{filepath}/3_shot.png"')
+        then: '''through {filepath}, which the file header sets to the folders of the page, and
+                 then the folder of the page itself'''
+            html.contains('src="{filepath}/Child/3_shot.png"')
     }
 
     def 'a link between pages uses the names they are written under'() {

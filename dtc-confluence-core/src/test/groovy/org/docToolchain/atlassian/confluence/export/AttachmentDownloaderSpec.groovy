@@ -7,6 +7,9 @@ import java.nio.file.Path
 
 /**
  * States where an attachment lands, and what happens when one cannot be fetched.
+ *
+ * The path names the folders of the page and then the page itself, so that two children of one
+ * parent cannot overwrite each other's files: page 1 here is "Root", page 2 is "Root/Child".
  */
 class AttachmentDownloaderSpec extends Specification {
 
@@ -40,8 +43,8 @@ class AttachmentDownloaderSpec extends Specification {
 
         then:
             failed.isEmpty()
-            imageAt('Root/3_diagram.png').exists()
-            imageAt('Root/3_diagram.png').bytes == 'PNGDATA'.bytes
+            imageAt('Root/Child/3_diagram.png').exists()
+            imageAt('Root/Child/3_diagram.png').bytes == 'PNGDATA'.bytes
     }
 
     def 'the bytes are written as they came, not as text'() {
@@ -55,7 +58,7 @@ class AttachmentDownloaderSpec extends Specification {
             downloader.downloadAll(tree, destination.toFile())
 
         then:
-            imageAt('1_a.png').bytes == binary
+            imageAt('Root/1_a.png').bytes == binary
     }
 
     def 'an awkward file name becomes one a path accepts'() {
@@ -68,7 +71,7 @@ class AttachmentDownloaderSpec extends Specification {
             downloader.downloadAll(tree, destination.toFile())
 
         then:
-            imageAt('2_my_diagram__final.png').exists()
+            imageAt('Root/2_my_diagram__final.png').exists()
     }
 
     def 'a name that would reach out of the image directory stays in it'() {
@@ -81,16 +84,16 @@ class AttachmentDownloaderSpec extends Specification {
         when:
             downloader.downloadAll(tree, destination.toFile())
 
-        then: 'the separators are gone, so the file is one name below images/'
+        then: 'the separators are gone, so the file is one name below the page folder'
             imageAt(landsAt).exists()
             !new File(destination.toFile().parentFile, 'escaped.png').exists()
             !new File(destination.toFile(), 'escaped.png').exists()
 
         where:
             name                          || landsAt
-            '../../escaped.png'           || '1_.._.._escaped.png'
-            '..\\..\\escaped.png'         || '1_.._.._escaped.png'
-            '/etc/escaped.png'            || '1__etc_escaped.png'
+            '../../escaped.png'           || 'Root/1_.._.._escaped.png'
+            '..\\..\\escaped.png'         || 'Root/1_.._.._escaped.png'
+            '/etc/escaped.png'            || 'Root/1__etc_escaped.png'
     }
 
     def 'an attachment without a download link is reported, and the rest still lands'() {
@@ -104,8 +107,8 @@ class AttachmentDownloaderSpec extends Specification {
             def failed = downloader.downloadAll(tree, destination.toFile())
 
         then: 'an export that stops at one broken file is worth less than one that names it'
-            failed == ['1_broken.png']
-            imageAt('1_fine.png').exists()
+            failed == ['Root/1_broken.png']
+            imageAt('Root/1_fine.png').exists()
     }
 
     def 'an attachment that is gone is reported rather than written empty'() {
@@ -118,8 +121,8 @@ class AttachmentDownloaderSpec extends Specification {
             def failed = downloader.downloadAll(tree, destination.toFile())
 
         then:
-            failed == ['1_gone.png']
-            !imageAt('1_gone.png').exists()
+            failed == ['Root/1_gone.png']
+            !imageAt('Root/1_gone.png').exists()
     }
 
     def 'a download that fails outright is reported, and the rest still lands'() {
@@ -134,8 +137,8 @@ class AttachmentDownloaderSpec extends Specification {
             def failed = downloader.downloadAll(tree, destination.toFile())
 
         then:
-            failed == ['1_boom.png']
-            imageAt('1_fine.png').exists()
+            failed == ['Root/1_boom.png']
+            imageAt('Root/1_fine.png').exists()
     }
 
     def 'nothing to download is not a failure'() {

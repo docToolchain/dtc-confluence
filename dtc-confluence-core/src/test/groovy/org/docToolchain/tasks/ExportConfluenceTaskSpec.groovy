@@ -173,6 +173,137 @@ class ExportConfluenceTaskSpec extends Specification {
             !adoc.contains('%%')
     }
 
+    def 'a file macro links to the file that was written'() {
+        given: """A view-file macro becomes an iframe for a PDF and a link for anything else, and
+                  both built their path from the ancestors of the page alone - so they named a
+                  place the downloader no longer writes to.
+
+                  The link branch here. The iframe of a PDF cannot be stated the same way yet:
+                  it travels through pandoc as text, which escapes the underscore of the version
+                  prefix, so its src reads "2++_++handbook.pdf" and names no file - before this
+                  change as much as after it."""
+            reader.fetchPage('1') >> page('1', 'Root', '<p>root</p>')
+            reader.fetchPage('2') >> page('2', 'Child',
+                '<p><ac:structured-macro ac:name="view-file">' +
+                    '<ri:attachment ri:filename="handbook.zip" ri:version-at-save="2"/>' +
+                    '</ac:structured-macro></p>')
+            reader.fetchChildPages('1') >> [[id: '2', title: 'Child']]
+            reader.fetchChildPages('2') >> []
+            reader.fetchAttachments('1') >> []
+            reader.fetchAttachments('2') >> [[id: 'a2', title: 'handbook.zip',
+                                              version: [number: 2],
+                                              _links: [download: '/download/2/handbook.zip']]]
+            reader.download(_) >> 'PDFBYTES'.bytes
+
+        when:
+            taskFor().execute()
+            def adoc = exported('Root/Child.adoc').getText('utf-8')
+
+        then: 'the link, read from where the document sits, reaches the file on disk'
+            def target = (adoc =~ /link:([^\[]+)\[/)[0][1]
+            new File(exported('Root/Child.adoc').parentFile, target).canonicalFile.exists()
+    }
+
+    def 'two pages whose names sanitise alike keep their attachments apart'() {
+        given: '''"A B" and "A-B" both become "A_B", and only the name the AsciiDoc file is
+                  written under is disambiguated - so a folder named after the sanitised title
+                  alone would be shared, and the two files one.'''
+            def image = '<p><ac:image><ri:attachment ri:filename="diagram.png"/></ac:image></p>'
+            reader.fetchPage('1') >> page('1', 'Root', '<p>root</p>')
+            reader.fetchPage('2') >> page('2', 'A B', image)
+            reader.fetchPage('3') >> page('3', 'A-B', image)
+            reader.fetchChildPages('1') >> [[id: '2', title: 'A B'], [id: '3', title: 'A-B']]
+            reader.fetchChildPages('2') >> []
+            reader.fetchChildPages('3') >> []
+            reader.fetchAttachments('1') >> []
+            reader.fetchAttachments('2') >> [[id: 'a2', title: 'diagram.png', version: [number: 1],
+                                              _links: [download: '/download/2/diagram.png']]]
+            reader.fetchAttachments('3') >> [[id: 'a3', title: 'diagram.png', version: [number: 1],
+                                              _links: [download: '/download/3/diagram.png']]]
+            reader.download({ it.contains('/2/') }) >> 'FIRSTBYTES'.bytes
+            reader.download({ it.contains('/3/') }) >> 'SECONDBYTES'.bytes
+
+        when:
+            taskFor().execute()
+
+        then:
+            def written = []
+            new File(destination.toFile(), 'docs/images').eachFileRecurse {
+                if (it.isFile()) {
+                    written << new String(it.bytes)
+                }
+            }
+            written as Set == ['FIRSTBYTES', 'SECONDBYTES'] as Set
+    }
+
+    def 'the attachment list of a page links to the files that were written'() {
+        given: '''An attachments macro becomes a list of links, and that list builds its path
+                  separately from the image references. Both have to name the same place, or the
+                  list points at files that are not there.'''
+            reader.fetchPage('1') >> page('1', 'Root', '<p>root</p>')
+            reader.fetchPage('2') >> page('2', 'Child',
+                '<p><ac:structured-macro ac:name="attachments"/></p>')
+            reader.fetchChildPages('1') >> [[id: '2', title: 'Child']]
+            reader.fetchChildPages('2') >> []
+            reader.fetchAttachments('1') >> []
+            reader.fetchAttachments('2') >> [[id: 'a2', title: 'notes.pdf', version: [number: 2],
+                                              _links: [download: '/download/2/notes.pdf']]]
+            reader.download(_) >> 'PDFBYTES'.bytes
+
+        when:
+            taskFor().execute()
+            def adoc = exported('Root/Child.adoc').getText('utf-8')
+
+        then: 'the link, read from where the document sits, reaches the file on disk'
+            def target = (adoc =~ /link:([^\[]+)\[/)[0][1]
+            new File(exported('Root/Child.adoc').parentFile, target).canonicalFile.exists()
+
+        and:
+            adoc.contains('notes.pdf (v2)')
+    }
+
+    def 'two pages with an attachment of the same name keep both files'() {
+        given: """The path named the ancestors of a page but not the page itself, so two children
+                  of one parent shared a directory. Two files called diagram.png at version 1
+                  became one, and whichever page was walked last decided what both documents
+                  showed."""
+            def image = '<p><ac:image><ri:attachment ri:filename="diagram.png"/></ac:image></p>'
+            reader.fetchPage('1') >> page('1', 'Root', '<p>root</p>')
+            reader.fetchPage('2') >> page('2', 'First', image)
+            reader.fetchPage('3') >> page('3', 'Second', image)
+            reader.fetchChildPages('1') >> [[id: '2', title: 'First'], [id: '3', title: 'Second']]
+            reader.fetchChildPages('2') >> []
+            reader.fetchChildPages('3') >> []
+            reader.fetchAttachments('1') >> []
+            reader.fetchAttachments('2') >> [[id: 'a2', title: 'diagram.png', version: [number: 1],
+                                              _links: [download: '/download/2/diagram.png']]]
+            reader.fetchAttachments('3') >> [[id: 'a3', title: 'diagram.png', version: [number: 1],
+                                              _links: [download: '/download/3/diagram.png']]]
+            reader.download({ it.contains('/2/') }) >> 'FIRSTBYTES'.bytes
+            reader.download({ it.contains('/3/') }) >> 'SECONDBYTES'.bytes
+
+        when:
+            taskFor().execute()
+
+        then: 'both files are on disk, neither having overwritten the other'
+            def written = []
+            new File(destination.toFile(), 'docs/images').eachFileRecurse { written << it }
+            written.findAll { it.isFile() }*.bytes*.toString() as Set ==
+                    ['FIRSTBYTES'.bytes.toString(), 'SECONDBYTES'.bytes.toString()] as Set
+
+        and: 'and each document refers to its own'
+            def first = exported('Root/First.adoc').getText('utf-8')
+            def second = exported('Root/Second.adoc').getText('utf-8')
+            first.contains('image::')
+            second.contains('image::')
+            targetIn(first) != targetIn(second)
+    }
+
+    private static String targetIn(String adoc) {
+        def matcher = adoc =~ /image::([^\[]+)\[/
+        return matcher ? matcher[0][1] : null
+    }
+
     def 'an attachment is written and referred to where the document can find it'() {
         given:
             treeOfTwoPages()
@@ -180,11 +311,13 @@ class ExportConfluenceTaskSpec extends Specification {
         when:
             taskFor().execute()
 
-        then: 'named by its version, below images/, as the file header points imagesdir'
-            new File(destination.toFile(), 'docs/images/3_diagram.png').bytes == 'PNGBYTES'.bytes
+        then: '''named by its version, in a folder of its page below images/, as the file header
+                 points imagesdir'''
+            new File(destination.toFile(), 'docs/images/Root/3_diagram.png').bytes ==
+                    'PNGBYTES'.bytes
 
         and:
-            exported('Root.adoc').getText('utf-8').contains('3_diagram.png')
+            exported('Root.adoc').getText('utf-8').contains('image::Root/3_diagram.png[')
     }
 
     def 'the menu names every page of the export'() {

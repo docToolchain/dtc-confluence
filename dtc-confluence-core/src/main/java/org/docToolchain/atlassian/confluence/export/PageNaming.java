@@ -52,6 +52,60 @@ public final class PageNaming {
     }
 
     /**
+     * Where the attachments of a page are written: the folders of the page, and then one named
+     * after the page itself.
+     *
+     * <p>The page itself has to be in the path. Named by its ancestors alone, two children of one
+     * parent shared a directory, and two attachments called {@code diagram.png} at version 1
+     * became one file - whichever page was walked last decided what both documents showed.</p>
+     *
+     * @return the folders below the image directory, outermost first
+     */
+    public static List<String> attachmentFolders(Map<?, ?> pages, String pageId) {
+        List<String> folders = new ArrayList<>(folderStructure(pages, pageId));
+        String own = ownFolder(pages, pageId);
+        if (!own.isEmpty()) {
+            folders.add(own);
+        }
+        return folders;
+    }
+
+    /**
+     * The last folder of {@link #attachmentFolders}: the page itself.
+     *
+     * <p>The sanitised title is not unique - "A B" and "A-B" both become "A_B" - and the export
+     * disambiguates only the name the AsciiDoc file is written under, not this one. So where
+     * another page would name the same folder, every page in that group carries its id: a folder
+     * is named after one page or it is not a folder per page, and the attachments of two
+     * siblings overwrite each other again.</p>
+     *
+     * <p>Decided from the page map alone, so that the downloader and the document agree without
+     * either telling the other.</p>
+     */
+    public static String ownFolder(Map<?, ?> pages, String pageId) {
+        String name = nameOf(pages.get(pageId), "filename");
+        return name.isEmpty() || !isSharedWithAnotherPage(pages, pageId, name)
+                ? name
+                : name + "_" + pageId;
+    }
+
+    /** Whether another page sits in the same folders under the same name. */
+    private static boolean isSharedWithAnotherPage(Map<?, ?> pages, String pageId, String name) {
+        List<String> folders = folderStructure(pages, pageId);
+        for (Map.Entry<?, ?> entry : pages.entrySet()) {
+            String otherId = String.valueOf(entry.getKey());
+            if (otherId.equals(pageId)) {
+                continue;
+            }
+            if (name.equals(nameOf(entry.getValue(), "filename"))
+                    && folders.equals(folderStructure(pages, otherId))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * The same, named after {@code adocFilename} - the prefix-stripped name the AsciiDoc files are
      * written under. Where no prefix regex is configured the two are identical.
      */

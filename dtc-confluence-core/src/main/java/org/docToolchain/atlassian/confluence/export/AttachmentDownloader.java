@@ -12,7 +12,7 @@ import java.util.Map;
  * Writes the attachments of an exported tree to disk, where the converter expects to find them.
  *
  * <p>The path an exported document refers to is
- * {@code images/<folders of the page>/<version>_<filename>}. The version is part of the name
+ * {@code images/<folders of the page>/<page>/<version>_<filename>}. The version is part of the name
  * because a document may refer to an older revision of a diagram, and the folders mirror the page
  * tree so that two pages may each have an {@code overview.png}.</p>
  *
@@ -82,7 +82,7 @@ public class AttachmentDownloader {
      */
     private String fileNameOf(ExportedTree tree, Map<String, Object> attachment) {
         List<String> folders =
-                PageNaming.folderStructure(tree.getPages(), textOf(attachment.get("pageId")));
+                PageNaming.attachmentFolders(tree.getPages(), textOf(attachment.get("pageId")));
         String prefix = folders.isEmpty() ? "" : String.join("/", folders) + "/";
         return prefix + textOf(attachment.get("version")) + "_"
                 + PageNaming.sanitizeAttachmentName(textOf(attachment.get("filename")));
