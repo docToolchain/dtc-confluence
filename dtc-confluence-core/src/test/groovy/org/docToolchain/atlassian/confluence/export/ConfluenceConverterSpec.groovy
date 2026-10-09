@@ -53,6 +53,18 @@ class ConfluenceConverterSpec extends Specification {
             convert(storage).contains('Worth knowing.')
     }
 
+    def 'an image embedded from a URL keeps the URL'() {
+        given: """An ac:image names either an attachment of the page or, with ri:url, an image
+                  somewhere else. Only the attachment was read, so the URL became an "1_" - a
+                  reference to a file that was never there. The publisher writes ri:url for any
+                  source starting with http, so this is the other half of that round trip."""
+            def storage = '<p><ac:image ac:align="center">' +
+                '<ri:url ri:value="https://example.com/chart.png"/></ac:image></p>'
+
+        expect:
+            convert(storage).contains('src="https://example.com/chart.png"')
+    }
+
     def 'a tag it does not know is reported rather than dropped in silence'() {
         given: 'a macro this converter was never taught'
             def storage = '''<ac:structured-macro ac:name="chart">

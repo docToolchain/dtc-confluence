@@ -147,6 +147,17 @@ class MacroTranslator {
     private void image(Element element) {
         String alignment = element.attr("ac:align");
         String width = element.attr("ac:width");
+        // An ac:image names either an attachment of the page or, with ri:url, an image somewhere
+        // else. Only the attachment was read, so an embedded URL became "1_" - a reference to a
+        // file that was never there. The publisher writes ri:url for any source starting with
+        // http, so this is the other half of that round trip.
+        String riUrl = element.select("ri|url").attr("ri:value");
+        if (!riUrl.isEmpty()) {
+            element.before("<img src='" + riUrl + "' align='" + alignment
+                    + "' width='" + width + "' />");
+            element.remove();
+            return;
+        }
         String riFilename = element.select("ri|attachment").attr("ri:filename");
         String riVersion = element.select("ri|attachment").attr("ri:version-at-save");
         // Through the attachment map, so that a drawio diagram merged into a single file - the
