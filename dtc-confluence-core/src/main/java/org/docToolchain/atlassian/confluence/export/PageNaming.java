@@ -52,6 +52,33 @@ public final class PageNaming {
     }
 
     /**
+     * Where the attachments of a page are written: the folders of the page, and then one named
+     * after the page itself.
+     *
+     * <p>The page itself has to be in the path. Named by its ancestors alone, two children of one
+     * parent shared a directory, and two attachments called {@code diagram.png} at version 1
+     * became one file - whichever page was walked last decided what both documents showed.</p>
+     *
+     * @return the folders below the image directory, outermost first
+     */
+    public static List<String> attachmentFolders(Map<?, ?> pages, String pageId) {
+        List<String> folders = new ArrayList<>(folderStructure(pages, pageId));
+        String own = ownFolder(pages, pageId);
+        if (!own.isEmpty()) {
+            folders.add(own);
+        }
+        return folders;
+    }
+
+    /**
+     * @return the last segment of {@link #attachmentFolders}, for the document side, which names
+     *         the folders of the page as the {@code {filepath}} attribute rather than in full
+     */
+    public static String ownFolder(Map<?, ?> pages, String pageId) {
+        return nameOf(pages.get(pageId), "filename");
+    }
+
+    /**
      * The same, named after {@code adocFilename} - the prefix-stripped name the AsciiDoc files are
      * written under. Where no prefix regex is configured the two are identical.
      */
