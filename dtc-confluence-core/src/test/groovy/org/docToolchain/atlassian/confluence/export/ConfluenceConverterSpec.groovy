@@ -38,9 +38,8 @@ class ConfluenceConverterSpec extends Specification {
         when:
             def html = convert(storage)
 
-        then:
-            html.contains('def hello = "world"')
-            html.contains('groovy')
+        then: 'as code, which is what pandoc needs to write it out verbatim'
+            html.contains('<pre><code class="language-groovy">def hello = "world"</code></pre>')
     }
 
     def 'an admonition keeps its text'() {
@@ -201,9 +200,8 @@ class ConfluenceConverterSpec extends Specification {
         when:
             def html = convert(storage)
 
-        then: 'two breaks between the three lines, marked for the step after pandoc'
-            html.count('%%CRLF%%') >= 5
-            html.contains('def a = 1%%CRLF%%def b = 2%%CRLF%%def c = 3')
+        then: 'the three lines reach pandoc as the lines of a code block'
+            html.contains('<pre><code class="language-groovy">def a = 1\ndef b = 2\ndef c = 3')
     }
 
     def 'a code sample containing markup stays a code sample'() {
@@ -264,7 +262,7 @@ class ConfluenceConverterSpec extends Specification {
             converter.createMenu(pages, '0') == '* xref:{jbake-root}Root.adoc[Root]\n'
     }
 
-    def 'a code macro hands its language on without brackets pandoc would escape'() {
+    def 'a code macro hands its language on in the form pandoc reads'() {
         given:
             def storage = '<ac:structured-macro ac:name="code">' +
                 '<ac:parameter ac:name="language">groovy</ac:parameter>' +
@@ -274,9 +272,21 @@ class ConfluenceConverterSpec extends Specification {
         when:
             def html = convert(storage)
 
-        then: 'as a placeholder, spelled out again once pandoc has run'
-            html.contains('%%SOURCE-BEGIN%%groovy%%SOURCE-END%%')
-            !html.contains('[source, groovy]')
+        then: '''as the class of a code block, which is how pandoc knows to write the attribute
+                 line itself - written out here it would be a literal bracket in text, and pandoc
+                 escapes those'''
+            html.contains('<pre><code class="language-groovy">')
+            !html.contains('[source')
+    }
+
+    def 'a code macro without a language is still a code block'() {
+        given: 'no language parameter at all, which Confluence allows'
+            def storage = '<ac:structured-macro ac:name="code">' +
+                '<ac:plain-text-body><![CDATA[plain text]]></ac:plain-text-body>' +
+                '</ac:structured-macro>'
+
+        expect: 'no class, rather than an empty one pandoc would write out as a language'
+            convert(storage).contains('<pre><code>plain text</code></pre>')
     }
 
     def 'a root page is found by its title'() {
