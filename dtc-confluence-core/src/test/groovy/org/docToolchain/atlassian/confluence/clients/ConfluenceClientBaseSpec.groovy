@@ -64,6 +64,20 @@ class ConfluenceClientBaseSpec extends Specification {
             paths.first().endsWith('/rest/api/user/current')
     }
 
+    def 'verifyCredentials accepts a Cloud user, which has no username'() {
+        given: """Cloud stopped answering with a username: /user/current returns an accountId, a
+                  publicName and a displayName. Required to see a username, the check refused
+                  every Cloud instance - with credentials that work."""
+            body = '{"type":"known","accountId":"5b10a2844c20165700ede21g",' +
+                '"publicName":"gerd","displayName":"Gerd Aschemann"}'
+
+        when:
+            def user = client().verifyCredentials()
+
+        then:
+            user.accountId == '5b10a2844c20165700ede21g'
+    }
+
     def 'verifyCredentials rejects an anonymous user'() {
         given: """Data Center answers an invalid token with 200 and an anonymous user rather than
                   401, so the status code alone proves nothing."""
@@ -78,8 +92,8 @@ class ConfluenceClientBaseSpec extends Specification {
             e.message.contains('bearerToken')
     }
 
-    def 'verifyCredentials rejects a user without a name'() {
-        given: 'a body that is neither anonymous nor usable'
+    def 'verifyCredentials rejects a user with nothing that identifies it'() {
+        given: 'neither anonymous nor usable: no username, no accountId, no user key'
             body = '{"type":"known"}'
 
         when:
