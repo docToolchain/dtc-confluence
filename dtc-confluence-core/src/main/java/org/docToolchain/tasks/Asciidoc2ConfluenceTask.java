@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import groovy.util.ConfigObject;
@@ -290,6 +291,7 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
 
         PageTree tree = new PageTreeBuilder(settings.footnoteLabel())
                 .build(dom, parentId, settings.subpagesForSections());
+        refuseDuplicateTitles(tree.getPages(), file);
         List<String> published =
                 pushPages(tree.getPages(), tree.getAnchors(), tree.getPageAnchors(), keywords);
 
@@ -441,6 +443,73 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
             throw new UncheckedIOException("Cannot read " + folder, e);
         }
         return found;
+    }
+
+    /**
+     * Refuses a document whose own pages would collide with each other.
+     *
+     * <p>A Confluence title is unique per space, so two sections carrying the same heading want
+     * one and the same page. Published in order, the first is written and the second then either
+     * fails or - with {@code moveExistingPages} - overwrites the first with its own content, both
+     * of which happen when part of the document is already in Confluence. Starting is worse than
+     * not starting, so the check runs before anything is written.</p>
+     *
+     * <p>Nothing is disambiguated automatically: a suffix invented here would be a page name the
+     * author never wrote, and it would move as soon as the document changed.</p>
+     *
+     * @throws IllegalStateException naming every colliding title and where it comes from
+     */
+    private void refuseDuplicateTitles(List<Page> pages, String file) {
+        Map<String, Collision> origins = new LinkedHashMap<>();
+        collectTitles(pages, "", origins);
+        String collisions = origins.values().stream()
+                .filter(collision -> collision.origins().size() > 1)
+                .map(entry -> "    '" + entry.title() + "' is wanted by:" + System.lineSeparator()
+                        + entry.origins().stream()
+                                .map(where -> "        " + where)
+                                .collect(Collectors.joining(System.lineSeparator())))
+                .collect(Collectors.joining(System.lineSeparator()));
+        if (collisions.isEmpty()) {
+            return;
+        }
+        throw new IllegalStateException("'" + file + "' cannot be published as it stands: two or "
+                + "more of its pages want the same Confluence title, and a title is unique per "
+                + "space." + System.lineSeparator() + collisions + System.lineSeparator()
+                + "    Rename one of the headings, or lower confluence.subpagesForSections so "
+                + "that they stay inside their parent page. A pagePrefix or pageSuffix cannot "
+                + "help: both are applied to every page of the document equally.");
+    }
+
+    /**
+     * Collects the title each page would be published under, with the headings it came from.
+     *
+     * <p>Keyed in lower case, because that is how the publish path compares a title:
+     * {@link #existingPage} looks one up in lower case and the clients key the pages they fetched
+     * the same way. So "Purpose" and "purpose" want one and the same page. The first spelling an
+     * author wrote is kept for the message - a lowercased key is not a heading anyone can search
+     * the document for.</p>
+     */
+    private void collectTitles(List<Page> pages, String path, Map<String, Collision> origins) {
+        for (Page page : pages) {
+            String heading = page.getTitle().trim();
+            String here = path.isEmpty() ? heading : path + " > " + heading;
+            String title = realTitle(heading);
+            origins.computeIfAbsent(title.toLowerCase(Locale.ROOT), key -> new Collision(title))
+                    .origins().add(here);
+            collectTitles(page.getChildren(), here, origins);
+        }
+    }
+
+    /**
+     * The pages that want one title.
+     *
+     * @param title   the first spelling the document used, for the message
+     * @param origins the heading path of every page that wants it
+     */
+    private record Collision(String title, List<String> origins) {
+        Collision(String title) {
+            this(title, new ArrayList<>());
+        }
     }
 
     /**
