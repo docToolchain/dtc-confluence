@@ -53,6 +53,26 @@ public class ConfigService {
     }
 
     /**
+     * Reads a switch: is this setting on?
+     *
+     * <p>{@code true} either as a boolean or spelled out as text, because a setting can arrive
+     * from a YAML file, a Groovy file or the command line, and only the first of those
+     * necessarily carries a type. Read raw, so that an explicit {@code false} is a decision
+     * rather than an absence.</p>
+     *
+     * <p>In one place, because two readings of the same switch disagree sooner or later: the
+     * publish task accepted {@code dryRun = 'true'} while the body builder did not, so a dry run
+     * configured that way still wrote its embedded images to disk.</p>
+     *
+     * @return whether the setting at {@code propertyPath} is on
+     */
+    public boolean isSwitchedOn(String propertyPath) {
+        Object configured = getRawConfigProperty(propertyPath);
+        return configured instanceof Boolean set
+                ? set : Boolean.parseBoolean(String.valueOf(configured));
+    }
+
+    /**
      * {@link ConfigObject#get} answers a missing key with an empty ConfigObject rather than with
      * {@code null}, and that is the only shape meaning "nothing is here".
      */
