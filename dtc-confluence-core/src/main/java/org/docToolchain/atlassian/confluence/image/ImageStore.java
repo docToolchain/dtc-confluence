@@ -23,8 +23,28 @@ public class ImageStore {
 
     private final List<String> imageDirs;
 
+    /** Whether a missing file is created, or only named. See {@link #readOnly}. */
+    private final boolean writing;
+
     public ImageStore(List<String> imageDirs) {
+        this(imageDirs, true);
+    }
+
+    private ImageStore(List<String> imageDirs, boolean writing) {
         this.imageDirs = imageDirs == null ? List.of() : imageDirs;
+        this.writing = writing;
+    }
+
+    /**
+     * A store that answers where an embedded image would go, and puts nothing there.
+     *
+     * <p>A dry run has to build the body, because the hash it compares is the hash of the body a
+     * real run would send - and building the body names every embedded image. Naming one is pure
+     * computation: the name is the hash of the content. Creating the file is not, and a run that
+     * announced it would write nothing has no business leaving a directory of PNGs behind.</p>
+     */
+    public static ImageStore readOnly(List<String> imageDirs) {
+        return new ImageStore(imageDirs, false);
     }
 
     /**
@@ -41,12 +61,16 @@ public class ImageStore {
         }
 
         System.out.println("Could not find embedded image at a known location");
-        new File(basePath + EMBEDDED_IMAGES_DIR).mkdirs();
-        // The hash names the file, so the same image inlined twice is written once.
+        // The hash names the file, so the same image inlined twice is written once - and so the
+        // name can be worked out without writing anything, which is what a dry run needs.
         String imageHash = ContentHash.md5(encodedContent);
         System.out.println("Embedded Image Hash " + imageHash);
 
         File image = new File(basePath + EMBEDDED_IMAGES_DIR + imageHash + "." + fileExtension);
+        if (!writing) {
+            return new StoredImage(image.getPath(), imageHash + "." + fileExtension);
+        }
+        new File(basePath + EMBEDDED_IMAGES_DIR).mkdirs();
         if (!image.exists()) {
             System.out.println("Creating image at " + basePath + EMBEDDED_IMAGES_DIR);
             write(image, encodedContent);
