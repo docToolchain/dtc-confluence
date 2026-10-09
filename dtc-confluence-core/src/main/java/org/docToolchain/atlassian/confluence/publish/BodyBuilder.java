@@ -1,7 +1,5 @@
 package org.docToolchain.atlassian.confluence.publish;
 
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -110,8 +108,8 @@ public class BodyBuilder {
             if (!source.startsWith(prefix)) {
                 continue;
             }
-            String fileName = decode(source.substring(source.lastIndexOf('/') + 1));
-            uploads.add(new Upload(decode(directory + source), fileName,
+            String fileName = SourcePath.decode(source.substring(source.lastIndexOf('/') + 1));
+            uploads.add(new Upload(SourcePath.decode(directory + source), fileName,
                     "automatically uploaded non-image attachment by docToolchain"));
             String text = link.html();
             // Escaped, because the fragment is parsed again: a quote in the name would close
@@ -163,11 +161,4 @@ public class BodyBuilder {
         return directories.stream().map(String::valueOf).toList();
     }
 
-    private static String decode(String value) {
-        try {
-            return URLDecoder.decode(value, StandardCharsets.UTF_8);
-        } catch (IllegalArgumentException notEncoded) {
-            return value;
-        }
-    }
 }
