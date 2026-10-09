@@ -215,6 +215,56 @@ class ExportConfluenceTaskSpec extends Specification {
             !new File(destination.toFile(), 'docs/images').exists()
     }
 
+    def 'an export can start at a page named by its title'() {
+        given: '''retrievePageIdByName is named after an id but used to answer the whole search
+                  result. The publisher extracted the id for itself; this task did not, and asked
+                  Confluence for a page whose id was a printed map.'''
+            def config = new ConfigObject()
+            config.confluence = [api        : 'https://confluence.example/confluence',
+                                 credentials: 'x', spaceKey: 'SPACE', useV1Api: true,
+                                 export     : [destDir: destination.toString(),
+                                               rootPageTitle: 'The Root']]
+            def client = Mock(org.docToolchain.atlassian.confluence.clients.ConfluenceClient)
+            def task = new ExportConfluenceTask(config, destination.toString())
+            task.confluenceClient = client
+            task.useReader(reader)
+            reader.fetchPage('4711') >> page('4711', 'The Root', '<p>root</p>')
+            reader.fetchChildPages('4711') >> []
+            reader.fetchAttachments('4711') >> []
+
+        when:
+            task.execute()
+
+        then: '''the title is resolved and the answer is used as the id. That the client answers
+                 an id at all is ConfluenceClientV1RequestSpec's business, not this test's - here
+                 the client is a mock, so this case cannot see the extraction.'''
+            1 * client.retrievePageIdByName('The Root', 'SPACE') >> '4711'
+
+        and:
+            new File(destination.toFile(), 'docs/The_Root.adoc').exists()
+    }
+
+    def 'a title that names no page says so'() {
+        given:
+            def config = new ConfigObject()
+            config.confluence = [api        : 'https://confluence.example/confluence',
+                                 credentials: 'x', spaceKey: 'SPACE', useV1Api: true,
+                                 export     : [destDir: destination.toString(),
+                                               rootPageTitle: 'Nowhere']]
+            def client = Mock(org.docToolchain.atlassian.confluence.clients.ConfluenceClient)
+            client.retrievePageIdByName(_, _) >> null
+            def task = new ExportConfluenceTask(config, destination.toString())
+            task.confluenceClient = client
+
+        when:
+            task.execute()
+
+        then:
+            def e = thrown(IllegalStateException)
+            e.message.contains('Nowhere')
+            e.message.contains('SPACE')
+    }
+
     def 'an export without a destination says so rather than writing somewhere'() {
         when:
             def config = new ConfigObject()

@@ -2,6 +2,7 @@ package org.docToolchain.atlassian.confluence.clients;
 
 import java.io.InputStream;
 import java.net.URISyntaxException;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.hc.client5.http.classic.methods.HttpGet;
@@ -172,8 +173,26 @@ public abstract class ConfluenceClient {
         return page == null ? Map.of() : page;
     }
 
+    /**
+     * @return the id of the page with that title in that space, or {@code null} where there is
+     *         none
+     *
+     *     <p>The extraction of the id from the search result belongs here rather than in the
+     *     callers: the method is named after an id, and when each caller did it for itself one of
+     *     them did not - the export passed the whole response body through
+     *     {@code String.valueOf} and asked Confluence for a page whose id was a printed map.</p>
+     */
     public Object retrievePageIdByName(String name, String spaceKey) {
-        return fetchPageIdByName(name, spaceKey);
+        Object response = fetchPageIdByName(name, spaceKey);
+        if (!(response instanceof Map<?, ?> found)) {
+            return null;
+        }
+        Object results = found.get("results");
+        if (results instanceof List<?> pages && !pages.isEmpty()
+                && pages.get(0) instanceof Map<?, ?> first) {
+            return first.get("id");
+        }
+        return null;
     }
 
     private static String determineEditorVersion(ConfigService configService) {
