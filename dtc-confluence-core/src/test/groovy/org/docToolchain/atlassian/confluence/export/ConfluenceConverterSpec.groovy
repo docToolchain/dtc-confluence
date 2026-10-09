@@ -65,6 +65,31 @@ class ConfluenceConverterSpec extends Specification {
             convert(storage).contains('src="https://example.com/chart.png"')
     }
 
+    def 'a quote in an image reference cannot add attributes of its own'() {
+        given: """jsoup decodes ri:value before the translation runs, so a stored URL carrying
+                  &apos; closed the src attribute of the fragment that was written out, and
+                  everything after it was read as further attributes - a page could put an
+                  onerror into the exported HTML."""
+            def storage = '<p><ac:image><ri:url ri:value="https://example.com/x.png?a=&apos;' +
+                ' onerror=&apos;alert(1)"/></ac:image></p>'
+
+        when: 'parsed, because what matters is the attributes the document ends up with'
+            def img = org.jsoup.Jsoup.parse(convert(storage)).selectFirst('img')
+
+        then: 'one src attribute carrying the whole value, and no attribute of the value\'s making'
+            img.attr('src') == "https://example.com/x.png?a=' onerror='alert(1)"
+            img.attr('onerror').isEmpty()
+    }
+
+    def 'a quote in an attachment name cannot add attributes either'() {
+        given: 'the same for the other branch, where the name comes from the storage format'
+            def storage = '<p><ac:image><ri:attachment' +
+                ' ri:filename="a&apos; onerror=&apos;alert(1).png"/></ac:image></p>'
+
+        expect:
+            org.jsoup.Jsoup.parse(convert(storage)).selectFirst('img').attr('onerror').isEmpty()
+    }
+
     def 'a tag it does not know is reported rather than dropped in silence'() {
         given: 'a macro this converter was never taught'
             def storage = '''<ac:structured-macro ac:name="chart">
