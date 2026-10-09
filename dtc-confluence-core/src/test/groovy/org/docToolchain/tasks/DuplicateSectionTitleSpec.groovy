@@ -32,6 +32,9 @@ class DuplicateSectionTitleSpec extends Specification {
     private static final String REPEATED_IN_ANOTHER_CASE =
         REPEATED_SUBSECTIONS.replace('<h3 id="_pb">Purpose</h3>', '<h3 id="_pb">purpose</h3>')
 
+    /** The titles createPage was called with, in order. */
+    private List<String> created = []
+
     private ConfluenceClient client = Mock(ConfluenceClient)
 
     private Asciidoc2ConfluenceTask taskFor(Map extra = [:], String document = REPEATED_SUBSECTIONS) {
@@ -107,8 +110,15 @@ class DuplicateSectionTitleSpec extends Specification {
         when: 'subpagesForSections 1 leaves the sub-sections inside their chapter pages'
             taskFor([subpagesForSections: 1]).execute()
 
-        then:
+        then: 'the two chapter pages, and no page of its own for the repeated sub-section'
             noExceptionThrown()
-            (1.._) * client.createPage(_, _, _, _, _)
+            2 * client.createPage(_, _, _, _, _) >> { String title, String space, Object body,
+                                                      String comment, String parent ->
+                created << title
+                [id: '1000']
+            }
+
+        and:
+            created == ['Building Block A', 'Building Block B']
     }
 }
