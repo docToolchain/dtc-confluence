@@ -114,4 +114,28 @@ class PageNamingSpec extends Specification {
             PageNaming.ownFolder(pages, '2') == 'First'
             PageNaming.attachmentFolders(pages, '2').last() == PageNaming.ownFolder(pages, '2')
     }
+
+    def 'two pages whose names sanitise alike get folders of their own'() {
+        given: '''"A B" and "A-B" both become "A_B". The export disambiguates the name the
+                  AsciiDoc file is written under, not this one, so a folder named after the
+                  sanitised title alone is not a folder per page.'''
+            def pages = ['1': [filename: 'Root'],
+                         '2': [parentId: '1', filename: 'A_B', title: 'A B'],
+                         '3': [parentId: '1', filename: 'A_B', title: 'A-B']]
+
+        expect: 'both carry their id, because neither of them is the one that may keep the name'
+            PageNaming.attachmentFolders(pages, '2') == ['Root', 'A_B_2']
+            PageNaming.attachmentFolders(pages, '3') == ['Root', 'A_B_3']
+    }
+
+    def 'a name nobody else wants is left as it is'() {
+        given: 'the same name under a different parent is a different folder'
+            def pages = ['1': [filename: 'Root'],
+                         '2': [parentId: '1', filename: 'Chapter'],
+                         '3': [parentId: '2', filename: 'Chapter']]
+
+        expect:
+            PageNaming.attachmentFolders(pages, '2') == ['Root', 'Chapter']
+            PageNaming.attachmentFolders(pages, '3') == ['Root', 'Chapter', 'Chapter']
+    }
 }
