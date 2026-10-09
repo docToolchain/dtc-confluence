@@ -58,10 +58,6 @@ public class ConfluenceConverter {
     private File lucidInfoFile;
 
     /**
-     * Strips a hand-written chapter number from a heading ("5.2.4. Title" -> "Title").
-     * AsciiDoc can number sections itself, so the number carried over from Confluence is noise.
-     */
-    /**
      * A chapter number at the start of a heading, which AsciiDoc numbers itself.
      *
      * <p>Three shapes, because a year looks like a chapter number to a regular expression and
@@ -72,6 +68,10 @@ public class ConfluenceConverter {
     private static final Pattern CHAPTER_NUMBER = Pattern.compile(
             "(<h[1-9](?:\\s[^>]*)?>)\\s*(?:\\d+(?:\\.\\d+)+\\.?|\\d+\\.|\\d{1,2})\\s+");
 
+    /**
+     * Strips a hand-written chapter number from a heading ("5.2.4. Title" -> "Title").
+     * AsciiDoc can number sections itself, so the number carried over from Confluence is noise.
+     */
     private boolean stripChapterNumbering = true;
 
     /** What one page of storage format became, and what of it was not understood. */
