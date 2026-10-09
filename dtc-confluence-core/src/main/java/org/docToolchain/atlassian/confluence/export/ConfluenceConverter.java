@@ -61,6 +61,17 @@ public class ConfluenceConverter {
      * Strips a hand-written chapter number from a heading ("5.2.4. Title" -> "Title").
      * AsciiDoc can number sections itself, so the number carried over from Confluence is noise.
      */
+    /**
+     * A chapter number at the start of a heading, which AsciiDoc numbers itself.
+     *
+     * <p>Three shapes, because a year looks like a chapter number to a regular expression and
+     * the page "2024 Roadmap" came back titled "Roadmap": a number with a dot in it
+     * ("5.2", "5.2.4."), a number followed by a dot ("5."), or a bare one of at most two digits
+     * ("5", "12"). A bare number of three digits or more is left where it is.</p>
+     */
+    private static final Pattern CHAPTER_NUMBER = Pattern.compile(
+            "(<h[1-9](?:\\s[^>]*)?>)\\s*(?:\\d+(?:\\.\\d+)+\\.?|\\d+\\.|\\d{1,2})\\s+");
+
     private boolean stripChapterNumbering = true;
 
     /** What one page of storage format became, and what of it was not understood. */
@@ -234,7 +245,7 @@ public class ConfluenceConverter {
                 .replaceAll("<div><div class=\"title\">([^<]+)</div></div>", ".$1")
                 .replaceAll("<strong><br />[.]([^<]+)</strong>", ".$1");
         if (stripChapterNumbering) {
-            html = html.replaceAll("(<h[1-9](?:\\s[^>]*)?>)\\s*\\d+(?:\\.\\d+)*\\.?\\s+", "$1");
+            html = html.replaceAll(CHAPTER_NUMBER.pattern(), "$1");
         }
         return new ConvertedBody(html, unknownTags);
     }
