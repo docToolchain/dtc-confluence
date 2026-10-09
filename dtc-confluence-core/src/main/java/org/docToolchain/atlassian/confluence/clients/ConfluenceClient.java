@@ -2,6 +2,7 @@ package org.docToolchain.atlassian.confluence.clients;
 
 import java.io.InputStream;
 import java.net.URISyntaxException;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.hc.client5.http.classic.methods.HttpGet;
@@ -105,14 +106,35 @@ public abstract class ConfluenceClient {
     public Object verifyCredentials() {
         Object response = callApiAndFailIfNot20x(new HttpGet(API_V1_PATH + "/user/current"));
         Map<?, ?> user = response instanceof Map<?, ?> map ? map : null;
-        if (user == null || "anonymous".equals(user.get("type")) || user.get("username") == null) {
+        Object identity = user == null ? null : identityOf(user);
+        if (user == null || "anonymous".equals(user.get("type")) || identity == null) {
             throw new IllegalStateException(
                     "Confluence did not accept the credentials: the API resolved to an anonymous user. "
                             + "Check confluence.bearerToken (Data Center: personal access token) "
                             + "or confluence.credentials.");
         }
-        System.out.println("Authenticated as '" + user.get("username") + "' (" + user.get("displayName") + ")");
+        System.out.println("Authenticated as '" + identity + "' (" + user.get("displayName") + ")");
         return user;
+    }
+
+    /**
+     * What the answer calls the user it resolved to.
+     *
+     * <p>Data Center answers with a {@code username}; Cloud stopped doing so and answers an
+     * {@code accountId} with a {@code publicName}. Required to see a username, the check refused
+     * every Cloud instance - with credentials that work. {@code userKey} is what older Data
+     * Center versions answer where the user has no name of its own.</p>
+     *
+     * @return the first of those the answer carries, or {@code null} where it carries none
+     */
+    private static Object identityOf(Map<?, ?> user) {
+        for (String key : List.of("username", "accountId", "userKey")) {
+            Object value = user.get(key);
+            if (value != null && !String.valueOf(value).isEmpty()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     public abstract Object addLabel(Object pageId, Object label);
