@@ -96,4 +96,22 @@ class PageNamingSpec extends Specification {
         expect:
             PageNaming.folderStructure([:], 'nope') == []
     }
+
+    def 'the attachments of a page sit in a folder of their own'() {
+        given: 'two children of one parent, which named the same folder before'
+            def pages = ['1': [filename: 'Root'],
+                         '2': [parentId: '1', filename: 'First'],
+                         '3': [parentId: '1', filename: 'Second']]
+
+        expect: 'the page itself is the last folder, so the two cannot collide'
+            PageNaming.attachmentFolders(pages, '2') == ['Root', 'First']
+            PageNaming.attachmentFolders(pages, '3') == ['Root', 'Second']
+
+        and: 'a root page gets one of its own as well'
+            PageNaming.attachmentFolders(pages, '1') == ['Root']
+
+        and: 'and the document side, which names the folders above as {filepath}, gets the last'
+            PageNaming.ownFolder(pages, '2') == 'First'
+            PageNaming.attachmentFolders(pages, '2').last() == PageNaming.ownFolder(pages, '2')
+    }
 }
