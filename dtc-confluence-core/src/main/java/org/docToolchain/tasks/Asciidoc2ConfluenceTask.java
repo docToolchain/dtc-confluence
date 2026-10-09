@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import groovy.util.ConfigObject;
@@ -290,6 +291,7 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
 
         PageTree tree = new PageTreeBuilder(settings.footnoteLabel())
                 .build(dom, parentId, settings.subpagesForSections());
+        refuseDuplicateTitles(tree.getPages(), file);
         List<String> published =
                 pushPages(tree.getPages(), tree.getAnchors(), tree.getPageAnchors(), keywords);
 
@@ -447,6 +449,51 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
      * @return the ids of the pages pushed at this level, so the caller can name where the document
      *         now starts
      */
+    /**
+     * Refuses a document whose own pages would collide with each other.
+     *
+     * <p>A Confluence title is unique per space, so two sections carrying the same heading want
+     * one and the same page. Published in order, the first is written and the second then either
+     * fails or - with {@code moveExistingPages} - overwrites the first with its own content, both
+     * of which happen when part of the document is already in Confluence. Starting is worse than
+     * not starting, so the check runs before anything is written.</p>
+     *
+     * <p>Nothing is disambiguated automatically: a suffix invented here would be a page name the
+     * author never wrote, and it would move as soon as the document changed.</p>
+     *
+     * @throws IllegalStateException naming every colliding title and where it comes from
+     */
+    private void refuseDuplicateTitles(List<Page> pages, String file) {
+        Map<String, List<String>> origins = new LinkedHashMap<>();
+        collectTitles(pages, "", origins);
+        String collisions = origins.entrySet().stream()
+                .filter(entry -> entry.getValue().size() > 1)
+                .map(entry -> "    '" + entry.getKey() + "' is wanted by:" + System.lineSeparator()
+                        + entry.getValue().stream()
+                                .map(where -> "        " + where)
+                                .collect(Collectors.joining(System.lineSeparator())))
+                .collect(Collectors.joining(System.lineSeparator()));
+        if (collisions.isEmpty()) {
+            return;
+        }
+        throw new IllegalStateException("'" + file + "' cannot be published as it stands: two or "
+                + "more of its pages want the same Confluence title, and a title is unique per "
+                + "space." + System.lineSeparator() + collisions + System.lineSeparator()
+                + "    Rename one of the headings, or lower confluence.subpagesForSections so "
+                + "that they stay inside their parent page. A pagePrefix or pageSuffix cannot "
+                + "help: both are applied to every page of the document equally.");
+    }
+
+    /** Collects the title each page would be published under, with the headings it came from. */
+    private void collectTitles(List<Page> pages, String path, Map<String, List<String>> origins) {
+        for (Page page : pages) {
+            String heading = page.getTitle().trim();
+            String here = path.isEmpty() ? heading : path + " > " + heading;
+            origins.computeIfAbsent(realTitle(heading), title -> new ArrayList<>()).add(here);
+            collectTitles(page.getChildren(), here, origins);
+        }
+    }
+
     private List<String> pushPages(List<Page> pages, Map<String, String> anchors,
                                    Map<String, String> pageAnchors, List<String> labels) {
         List<String> ids = new ArrayList<>();
