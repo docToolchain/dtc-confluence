@@ -75,7 +75,7 @@
     <archunit.version>1.5.1</archunit.version>
     <!-- Spock needs these to mock Java classes. It does not need them for Groovy
          classes, which is why they only became necessary once the port started. -->
-    <byte-buddy.version>1.18.13</byte-buddy.version>
+    <byte-buddy.version>1.18.14</byte-buddy.version>
     <objenesis.version>3.6</objenesis.version>
 
     <gmavenplus.version>5.1.0</gmavenplus.version>
