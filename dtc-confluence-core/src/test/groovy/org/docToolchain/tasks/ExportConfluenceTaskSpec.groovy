@@ -335,6 +335,42 @@ class ExportConfluenceTaskSpec extends Specification {
         return new File(destination.toFile(), "docs/images/${target}").bytes
     }
 
+    def 'a PDF becomes a block the renderer passes through'() {
+        given: """A view-file macro for a PDF is written as an AsciiDoc passthrough block holding
+                  an iframe. The delimiters travelled through pandoc as text, which spells a plus
+                  as "{plus}" - so "++++" arrived as "{plus}{plus}{plus}{plus}", which is not a
+                  passthrough block, and the iframe was shown to the reader as text."""
+            reader.fetchPage('1') >> page('1', 'Root',
+                '<p><ac:structured-macro ac:name="view-file">' +
+                    '<ri:attachment ri:filename="handbook.pdf" ri:version-at-save="2"/>' +
+                    '</ac:structured-macro></p>')
+            reader.fetchChildPages('1') >> []
+            reader.fetchAttachments('1') >> [[id: 'a1', title: 'handbook.pdf',
+                                              version: [number: 2],
+                                              _links: [download: '/download/1/handbook.pdf']]]
+            reader.download(_) >> 'PDFBYTES'.bytes
+
+        when:
+            taskFor().execute()
+            def adoc = exported('Root.adoc').getText('utf-8')
+
+        then: 'the iframe stands between delimiters, rather than among {plus} signs'
+            def lines = adoc.readLines().findAll { !it.trim().isEmpty() }
+            def at = lines.findIndexOf { it.contains('<iframe') }
+            at > 0
+            lines[at - 1].trim() == '++++'
+            lines[at + 1].trim() == '++++'
+            !adoc.contains('{plus}')
+
+        and: 'and it is the iframe itself, not an escaped account of one'
+            !adoc.contains('++<++')
+            !adoc.contains('++>')
+            lines[at].contains('</iframe>')
+
+        and: 'naming the file that was written'
+            lines[at].contains('2_handbook.pdf')
+    }
+
     def 'an attachment is written and referred to where the document can find it'() {
         given:
             treeOfTwoPages()

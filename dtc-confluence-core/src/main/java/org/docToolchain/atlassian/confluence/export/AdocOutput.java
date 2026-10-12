@@ -39,6 +39,22 @@ final class AdocOutput {
     private static final String MASK_PREFIX = "\u0000listing";
     private static final String MASK_SUFFIX = "\u0000";
 
+    /**
+     * What a passthrough block travels through pandoc as, and everything between.
+     *
+     * <p>The delimiters cannot travel as themselves: pandoc writes a plus in text as
+     * {@code {plus}}, so "++++" arrived as "{plus}{plus}{plus}{plus}", which is not a
+     * passthrough block - the iframe of a PDF or of a chart was shown to the reader as text.</p>
+     */
+    private static final Pattern PASSTHROUGH = Pattern.compile(
+            "%%PASSTHROUGH-BEGIN%%([\\s\\S]*?)%%PASSTHROUGH-END%%");
+
+    /**
+     * What pandoc escaped: "++_++" for an underscore, "{plus}" for a plus - and more than one
+     * character where they stood next to each other, as "++><++" for the "><" of a closing tag.
+     */
+    private static final Pattern PANDOC_ESCAPE = Pattern.compile("\\+\\+(.+?)\\+\\+");
+
     private static final Pattern STATUS = Pattern.compile(
             "%%STATUS-BEGIN-(\\w+)%%([\\s\\S]*?)%%STATUS-END%%");
 
@@ -94,6 +110,7 @@ final class AdocOutput {
                 .replaceAll("(?sm)^ [+] *$", "")
                 .replace("%7Bfilepath%7D", "{filepath}")
                 .replaceAll("\\s*%%DISCRETE%%\\s*", "\n\n[discrete]\n");
+        text = passthroughs(text);
         text = admonitions(text);
         text = collapsibles(text);
         text = anchors(text);
@@ -103,6 +120,19 @@ final class AdocOutput {
         // AsciiDoc needs "image::foo[]" for a block image. Anchored to the start of a line, so
         // that an image inside a sentence stays inline.
         return text.replaceAll("(?m)^(\\s*)image:(?!:)", "$1image::");
+    }
+
+    /**
+     * A passthrough block, with what pandoc escaped inside it spelled back.
+     *
+     * <p>Nothing inside such a block is AsciiDoc, so nothing in it may carry an AsciiDoc escape:
+     * the markup reaches the renderer as it is. A file name keeps its underscore, and a tag its
+     * angle brackets.</p>
+     */
+    private static String passthroughs(String adoc) {
+        return replaceAll(PASSTHROUGH, adoc, matcher -> "++++\n"
+                + PANDOC_ESCAPE.matcher(matcher.group(1)).replaceAll("$1").replace("{plus}", "+")
+                + "\n++++");
     }
 
     /**

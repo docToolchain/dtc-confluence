@@ -257,10 +257,10 @@ class MacroTranslator {
         String file = attachmentPath(firstOf(version, "1") + "_" + fileName(filename));
         String name = filename.toLowerCase(Locale.ROOT);
         if (name.endsWith(".pdf")) {
-            element.before("\n<div>\n++++%%CRLF%%\n"
+            element.before("\n<div>\n%%PASSTHROUGH-BEGIN%%%%CRLF%%\n"
                     + "&lt;iframe name=\"" + fileName(filename) + "\" allowfullscreen"
                     + " frameborder=\"0\" src='" + file + "' width='100%' height='" + height
-                    + "' >&lt;/iframe>%%CRLF%%\n++++%%CRLF%%\n</div>\n");
+                    + "' >&lt;/iframe>%%CRLF%%\n%%PASSTHROUGH-END%%%%CRLF%%\n</div>\n");
         } else if (name.endsWith(".jpg") || name.endsWith(".png")) {
             // Through {filepath} like any other image: AsciiDoc resolves an image target against
             // imagesdir, which the file header already points at the images directory. The path
@@ -302,10 +302,10 @@ class MacroTranslator {
         }
         String chart;
         if (lucidChartsIframe) {
-            chart = "\n++++%%CRLF%%\n&lt;iframe allowfullscreen frameborder=\"0\""
+            chart = "\n%%PASSTHROUGH-BEGIN%%%%CRLF%%\n&lt;iframe allowfullscreen frameborder=\"0\""
                     + " style=\"width:640px; height:480px\""
                     + " src=\"https://lucid.app/documents/embedded/" + documentId
-                    + "\" >&lt;/iframe>%%CRLF%%\n++++%%CRLF%%\n";
+                    + "\" >&lt;/iframe>%%CRLF%%\n%%PASSTHROUGH-END%%%%CRLF%%\n";
         } else {
             String folders = String.join("/", folders(pageId, "filename"));
             chart = "\n%%CRLF%%\nimage::" + folders + "/" + documentId + ".png[]%%CRLF%%\n%%CRLF%%\n";
