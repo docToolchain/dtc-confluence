@@ -272,9 +272,13 @@ class ConfluenceClientV2RequestSpec extends Specification {
         when:
             def pages = spaceAddressingClient([first, second]).fetchPagesBySpaceKey('SPACE', 25)
 
-        then: 'the cursor from the next link is carried into the following request'
-            requests[1].uri == '/wiki/api/v2/spaces/SPACE-1/pages?depth=all&limit=25'
-            requests[2].uri == '/wiki/api/v2/spaces/SPACE-1/pages?depth=all&limit=25&cursor=CUR2'
+        then: '''the cursor from the next link is carried into the following request, and the
+                 status is asked for: without it the endpoint answers the archived pages too, and
+                 the publisher would take an archived page for the one to write to'''
+            requests[1].uri ==
+                    '/wiki/api/v2/spaces/SPACE-1/pages?depth=all&limit=25&status=current'
+            requests[2].uri ==
+                    '/wiki/api/v2/spaces/SPACE-1/pages?depth=all&limit=25&status=current&cursor=CUR2'
 
         and: 'pages are keyed by lower-case title'
             pages.keySet() == ['alpha', 'beta'] as Set
