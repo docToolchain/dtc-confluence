@@ -318,23 +318,21 @@ class ExportConfluenceTaskSpec extends Specification {
         when:
             taskFor().execute()
 
-        then: 'both files are on disk, neither having overwritten the other'
-            def written = []
-            new File(destination.toFile(), 'docs/images').eachFileRecurse { written << it }
-            written.findAll { it.isFile() }*.bytes*.toString() as Set ==
-                    ['FIRSTBYTES'.bytes.toString(), 'SECONDBYTES'.bytes.toString()] as Set
-
-        and: 'and each document refers to its own'
-            def first = exported('Root/First.adoc').getText('utf-8')
-            def second = exported('Root/Second.adoc').getText('utf-8')
-            first.contains('image::')
-            second.contains('image::')
-            targetIn(first) != targetIn(second)
+        then: '''each document reaches the bytes of its own page. Not "both files exist and the
+                 two targets differ" - that holds just as well when both targets name nothing.'''
+            bytesBehindTheImageIn('Root/First.adoc') == 'FIRSTBYTES'.bytes
+            bytesBehindTheImageIn('Root/Second.adoc') == 'SECONDBYTES'.bytes
     }
 
-    private static String targetIn(String adoc) {
-        def matcher = adoc =~ /image::([^\[]+)\[/
-        return matcher ? matcher[0][1] : null
+    /**
+     * The file an exported document's image macro points at, resolved the way AsciiDoc would:
+     * the target against {filepath} and imagesdir, both of which the file header sets.
+     */
+    private byte[] bytesBehindTheImageIn(String document) {
+        def adoc = exported(document).getText('utf-8')
+        def filepath = (adoc =~ /(?m)^:filepath: (.*)$/)[0][1]
+        def target = (adoc =~ /image::([^\[]+)\[/)[0][1].replace('{filepath}', filepath)
+        return new File(destination.toFile(), "docs/images/${target}").bytes
     }
 
     def 'an attachment is written and referred to where the document can find it'() {
