@@ -328,6 +328,21 @@ class ExportConfluenceTaskSpec extends Specification {
      * The file an exported document's image macro points at, resolved the way AsciiDoc would:
      * the target against {filepath} and imagesdir, both of which the file header sets.
      */
+    /**
+     * The bodies of the verbatim blocks of a document: a delimiter line, the lines up to the
+     * next line of the same delimiter, and nothing of what surrounds them. Asked for rather
+     * than "does the text appear somewhere", which holds just as well when the delimiters
+     * were lost and the sample became a paragraph.
+     */
+    private static List<String> verbatimBlocksIn(String adoc) {
+        def blocks = []
+        def matcher = adoc =~ /(?ms)^[ \t]*(-{4,}|\.{4,})[ \t]*$(.*?)^[ \t]*\1[ \t]*$/
+        while (matcher.find()) {
+            blocks << matcher.group(2)
+        }
+        return blocks
+    }
+
     private byte[] bytesBehindTheImageIn(String document) {
         def adoc = exported(document).getText('utf-8')
         def filepath = (adoc =~ /(?m)^:filepath: (.*)$/)[0][1]
@@ -392,8 +407,8 @@ class ExportConfluenceTaskSpec extends Specification {
             taskFor().execute()
             def adoc = exported('Root.adoc').getText('utf-8')
 
-        then: 'the sample says what the page wrote'
-            adoc.contains('%%attachments%%')
+        then: 'the sample says what the page wrote, and says it inside the sample'
+            verbatimBlocksIn(adoc).any { it.contains('%%attachments%%') }
 
         and: """and the macro outside it still became the list, whose link reaches the
                 file - not merely a list, which holds just as well with the marker left in
