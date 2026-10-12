@@ -1,7 +1,5 @@
 package org.docToolchain.atlassian.confluence.export;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Locale;
 import java.util.function.Function;
 import java.util.regex.Matcher;
@@ -26,19 +24,6 @@ final class AdocOutput {
     private static final Pattern ANCHOR = Pattern.compile("\\s*%%ANCHOR%%([^%]+)%%ANCHOR-END%%\\s*");
     private static final Pattern ROW_HEADER_TABLE = Pattern.compile(
             "%%TABLE-ROWHEADER-(\\d+)%%\\s*\\n+\\s*(?:\\[[^\\]]*\\]\\s*\\n)?\\|===");
-    /**
-     * A verbatim block: a delimiter line, everything up to the next line of the same delimiter,
-     * and that line. Hyphens for a listing block and dots for a literal one - pandoc writes the
-     * latter for a sample whose language Confluence did not record. Reluctant, so two blocks are
-     * two matches rather than one spanning both.
-     */
-    private static final Pattern VERBATIM_BLOCK = Pattern.compile(
-            "(?m)^[ \\t]*(-{4,}|\\.{4,})[ \\t]*$.*?^[ \\t]*\\1[ \\t]*$", Pattern.DOTALL);
-
-    /** Around a masked listing: NUL cannot occur in a Confluence page and matches no pattern here. */
-    private static final String MASK_PREFIX = "\u0000listing";
-    private static final String MASK_SUFFIX = "\u0000";
-
     /**
      * What a passthrough block travels through pandoc as, and everything between.
      *
@@ -66,37 +51,7 @@ final class AdocOutput {
      * @return the same document with every placeholder spelled out as AsciiDoc
      */
     static String substitute(String adoc) {
-        // The listing blocks are taken out of the way first. AsciiDoc substitutes nothing inside
-        // them, so neither may this: "image: nginx:1.25" in a docker-compose sample came back as
-        // "image:: nginx:1.25", and a sample about this very conversion had its own placeholder
-        // tokens expanded. Nothing has to run before the masking, because pandoc writes the
-        // delimiters on lines of their own; masking rather than walking line by line, because
-        // several substitutions match across line boundaries and splitting the text changes what
-        // they see.
-        List<String> listings = new ArrayList<>();
-        String masked = mask(adoc, listings);
-        return unmask(substituteOutsideListings(masked), listings);
-    }
-
-    /** Replaces every verbatim block with a token no substitution matches. */
-    private static String mask(String adoc, List<String> listings) {
-        Matcher matcher = VERBATIM_BLOCK.matcher(adoc);
-        StringBuilder masked = new StringBuilder();
-        while (matcher.find()) {
-            matcher.appendReplacement(masked,
-                    Matcher.quoteReplacement(MASK_PREFIX + listings.size() + MASK_SUFFIX));
-            listings.add(matcher.group());
-        }
-        matcher.appendTail(masked);
-        return masked.toString();
-    }
-
-    private static String unmask(String adoc, List<String> listings) {
-        String text = adoc;
-        for (int i = 0; i < listings.size(); i++) {
-            text = text.replace(MASK_PREFIX + i + MASK_SUFFIX, listings.get(i));
-        }
-        return text;
+        return VerbatimBlocks.outside(adoc, AdocOutput::substituteOutsideListings);
     }
 
     private static String substituteOutsideListings(String adoc) {

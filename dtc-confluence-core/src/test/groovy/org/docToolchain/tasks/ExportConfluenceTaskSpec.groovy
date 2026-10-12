@@ -373,6 +373,37 @@ class ExportConfluenceTaskSpec extends Specification {
             new File(exported('Root.adoc').parentFile, src).canonicalFile.exists()
     }
 
+    def 'a sample that mentions the attachment marker keeps it'() {
+        given: """The marker for the attachments macro was replaced everywhere in the document,
+                  so a page writing it as text - a page of ours documenting this export, say -
+                  had a list of attachments put in the middle of its code sample."""
+            reader.fetchPage('1') >> page('1', 'Root',
+                '<ac:structured-macro ac:name="code">' +
+                    '<ac:parameter ac:name="language">text</ac:parameter>' +
+                    '<ac:plain-text-body><![CDATA[%%attachments%%]]></ac:plain-text-body>' +
+                    '</ac:structured-macro>' +
+                    '<p><ac:structured-macro ac:name="attachments"/></p>')
+            reader.fetchChildPages('1') >> []
+            reader.fetchAttachments('1') >> [[id: 'a1', title: 'notes.pdf', version: [number: 1],
+                                              _links: [download: '/download/1/notes.pdf']]]
+            reader.download(_) >> 'PDFBYTES'.bytes
+
+        when:
+            taskFor().execute()
+            def adoc = exported('Root.adoc').getText('utf-8')
+
+        then: 'the sample says what the page wrote'
+            adoc.contains('%%attachments%%')
+
+        and: """and the macro outside it still became the list, whose link reaches the
+                file - not merely a list, which holds just as well with the marker left in
+                place"""
+            adoc.contains('.Attachments')
+            adoc.contains('notes.pdf (v1)')
+            def target = (adoc =~ /link:([^\[]+)\[/)[0][1]
+            new File(exported('Root.adoc').parentFile, target).canonicalFile.exists()
+    }
+
     def 'an attachment is written and referred to where the document can find it'() {
         given:
             treeOfTwoPages()
