@@ -149,8 +149,7 @@ public class ConfluenceClientV2 extends ConfluenceClient {
         boolean morePages = true;
         while (morePages) {
             Object response = callApiAndFailIfNot20x(new HttpGet(
-                    pagedUri(API_V2_PATH + "/spaces/" + spaceIdOf(requestedSpaceKey)
-                            + "/pages", pageLimit, cursor)));
+                    spacePagesUri(spaceIdOf(requestedSpaceKey), pageLimit, cursor)));
             List<?> results = listAt(response, "results");
             String next = nextCursor(response);
             if (results.isEmpty() || next == null) {
@@ -278,6 +277,29 @@ public class ConfluenceClientV2 extends ConfluenceClient {
         version.put("number", number);
         version.put("message", message);
         return version;
+    }
+
+    /**
+     * The pages of a space, the current ones.
+     *
+     * <p>Asked without a status, this endpoint answers the current pages <em>and</em> the archived
+     * ones. The publisher keys what it fetched by title and looks a title up in it, so an
+     * archived page of that title was taken for the page to write to: the document went into the
+     * archive instead of into the space. The V1 client does not have the problem - its
+     * {@code /content?type=page} answers current pages unless asked otherwise - so this also
+     * makes the two agree.</p>
+     */
+    private URI spacePagesUri(String spaceId, Integer pageLimit, String cursor) {
+        Map<String, String> query = new LinkedHashMap<>();
+        query.put("depth", "all");
+        query.put("limit", pageLimit.toString());
+        query.put("status", "current");
+        List<String> order = new ArrayList<>(List.of("depth", "limit", "status"));
+        if (cursor != null && !cursor.isEmpty()) {
+            query.put("cursor", cursor);
+            order.add("cursor");
+        }
+        return uri(API_V2_PATH + "/spaces/" + spaceId + "/pages", query, order);
     }
 
     private static URI pagedUri(String path, Integer pageLimit, String cursor) {
