@@ -60,6 +60,27 @@ services:
             AdocOutput.substitute('a%%CRLF%%b') == 'a\nb'
     }
 
+    def 'a document with a listing has both halves converted'() {
+        given: """The cases above have either a listing or substitutions, never both: an
+                  implementation that gave up on the whole document as soon as it saw a listing
+                  would pass every one of them."""
+            def adoc = '''image:before.png[]
+----
+image: nginx:1.25
+----
+image:after.png[]%%CRLF%%done
+'''
+
+        expect: 'the listing untouched, and the lines around it substituted'
+            AdocOutput.substitute(adoc) == '''image::before.png[]
+----
+image: nginx:1.25
+----
+image::after.png[]
+done
+'''
+    }
+
     def 'an admonition becomes a block, separated from what is above it'() {
         when:
             def adoc = AdocOutput.substitute('text%%ADMON-BEGIN-NOTE%%Worth knowing.%%ADMON-END%%')
