@@ -530,7 +530,9 @@ public class ConfluenceConverter {
                             .append("[").append(filename).append(" (v").append(version)
                             .append(")]\n");
                 });
-        return adoc.replace("%%attachments%%", list.toString());
+        // Outside the verbatim blocks: a page documenting this export writes the marker as
+        // text, and a list of attachments in the middle of a code sample is not what it meant.
+        return VerbatimBlocks.outside(adoc, text -> text.replace("%%attachments%%", list.toString()));
     }
 
     /**
