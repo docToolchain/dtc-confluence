@@ -79,6 +79,12 @@ public final class PageNaming {
      * is named after one page or it is not a folder per page, and the attachments of two
      * siblings overwrite each other again.</p>
      *
+     * <p>Behind two underscores, which no name of a page can contain:
+     * {@link #sanitizeFilename} collapses a run of them into one. So the folder of a page that
+     * had to be disambiguated cannot be the folder of a page that did not - a third sibling
+     * titled "A B 2", whose name is "A_B_2", would otherwise have taken the folder "A_B_2" given
+     * to page 2 of the group "A_B".</p>
+     *
      * <p>Decided from the page map alone, so that the downloader and the document agree without
      * either telling the other.</p>
      */
@@ -86,7 +92,7 @@ public final class PageNaming {
         String name = nameOf(pages.get(pageId), "filename");
         return name.isEmpty() || !isSharedWithAnotherPage(pages, pageId, name)
                 ? name
-                : name + "_" + pageId;
+                : name + "__" + pageId;
     }
 
     /** Whether another page sits in the same folders under the same name. */

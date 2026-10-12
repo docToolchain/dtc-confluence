@@ -124,8 +124,8 @@ class PageNamingSpec extends Specification {
                          '3': [parentId: '1', filename: 'A_B', title: 'A-B']]
 
         expect: 'both carry their id, because neither of them is the one that may keep the name'
-            PageNaming.attachmentFolders(pages, '2') == ['Root', 'A_B_2']
-            PageNaming.attachmentFolders(pages, '3') == ['Root', 'A_B_3']
+            PageNaming.attachmentFolders(pages, '2') == ['Root', 'A_B__2']
+            PageNaming.attachmentFolders(pages, '3') == ['Root', 'A_B__3']
     }
 
     def 'a name nobody else wants is left as it is'() {
@@ -137,5 +137,24 @@ class PageNamingSpec extends Specification {
         expect:
             PageNaming.attachmentFolders(pages, '2') == ['Root', 'Chapter']
             PageNaming.attachmentFolders(pages, '3') == ['Root', 'Chapter', 'Chapter']
+    }
+
+    def 'a disambiguated folder cannot be another page\'s folder'() {
+        given: """A third sibling titled "A B 2" is named "A_B_2" - which is what page 2 of the
+                  group "A_B" would have been given. The id goes behind two underscores, which no
+                  name of a page can contain: sanitizeFilename collapses a run of them into one."""
+            def pages = ['1': [filename: 'Root'],
+                         '2': [parentId: '1', filename: 'A_B', title: 'A B'],
+                         '3': [parentId: '1', filename: 'A_B', title: 'A-B'],
+                         '4': [parentId: '1', filename: 'A_B_2', title: 'A B 2']]
+
+        expect: 'three folders, all of them different'
+            def folders = ['2', '3', '4'].collect { PageNaming.attachmentFolders(pages, it).last() }
+            folders == ['A_B__2', 'A_B__3', 'A_B_2']
+            folders.toSet().size() == 3
+
+        and: 'and no name a title can produce carries two underscores in a row'
+            !PageNaming.sanitizeFilename('A  B').contains('__')
+            !PageNaming.sanitizeFilename('A - B').contains('__')
     }
 }
