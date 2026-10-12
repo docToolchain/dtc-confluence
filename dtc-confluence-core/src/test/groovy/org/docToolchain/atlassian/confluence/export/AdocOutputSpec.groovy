@@ -81,6 +81,27 @@ done
 '''
     }
 
+    def 'a passthrough block becomes delimiters, with nothing escaped inside'() {
+        given: """Pandoc writes a plus in text as "{plus}", so the delimiters cannot travel as
+                  themselves - and inside such a block nothing is AsciiDoc, so nothing in it may
+                  carry an AsciiDoc escape."""
+            def adoc = '%%PASSTHROUGH-BEGIN%%' +
+                '++<++iframe src=\'a/2++_++b.pdf\' width=\'100++%++\' ++><++/iframe++>++' +
+                '%%PASSTHROUGH-END%%'
+
+        when:
+            def out = AdocOutput.substitute(adoc)
+
+        then:
+            out == '++++\n<iframe src=\'a/2_b.pdf\' width=\'100%\' ></iframe>\n++++'
+    }
+
+    def 'a plus that pandoc spelled out is a plus again inside a passthrough'() {
+        expect:
+            AdocOutput.substitute('%%PASSTHROUGH-BEGIN%%a{plus}b%%PASSTHROUGH-END%%') ==
+                    '++++\na+b\n++++'
+    }
+
     def 'an admonition becomes a block, separated from what is above it'() {
         when:
             def adoc = AdocOutput.substitute('text%%ADMON-BEGIN-NOTE%%Worth knowing.%%ADMON-END%%')

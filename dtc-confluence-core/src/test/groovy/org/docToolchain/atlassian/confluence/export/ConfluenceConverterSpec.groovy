@@ -301,6 +301,25 @@ class ConfluenceConverterSpec extends Specification {
             dom.selectFirst('pre > code').attr('class').startsWith('language-groovy">')
     }
 
+    def 'a Lucidchart macro asked for as an iframe travels as a passthrough placeholder'() {
+        given:
+            converter.lucidChartsIframe = true
+            def storage = '<ac:structured-macro ac:name="lucidchart">' +
+                '<ac:parameter ac:name="documentId">abc-123</ac:parameter>' +
+                '</ac:structured-macro>'
+
+        when:
+            def html = convert(storage)
+
+        then: 'the iframe is in a passthrough block, which cannot travel as its own delimiters'
+            html.contains('%%PASSTHROUGH-BEGIN%%')
+            html.contains('%%PASSTHROUGH-END%%')
+            html.contains('abc-123')
+
+        and: 'pandoc would spell those out as {plus} signs and the iframe would be shown as text'
+            !html.contains('++++')
+    }
+
     def 'a code macro without a language is still a code block'() {
         given: 'no language parameter at all, which Confluence allows'
             def storage = '<ac:structured-macro ac:name="code">' +
