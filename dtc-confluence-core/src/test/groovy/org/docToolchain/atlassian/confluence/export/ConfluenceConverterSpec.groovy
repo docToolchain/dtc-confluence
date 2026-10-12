@@ -311,12 +311,14 @@ class ConfluenceConverterSpec extends Specification {
         when:
             def html = convert(storage)
 
-        then: 'the iframe is in a passthrough block, which cannot travel as its own delimiters'
-            html.contains('%%PASSTHROUGH-BEGIN%%')
-            html.contains('%%PASSTHROUGH-END%%')
-            html.contains('abc-123')
+        then: '''the iframe is between the placeholders - not merely somewhere in the document,
+                 because the document id is in the metadata and the edit link as well'''
+            def between = html.substring(html.indexOf('%%PASSTHROUGH-BEGIN%%'),
+                    html.indexOf('%%PASSTHROUGH-END%%'))
+            between.contains('iframe')
+            between.contains('abc-123')
 
-        and: 'pandoc would spell those out as {plus} signs and the iframe would be shown as text'
+        and: 'pandoc would spell the delimiters out as {plus} signs and show the iframe as text'
             !html.contains('++++')
     }
 
