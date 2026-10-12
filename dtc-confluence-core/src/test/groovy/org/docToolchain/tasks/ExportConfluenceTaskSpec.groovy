@@ -367,8 +367,10 @@ class ExportConfluenceTaskSpec extends Specification {
             !adoc.contains('++>')
             lines[at].contains('</iframe>')
 
-        and: 'naming the file that was written'
-            lines[at].contains('2_handbook.pdf')
+        and: '''naming the file that was written - resolved, because a src in the wrong
+                 directory contains that name just as well and loads nothing'''
+            def src = (lines[at] =~ /src='([^']+)'/)[0][1]
+            new File(exported('Root.adoc').parentFile, src).canonicalFile.exists()
     }
 
     def 'an attachment is written and referred to where the document can find it'() {
