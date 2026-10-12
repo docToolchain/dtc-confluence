@@ -255,6 +255,9 @@ class ExportConfluenceTaskSpec extends Specification {
             client.retrievePageIdByName(_, _) >> null
             def task = new ExportConfluenceTask(config, destination.toString())
             task.confluenceClient = client
+            // The reader too, though the run should never reach it: without the guard the task
+            // would walk from the page id "null" and this test would talk to the network.
+            task.useReader(reader)
 
         when:
             task.execute()
