@@ -279,6 +279,28 @@ class ConfluenceConverterSpec extends Specification {
             !html.contains('[source')
     }
 
+    def 'a language parameter cannot carry markup into the page'() {
+        given: """The language used to be interpolated into the markup of the code block, so a
+                  value ending the class attribute put whatever followed it into the exported
+                  page - as markup, outside the sample."""
+            def storage = '<ac:structured-macro ac:name="code">' +
+                '<ac:parameter ac:name="language">groovy"&gt;&lt;/code&gt;&lt;/pre&gt;' +
+                '&lt;h2&gt;Extra&lt;/h2&gt;&lt;pre&gt;&lt;code class="language-groovy' +
+                '</ac:parameter>' +
+                '<ac:plain-text-body><![CDATA[def x = 1]]></ac:plain-text-body>' +
+                '</ac:structured-macro>'
+
+        when:
+            def dom = org.jsoup.Jsoup.parse(convert(storage))
+
+        then: 'one code block, and no heading of the value\'s making'
+            dom.select('pre > code').size() == 1
+            dom.select('h2').isEmpty()
+
+        and: 'the value is the class, in full, meaning itself'
+            dom.selectFirst('pre > code').attr('class').startsWith('language-groovy">')
+    }
+
     def 'a code macro without a language is still a code block'() {
         given: 'no language parameter at all, which Confluence allows'
             def storage = '<ac:structured-macro ac:name="code">' +

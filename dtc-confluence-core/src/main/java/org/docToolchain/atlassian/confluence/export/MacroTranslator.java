@@ -379,20 +379,26 @@ class MacroTranslator {
     private void code(Element element) {
         String language = element.select("ac|parameter[ac:name=language]").text();
         Element body = element.selectFirst("ac|plain-text-body");
-        // Escaped, because it is put back into the document as markup: a sample containing an
-        // <af:button/> was parsed as markup once, and disappeared from the exported document.
-        //
         // wholeText rather than text: for the CDATA bodies Confluence writes the two are the
         // same, but a body without one would lose its line breaks.
-        String code = Entities.escape(body == null ? "" : body.wholeText());
+        String sample = body == null ? "" : body.wholeText();
         // Handed to pandoc as code rather than as text. Written as text it was reflowed like a
         // paragraph: a YAML sample lost the indentation that is its meaning, its brackets and
         // underscores came back escaped as "++[++", and "image: nginx:1.25" was promoted to a
         // block image. A <pre><code> is a code block to pandoc, which writes it out verbatim -
         // delimiters and "[source, yaml]" line included, so no placeholder is needed for either.
-        String opening = language.isEmpty() ? "<code>" : "<code class=\"language-" + language + "\">";
-        element.html("<pre>" + opening + code + "</code></pre>");
-        element.unwrap();
+        //
+        // Built rather than written out: interpolated into markup, a language parameter ending
+        // the class attribute would put whatever follows it into the exported page as markup,
+        // and a sample containing an <af:button/> was parsed as markup once and disappeared.
+        // Set through the DOM, both are escaped when the document is serialised.
+        Element code = new Element("code");
+        if (!language.isEmpty()) {
+            code.attr("class", "language-" + language);
+        }
+        code.text(sample);
+        element.before(new Element("pre").appendChild(code));
+        element.remove();
     }
 
     /**
