@@ -85,8 +85,16 @@ class ConfluenceConverterSpec extends Specification {
             def storage = '<p><ac:image><ri:attachment' +
                 ' ri:filename="a&apos; onerror=&apos;alert(1).png"/></ac:image></p>'
 
-        expect:
-            org.jsoup.Jsoup.parse(convert(storage)).selectFirst('img').attr('onerror').isEmpty()
+        when:
+            def img = org.jsoup.Jsoup.parse(convert(storage)).selectFirst('img')
+
+        then: '''the whole name reaches the src - sanitizeAttachmentName turns the space into an
+                 underscore, so an attribute smuggled in here would be called "_onerror" and
+                 asking for "onerror" alone would pass on a truncated src'''
+            img.attr('src') == "A_Page/1_a'_onerror='alert(1).png"
+
+        and: 'and the element carries what it was built with, and nothing the value invented'
+            img.attributes()*.key as Set == ['src', 'align', 'width'] as Set
     }
 
     def 'a tag it does not know is reported rather than dropped in silence'() {
