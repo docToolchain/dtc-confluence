@@ -130,7 +130,8 @@ class ConfluenceConverterSpec extends Specification {
     }
 
     def 'a chapter number is still stripped in the shapes a document writes it'() {
-        expect:
+        expect: 'the number goes and the title stays - losing the whole heading is not a pass'
+            convert(heading).contains('Deployment')
             !convert(heading).contains(number)
 
         where:
