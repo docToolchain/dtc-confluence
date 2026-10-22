@@ -1,10 +1,8 @@
 # Lints everything that the Maven build does not: the workflows themselves
 # (actionlint), YAML, XML, editorconfig conformance, shell, and leaked secrets.
 #
-# Run through super-linter, mirroring apache/maven. There the detour is
-# mandatory: the ASF allowed-actions policy permits GitHub-owned actions only,
-# which is why that PR uses github/super-linter - a fork of the project, two
-# major versions behind. We have no such policy, so we use maintained upstream.
+# One action for all of them, pinned by SHA and tracking current upstream rather
+# than an older major, so a breaking change arrives as one release to read.
 #
 # Java and Groovy are deliberately NOT linted here. SonarQube Cloud analyses
 # both, including Groovy, and super-linter's Java validator enforces
