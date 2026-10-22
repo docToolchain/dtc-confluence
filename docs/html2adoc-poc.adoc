@@ -96,12 +96,8 @@ A code macro and an admonition, both already reduced to placeholder tokens by `f
 ----
 <p></p><p>
 </p><div class="content">
-    <div class="code-wrapper">
-    %%SOURCE-BEGIN%%groovy%%SOURCE-END%%%%CRLF%%
-    ----%%CRLF%%
-    def hello = "world"%%CRLF%%println hello%%CRLF%%
-    ----%%CRLF%%
-    </div>
+<pre><code class="language-groovy">def hello = "world"
+println hello</code></pre>
 </div>
 <p></p>
 <p>%%ADMON-BEGIN-NOTE%%</p>
@@ -156,8 +152,8 @@ The listing block differs: pandoc keeps the literal newlines of the HTML as blan
 Rendered, the two are the same - `asciidoctor` strips leading and trailing blank lines from a listing block - so this is a tie on output and a win for native on source legibility only.
 The placeholder tokens survive both converters verbatim, which is what `AdocOutput` needs.
 
-This is also the page where the native path marks the `div.code-wrapper` as a `<pre>` before converting, so that the sample inside the `----` lines is not escaped as prose.
-The corpus cannot show the difference - `+def hello = "world"+` has no character that escaping would change - which is why it is specified in `PreformattedSpec` and `ExportConverterChoiceSpec` instead of counted here.
+This is also the page whose code macro arrives as a `<pre><code class="language-groovy">`, which both converters read as a listing block: pandoc has always done so, and `PreformattedConverter` now does.
+The corpus cannot show what that buys - `+def hello = "world"+` has no character that escaping would change - which is why it is specified in `PreformattedSpec` and `ExportConverterChoiceSpec` instead of counted here.
 
 What native cannot do yet: nothing on this page.
 
@@ -519,8 +515,12 @@ Both render the same; it only makes the exported file easier to read and to diff
 Mostly yes, which was not the expected answer.
 
 The tokens exist because pandoc escapes AsciiDoc punctuation indiscriminately.
-Native escapes selectively - `AdocText` asks what `asciidoctor` would do with the text unescaped - but a line of text that begins with `+[source, groovy]+` is a block attribute line to AsciiDoc, so `AdocText` escapes it on purpose and the token is needed just the same.
-The same holds for `%%ANCHOR%%` (an `+[[id]]+` in text is an inline anchor), `+%%ADMON-*%%+` and `+%%EXPAND-*%%+` (delimiter lines), `%%TABLE-ROWHEADER%%` (an attribute line) and `%%CRLF%%` (a line break, which `BrConverter` writes as a space).
+Native escapes selectively - `AdocText` asks what `asciidoctor` would do with the text unescaped - but a line of text that begins with `+[[id]]+` is an inline anchor to AsciiDoc, so `AdocText` escapes it on purpose and `%%ANCHOR%%` is needed just the same.
+The same holds for `+%%ADMON-*%%+` and `+%%EXPAND-*%%+` (delimiter lines), `%%TABLE-ROWHEADER%%` (an attribute line) and `%%CRLF%%` (a line break, which `BrConverter` writes as a space).
+
+One token *was* abolished, and not by this converter: `%%SOURCE-BEGIN%%` and `%%SOURCE-END%%` are gone from the code entirely.
+The fix for the mangled listing blocks took the delimiters and the attribute line out of the HTML and let `MacroTranslator` build a `<pre><code class="language-X">` instead, which is a listing block to both converters and needs no token to be told apart from text.
+That is the step this report proposed below and called a change pandoc would have to survive; pandoc survived it.
 
 The measurement added one token rather than removing any.
 `fixBody` used to turn a Confluence block title into a bare `+.Title+` line, which pandoc happens to leave alone - and which `AdocText` protects as text, because a line of prose beginning with a full stop would otherwise leave the page as a block title.
@@ -529,11 +529,11 @@ It now travels as `%%BLOCK-TITLE%%`, for exactly the reason the other tokens exi
 What the native path does make unnecessary is the pandoc *repairs* in `AdocOutput`, as counted above: the `%7Bfilepath%7D` rewrite and the removal of pandoc's lone `pass:[+]` lines.
 Those two are the whole saving today.
 
-The larger opportunity is that native makes the tokens avoidable rather than unnecessary: with a converter in process, `fixBody` could hand a real `<pre data-language="groovy">` to a `ListingConverter` instead of a string the next stage has to find again.
-Half of that step is taken, and only on the native path: `NativeHtmlToAsciidoc` wraps the code macro's listing block in a `<pre>` before converting, which is what tells the converter not to escape the sample.
-The other half - letting the `<pre>` carry the language and the delimiters, so that `%%SOURCE-BEGIN%%` and the `----` lines are not strings in the HTML at all - is a change to `MacroTranslator` that pandoc would have to survive too.
-pandoc reads a `<pre>` as a block of its own and writes delimiters around it, so doing it in `fixBody` would nest one listing block inside another on the path that ships today.
-That is why the marking sits in the native converter and not in the translation, and it is as far as this PoC goes.
+The larger opportunity is that a token can be made avoidable rather than merely unnecessary: let `fixBody` hand over HTML that says what the construct is, instead of a string the next stage has to find again.
+For the code macro that step is now taken in full, and on both paths: `MacroTranslator` builds a `<pre><code class="language-X">`, pandoc writes the block out of it as it always did, and `PreformattedConverter` writes the same block.
+Nothing marks anything afterwards, and the two `%%SOURCE-*%%` tokens are gone.
+The worry that pandoc would nest one listing block inside another did not materialise, because the delimiters are no longer in the HTML for it to wrap a second time.
+That is the shape to aim at for the remaining tokens: an anchor, an admonition and an expand block are all constructs HTML can state.
 
 === What it would take to close the gap
 

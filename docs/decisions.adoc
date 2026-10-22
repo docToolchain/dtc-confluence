@@ -525,7 +525,7 @@ A general HTML-to-AsciiDoc converter has to survive anything; this one has to su
 That is a narrow subset, it is written down in `html2adoc/src/test/resources/corpus/INVENTORY.md`, and it is a subset we control from both ends.
 
 And because we already own the problem that makes pandoc expensive.
-pandoc escapes AsciiDoc punctuation indiscriminately, which is why the translation hides every construct it writes behind `%%SOURCE-BEGIN%%`, `%%ANCHOR%%`, `%%ADMON-BEGIN%%` and the rest, and why `AdocOutput` carries repairs for what comes back escaped anyway.
+pandoc escapes AsciiDoc punctuation indiscriminately, which is why the translation hides every construct it writes behind `%%ANCHOR%%`, `%%ADMON-BEGIN%%`, `%%BLOCK-TITLE%%` and the rest, and why `AdocOutput` carries repairs for what comes back escaped anyway.
 That machinery is not pandoc's fault and it is not free: it exists because the converter cannot be told which characters are markup we wrote and which are text the author typed.
 A converter in process can be told.
 

@@ -87,8 +87,6 @@ as text — and `AdocOutput` tolerates the whitespace the converters put around 
 | Token | Count | Becomes |
 | --- | --- | --- |
 | `%%ANCHOR%%` / `%%ANCHOR-END%%` | 15 / 15 | `[[_name]]` |
-| `%%CRLF%%` | 15 | a line break |
-| `%%SOURCE-BEGIN%%` / `%%SOURCE-END%%` | 3 / 3 | `[source, language]` |
 | `%%ADMON-BEGIN-NOTE%%` / `%%ADMON-END%%` | 3 / 3 | `[NOTE]` and `====` |
 | `%%BLOCK-TITLE%%` / `%%BLOCK-TITLE-END%%` | 3 / 3 | `.Title`, on the line above its block |
 
@@ -106,6 +104,13 @@ Shapes the corpus holds that no single element names, found by converting it:
 * **A nested list comes out flat.** `ListConverter` records which kind of list its items are in and
   not how deep they stand, so the `ul` inside a `li` writes `*` like its parent. `nested` becomes a
   third sibling of `Second item` rather than its child.
+
+Two tokens that this table used to list are no longer in the corpus at all. `%%SOURCE-BEGIN%%`
+and `%%SOURCE-END%%` are gone from the code: a code macro now arrives as a
+`<pre><code class="language-X">`, which both converters read as a listing block without being
+told. `%%CRLF%%` is still a token, but its fifteen occurrences were all inside those blocks,
+separating the lines of a sample; the lines are real newlines now, and the corpus reaches the token
+nowhere else. It is therefore specified rather than counted, like the shapes below.
 
 ## What the corpus cannot say anything about
 
