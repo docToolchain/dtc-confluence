@@ -203,8 +203,8 @@ class ConfluenceConverterSpec extends Specification {
 
         and: 'in the order a reader reads them, not the one the API answers with'
             includes.readLines().findAll { it.startsWith('include::') } == [
-                'include::Parent/Chapter_2.adoc[levelOffset=+1]',
-                'include::Parent/Chapter_10.adoc[levelOffset=+1]']
+                'include::Parent/Chapter_2.adoc[leveloffset=+1]',
+                'include::Parent/Chapter_10.adoc[leveloffset=+1]']
 
         and: 'between the markers that make them optional'
             includes.readLines().contains('ifdef::includeChildren[]')
