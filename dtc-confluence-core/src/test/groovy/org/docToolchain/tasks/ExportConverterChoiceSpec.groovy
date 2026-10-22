@@ -28,6 +28,7 @@ class ExportConverterChoiceSpec extends Specification {
 
     private static final String BODY = '''
         <p>An introduction with <strong>bold</strong> in it.</p>
+        <h1>A section</h1>
         <ac:structured-macro ac:name="code">
           <ac:parameter ac:name="language">groovy</ac:parameter>
           <ac:plain-text-body><![CDATA[def hello = "world"]]></ac:plain-text-body>
@@ -94,6 +95,28 @@ class ExportConverterChoiceSpec extends Specification {
      * strips no backslash. An escape put in there is printed rather than consumed, so the shell
      * sample below would reach the page reading {@code $\{HOME}} instead of {@code ${HOME}}.
      */
+    /**
+     * A code sample stands between listing delimiters, where AsciiDoc substitutes nothing and
+     * strips no backslash. An escape put in there is printed rather than consumed, so the shell
+     * sample below would reach the page reading {@code $\{HOME}} instead of {@code ${HOME}}.
+     */
+    def 'a heading of the page body stands below the page title'() {
+        given: '''writePage writes "== " + title above everything the converter produces, which is
+                  level 1. HTML numbers headings from the top of its own document, so an <h1>
+                  converted as it stands is a level-0 section and outranks the title - the page
+                  then holds two document titles and the body is not under the page at all.'''
+        when:
+            def lines = exportedLines()
+
+        then:
+            lines.contains('== Root')
+
+        and: 'the body heading is one level deeper, and is not a title of its own'
+            lines.contains('=== A section')
+            !lines.contains('= A section')
+            !lines.contains('== A section')
+    }
+
     def 'a code sample is exported with the characters it was written with'() {
         expect:
             exportedLines().contains('cp *.txt ${HOME}/out and H~2~O')

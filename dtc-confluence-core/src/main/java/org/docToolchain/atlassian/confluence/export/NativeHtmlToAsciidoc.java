@@ -19,6 +19,15 @@ import org.jsoup.nodes.Document;
 public class NativeHtmlToAsciidoc implements HtmlToAsciidoc {
 
     /**
+     * The level the page's own headings are written at, one below the title.
+     *
+     * <p>{@link ConfluenceConverter#writePage} writes {@code "== " + title} above everything this
+     * converter produces, which is level 1. A heading of the page body belongs under that, and
+     * {@code <h1>} would otherwise become a level-0 section and outrank it.</p>
+     */
+    private static final int TOP_HEADING_LEVEL = 2;
+
+    /**
      * {@inheritDoc}
      *
      * <p>Always writes: the converter walks whatever jsoup parsed and has no failure to report,
@@ -27,7 +36,8 @@ public class NativeHtmlToAsciidoc implements HtmlToAsciidoc {
     @Override
     public boolean convert(File html, File adoc) throws IOException {
         Document document = Jsoup.parse(Files.readString(html.toPath(), StandardCharsets.UTF_8));
-        Files.writeString(adoc.toPath(), Html2Adoc.convert(document.body()), StandardCharsets.UTF_8);
+        Files.writeString(adoc.toPath(), Html2Adoc.convert(document.body(), TOP_HEADING_LEVEL),
+                StandardCharsets.UTF_8);
         return true;
     }
 }

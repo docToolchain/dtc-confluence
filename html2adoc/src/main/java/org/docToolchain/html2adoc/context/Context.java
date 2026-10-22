@@ -13,6 +13,7 @@ public class Context implements IContext {
     private boolean lineStarted;
     private boolean spaceNeeded;
     private boolean verbatim;
+    private int headingShift;
 
     Context() {
     }
@@ -47,6 +48,15 @@ public class Context implements IContext {
     @Override
     public boolean isVerbatim() {
         return verbatim;
+    }
+
+    @Override
+    public int getHeadingShift() {
+        return headingShift;
+    }
+
+    void setHeadingShift(int headingShift) {
+        this.headingShift = headingShift;
     }
 
     void setVerbatim(boolean verbatim) {

@@ -30,6 +30,12 @@ public class ContextBuilder {
         context.setLineStarted(originalContext.isLineStarted());
         context.setSpaceNeeded(originalContext.isSpaceNeeded());
         context.setVerbatim(originalContext.isVerbatim());
+        context.setHeadingShift(originalContext.getHeadingShift());
+        return this;
+    }
+
+    public ContextBuilder withHeadingShift(int headingShift) {
+        context.setHeadingShift(headingShift);
         return this;
     }
 

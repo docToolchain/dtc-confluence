@@ -47,4 +47,13 @@ public interface IContext {
      * {@code <p>a <strong>b</strong></p>} implies has to be put back deliberately.</p>
      */
     boolean isSpaceNeeded();
+
+    /**
+     * How many levels deeper than its own depth a heading is written, so that {@code <h1>} need
+     * not be the document title. Zero leaves {@code <hN>} at {@code N} markers, which is what a
+     * caller that says nothing gets.
+     */
+    default int getHeadingShift() {
+        return 0;
+    }
 }

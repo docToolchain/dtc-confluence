@@ -52,6 +52,16 @@ Code
   * `LinkConverter`: the condition `isExternalLink(e) || isExternalLink(e)` is
     stated once, and the redundant second `addSpaceIfNeeded` call in each
     branch is gone - the first call already wrote the space.
+  * `HeaderConverter` writes a heading at its own depth plus the context's heading shift, and
+    never deeper than the six markers AsciiDoc has levels for. `IContext`, `Context` and
+    `ContextBuilder` carry that shift, and `Html2Adoc` gained
+    `convert(Node, int topLevel)`, which derives it from the shallowest heading of the fragment.
+    Upstream wrote `<hN>` as `N` markers, so an `<h1>` was a level-0 section - a document title -
+    and a fragment written underneath a heading of the caller's own outranked it. The shift is
+    derived from the shallowest heading in the page's own flow: one inside a table cell, a list
+    item or a `<pre>` is not a section and does not set the base level. Clamped at both ends, so
+    the upper clamp loses structure where a page is deeper than the levels that remain - two HTML
+    levels then share one AsciiDoc level and become siblings.
   * `ImageConverter` decides between `image::` and `image:` by whether the image opens a line of
     the output, looking through the wrappers that contribute no markup. Upstream asked whether the
     image's own parent was a `p` holding nothing else or the `body`, so an image inside any wrapper

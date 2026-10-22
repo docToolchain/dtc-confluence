@@ -408,23 +408,26 @@ native:
 [source,asciidoc]
 ----
 [[__subsection]]
-= Subsection
+=== Subsection
 ----
 
-*pandoc is right.*
+*native is right, and this one has turned around.*
 `writePage` puts `== <page title>` at the top of every exported document, so a heading in the body has to be `===` or deeper to sit inside the page.
-Neither converter gets that right, but they are wrong by different amounts.
-pandoc's `==` makes the subsection a sibling of the page title; native's `=` is a level-0 section, which outranks the page title and renders outside it:
+Neither converter did that: pandoc's `==` makes the subsection a sibling of the page title, and native's `=` was a level-0 section, which outranked the page title and rendered outside it.
 
-[source,html]
+Native is now told where its top heading belongs - `Html2Adoc.convert(node, 2)` - and shifts every heading of the fragment by the same amount, so `<h1>` becomes `===` and the `<h2>` under it `====`.
+Shifting rather than mapping each level on its own is what keeps a page that starts at `<h2>` from skipping a level, which `asciidoctor` reports as a section out of sequence.
+pandoc is unchanged and still writes `==`:
+
+[source,asciidoc]
 ----
-<h2 id="_first_page">First Page</h2>     <!-- the page -->
-<h1 id="__subsection" class="sect0">Subsection</h1>   <!-- native: above it -->
+== Subsection      // pandoc: a sibling of the page title
+=== Subsection     // native: inside the page
 ----
 
 Everything else on this page repeats the three pages above: the dead pandoc footnote links, the broken native list, the missing space before `+_italic_+`, and identical admonition and listing blocks.
 
-What native cannot do yet: map an HTML heading level to the document level the export actually writes at.
+What native cannot do yet on this page: nothing that is measured here.
 
 === smoke-subpages-0-docToolchain_Confluence_Smoke_Test.html
 
@@ -443,20 +446,21 @@ The heading hierarchy, rendered, with `== Page Title` prepended as the export wr
 
 <!-- native -->
 <h2 id="_page_title">Page Title</h2>
-<h1 id="__first_page" class="sect0">First Page</h1>
-<h2 id="__subsection">Subsection</h2>
-<h1 id="__second_page" class="sect0">Second Page</h1>
+<h3 id="__first_page">First Page</h3>
+<h4 id="__subsection">Subsection</h4>
+<h3 id="__second_page">Second Page</h3>
 ----
 
-*pandoc is right, and on a whole document the cost is visible.*
-pandoc's hierarchy is flat where it should be nested - the two pages are siblings of the title rather than children - but it is a hierarchy.
-Native's is inverted: both sections outrank the title they are inside, so a table of contents built from this document puts the page title underneath its own sections.
-Native does keep the relative order of `h1` and `h2` intact, which is why `Subsection` is still one level below `First Page`.
+*native is right, and on a whole document that is where it shows.*
+pandoc's hierarchy is flat where it should be nested: the two pages are siblings of the title rather than children, so a table of contents lists them beside the page instead of inside it.
+Native writes them one level below the title and keeps the relative order of `h1` and `h2`, so `Subsection` stays one level under `First Page` and the whole page nests under its own title.
+This was the other way round until the heading shift went in, and it was the sharpest heading defect in this report: native's sections used to outrank the title they stood in.
 
-The rest of this page differs exactly as the smaller pages do.
-Counted on the rendered HTML: pandoc produces 1 image, 3 list items in 2 nested lists, the `A list` title, and 0 links; native produces 0 images, the same 3 list items but in 1 flat list, the same `A list` title, 1 literal block where the image should be, and 5 links of which 2 carry the `<em>` corruption described above.
+The rest of this page differs as the smaller pages do.
+Counted on the AsciiDoc both converters produced: 3 headings each, 1 block image each, and 3 list items each - but pandoc writes them as two nested lists (`+*+` and `+**+`) where native writes one flat list, which is the gap below.
+Native's links are the sound ones, pandoc's `xref:` are escaped into prose; 2 of native's carry the `+__+` corruption described above.
 
-What native cannot do yet: every defect above, on a page where all of them occur at once.
+What native cannot do yet on this page: the nested list, and the attributes of the image.
 
 == Summary
 
@@ -495,7 +499,6 @@ Both render the same; it only makes the exported file easier to read and to diff
 
 * *Lists.* Nesting. Both converters now render the title and every item; native writes a nested `ul` at its parent's level, which flattens the list.
 * *Image attributes.* `width` survives pandoc and not native; `align` survives neither.
-* *Heading levels.* pandoc's `<h1>` -> `==` is wrong against the export's own `== <title>`, but native's `<h1>` -> `=` is worse: a level-0 section inside a page.
 * *Spacing around punctuation.* Native drops the space after a comma that precedes an inline span, which changes the words on the page.
 * *Declared column widths.* Native discards `<col style="width: …">`. No corpus table is affected, because all of them are equal-width.
 * *Preserved line breaks.* `--wrap preserve` keeps one sentence per line; native joins the paragraph into one line.
@@ -530,7 +533,6 @@ That is the shape to aim at for the remaining tokens: an anchor, an admonition a
 In the order the corpus argues for, smallest first.
 
 . *Spacing after punctuation.* `TextNodeConverter` decides "does a space belong here" from a character whitelist, `+[a-zA-Z0-9.:/()]+`, that omits `,` and `;`. Honouring the text node's own trailing whitespace instead of re-deriving it would be the real fix.
-. *Heading levels.* Both converters need to know the level the export writes the page title at. That argues for an option on the converter rather than a constant in it, since `writePage` is the only thing that knows.
 . *Nested lists.* `ListConverter` and `ListItemConverter` need to carry a depth in the context, so that a list inside a list item writes `**` rather than `*`. This is the one the corpus shows most often.
 . *Image attributes.* `width` and `align` are dropped by `ImageConverter`, which reads `src` only.
 . *Column widths.* `TableConverter` measures the column count from the cells; it would have to read `<colgroup>` where one is present.
@@ -569,14 +571,18 @@ The claim above is left standing with this correction beside it rather than quie
 
 === What the real pages showed instead
 
-Native is not better than pandoc here.
-It is wrong in different places, and two of its differences change the words on the page:
+Native was not better than pandoc here when these pages were exported.
+It was wrong in different places, and two of its differences changed the words on the page.
+The list below is that measurement; where a gap has been closed since, it says so, because the pages were a read-only export and have not been re-measured.
 
-* *A missing space before a link.* `…GenericVersion.java[…]in link:…` - the text node's trailing whitespace is dropped, which is gap 2 above, seen in prose rather than in a fixture.
-* *Bold becomes a literal asterisk.* `issue tracked as *https://…[MNG-3010]*` turns into `* link:https://…[MNG-3010]*`: the opening `*` is separated from its text, so the span is not bold any more and a stray asterisk is on the page. That is gap 7.
-* *Heading levels.* `== Improve default support for version schemes` from pandoc, `= Improve …` from native - a level-0 section inside a page that is included elsewhere. Gap 3, and these pages are full of it.
-* *AsciiDoc attributes for characters that need them.* pandoc writes `{nbsp}` and `{plus}`; native leaves a literal no-break space and writes a bare `+`, which AsciiDoc reads as markup.
-* *Redundant `link:`.* Native writes `link:https://…[text]` where pandoc writes `https://…[text]`. Both render; only the diff is noisier.
+* *A missing space before a link.* `…GenericVersion.java[…]in link:…` - the text node's trailing whitespace was dropped, in prose rather than in a fixture.
+  *Closed:* this is the defect gap 2 fixed, and the fixture rows for it are in `StrongSpacingSpec`.
+* *Bold becomes a literal asterisk.* `issue tracked as *https://…[MNG-3010]*` turns into `* link:https://…[MNG-3010]*`: the opening `*` is separated from its text, so the span is not bold any more and a stray asterisk is on the page. Still open, and it is the escaping gap.
+* *AsciiDoc attributes for characters that need them.* pandoc writes `{nbsp}` and `{plus}`; native leaves a literal no-break space and writes a bare `+`, which AsciiDoc reads as markup. Still open.
+* *Redundant `link:`.* Native writes `link:https://…[text]` where pandoc writes `https://…[text]`. Both render; only the diff is noisier. Still open.
+
+One difference on these pages has turned the other way since: the headings.
+pandoc writes `== Improve default support for version schemes`, a sibling of the page title; native writes `=== Improve …`, inside the page, and these pages are full of headings.
 
 === Two macros the corpus never contained
 

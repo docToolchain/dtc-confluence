@@ -32,6 +32,7 @@ import org.docToolchain.html2adoc.convert.TextNodeConverter;
 import org.docToolchain.html2adoc.convert.TransparentConverter;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
 
 /**
@@ -66,6 +67,16 @@ public final class Html2Adoc {
             new BrConverter(),
             new HorizontalRuleConverter());
 
+    /**
+     * Headings that fix the base level: the ones in the page's own flow.
+     *
+     * <p>A heading inside a table cell, a list item or a {@code <pre>} is not a section of the
+     * document - and a {@code <h1>} in a cell would otherwise push every real heading of the page
+     * a level deeper, which is the skipped level this shift exists to avoid.</p>
+     */
+    private static final String STRUCTURAL_HEADINGS =
+            ":is(h1, h2, h3, h4, h5, h6):not(:is(table, pre, li) *)";
+
     private Html2Adoc() {
     }
 
@@ -81,6 +92,47 @@ public final class Html2Adoc {
         StringBuilder sb = new StringBuilder();
         convert(context, sb, node);
         return sb.toString();
+    }
+
+    /**
+     * Converts {@code node}, writing its shallowest heading at {@code topLevel} and every deeper
+     * one as far below that as it stands below the shallowest.
+     *
+     * <p>A caller that writes a heading of its own above this fragment has to say so, or the
+     * fragment outranks it: HTML numbers headings from the top of the document, so {@code <h1>}
+     * becomes a level-0 section - a document title - and a page written under
+     * {@code "== Title"} then has two. Shifting rather than mapping each level separately is what
+     * keeps a page that starts at {@code <h2>} from skipping a level, which asciidoctor reports as
+     * a section out of sequence.</p>
+     *
+     * @param topLevel the AsciiDoc level for the shallowest heading: 0 writes {@code =}, 1
+     *                 {@code ==}, and so on
+     */
+    public static String convert(Node node, int topLevel) {
+        IContext context = ContextBuilder.build()
+                .withHeadingShift(topLevel + 1 - shallowestHeading(node))
+                .create();
+        StringBuilder sb = new StringBuilder();
+        convert(context, sb, node);
+        return sb.toString();
+    }
+
+    /**
+     * @return the {@code N} of the shallowest {@code <hN>} in {@code node}, or 1 where it holds no
+     *         heading at all - the shift is then whatever the caller asked for and changes nothing
+     */
+    private static int shallowestHeading(Node node) {
+        if (!(node instanceof Element)) {
+            return 1;
+        }
+        // Not seeded with 6: an <h6> is a legal shallowest heading, and a sentinel inside the
+        // domain cannot be told apart from it. A page whose headings are all <h6> was shifted as
+        // though it had none, which put its one section at level 5 under a level-1 title.
+        int shallowest = Integer.MAX_VALUE;
+        for (Element heading : ((Element) node).select(STRUCTURAL_HEADINGS)) {
+            shallowest = Math.min(shallowest, Integer.parseInt(heading.tagName().substring(1)));
+        }
+        return shallowest == Integer.MAX_VALUE ? 1 : shallowest;
     }
 
     /**
