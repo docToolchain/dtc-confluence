@@ -77,6 +77,26 @@ class AdocOutputSpec extends Specification {
             AdocOutput.substitute(once) == once
     }
 
+    def 'a definition further down the page does not count as one'() {
+        given: '''a page that shows what an exported emoticon looks like, in prose rather than in
+                  a listing block, after using one itself'''
+            def adoc = '%%EMOTICON-tick%% then ifndef::emoticon-tick[:emoticon-tick: custom]\n'
+
+        when:
+            def result = AdocOutput.substitute(adoc)
+
+        then: 'the reference gets a definition of its own'
+            result.contains('ifndef::emoticon-tick[:emoticon-tick: ✓]')
+
+        and: '''in front of it: AsciiDoc reads an attribute entry from where it stands
+                onwards, so the one further down the page would come too late'''
+            result.indexOf('ifndef::emoticon-tick[:emoticon-tick: ✓]') <
+                    result.indexOf('{emoticon-tick}')
+
+        and: 'and what the page itself wrote is left where it was'
+            result.contains('then ifndef::emoticon-tick[:emoticon-tick: custom]')
+    }
+
     def 'every emoticon default is the glyph or the text the server offers for it'() {
         when:
             def adoc = AdocOutput.substitute("%%EMOTICON-${name}%%\n")

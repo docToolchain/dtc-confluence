@@ -256,8 +256,10 @@ final class AdocOutput {
      * emoticon shown in a code sample - a page of ours documenting this very export would have
      * one - gets neither a substitution nor a definition nothing reads.</p>
      *
-     * <p>A name already defined in the text is left alone, which keeps a second pass over an
-     * exported page from stacking definitions on the first one's.</p>
+     * <p>A name whose definition already stands <em>before</em> its first reference is left
+     * alone, which keeps a second pass over an exported page from stacking definitions on the
+     * first one's. A definition further down the page does not count: AsciiDoc would not have
+     * read it yet.</p>
      *
      * <p>They are written in front of the converted body, which puts them below the page heading
      * rather than in the document header. An attribute entry is read wherever it stands, and
@@ -268,7 +270,12 @@ final class AdocOutput {
         Matcher references = EMOTICON_REFERENCE.matcher(adoc);
         while (references.find()) {
             String name = references.group(1);
-            if (!adoc.contains("ifndef::emoticon-" + name + "[")) {
+            int defined = adoc.indexOf("ifndef::emoticon-" + name + "[");
+            // Only a definition that already stands before this reference makes one here
+            // unnecessary. AsciiDoc reads an attribute entry from where it stands onwards, so one
+            // further down the page would leave this reference unresolved - and that is also what
+            // makes a second pass add nothing, since the first put its definitions at the top.
+            if (defined < 0 || defined > references.start()) {
                 names.add(name);
             }
         }
