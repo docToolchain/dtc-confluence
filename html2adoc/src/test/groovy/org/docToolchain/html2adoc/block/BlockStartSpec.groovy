@@ -70,6 +70,28 @@ class BlockStartSpec extends Specification {
                           '<tbody><tr><td>a</td></tr></tbody></table>'           | '<th class='
     }
 
+    def 'the space a node left pending is not written onto a fresh line: #name'() {
+        given: '''A text node that follows a block and begins with whitespace. The context still
+                  says a space is pending, because the converters that end a line return the
+                  context they were given - so the space landed at the start of the new line.
+                  An indented line is a literal block, and it also hides the line start from
+                  AdocText.escape, whose {empty} guard before a .Title only fires on a newline.'''
+        when:
+            def lines = Html2Adoc.convert(html).readLines()
+
+        then: 'no line is indented'
+            !lines.any { it.startsWith(' ') }
+
+        and: 'and the text stands at the start of its line, guarded where it is block markup'
+            lines.contains(expected)
+
+        where:
+            name            | html                            | expected
+            'a block title' | '<div>x<p>y</p> .Title</div>'    | '{empty}.Title'
+            'plain text'    | '<div>x<p>y</p> , z</div>'       | ', z'
+            'inside a list' | '<ul><li>x<p>y</p> .Title</li>'  | '{empty}.Title'
+    }
+
     private String render(String adoc) {
         Path source = directory.resolve('block.adoc')
         Files.writeString(source, adoc)

@@ -52,9 +52,18 @@ abstract class AbstractConverter implements IConverter {
      *
      * <p>Only on a started line, because a space after a list bullet or a heading marker would be
      * doubled, and only when the output does not already end in one.</p>
+     *
+     * <p>And never at the start of a line, whatever the context says: an indented line is a literal
+     * block to AsciiDoc, so a space written there turns the paragraph that follows into a
+     * preformatted one - and it also hides the start of the line from {@code AdocText.escape},
+     * which guards block markup such as a leading {@code .Title} only when it sees the newline.
+     * {@code isLineStarted} cannot answer this on its own, because the converters that end a line
+     * return the context they were given.</p>
      */
     protected void addSpaceIfNeeded(IContext context, StringBuilder sb) {
-        if (context.isSpaceNeeded() && context.isLineStarted() && !sb.substring(sb.length() - 1).equals(" ")) {
+        if (context.isSpaceNeeded() && context.isLineStarted()
+                && AdocText.lastCharacterOf(sb) != '\n'
+                && !sb.substring(sb.length() - 1).equals(" ")) {
             sb.append(" ");
         }
     }

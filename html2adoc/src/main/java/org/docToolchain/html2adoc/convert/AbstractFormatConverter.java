@@ -57,8 +57,11 @@ abstract class AbstractFormatConverter extends AbstractConverter {
             return context;
         }
         sb.append(marker);
-        // The closing character ends the formatted run, so whatever follows is a separate word.
-        return ContextBuilder.build(context).withSpaceNeeded(true).create();
+        // The closing character ends the formatted run, so whatever follows is a separate word -
+        // and the line is started, because markup was written onto it. Without the second half a
+        // paragraph that opens with a span left the line unstarted, which is the one condition
+        // addSpaceIfNeeded insists on: "<p><strong>a</strong> b</p>" then came out as "*a*b".
+        return ContextBuilder.build(context).withSpaceNeeded(true).withLineStarted(true).create();
     }
 
     private String marker(char previous, char following) {
