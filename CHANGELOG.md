@@ -28,8 +28,8 @@ publisher verified against a real instance (ASF cwiki, Confluence Data Center 9.
 - `confluence.export.converter` chooses what turns the HTML into AsciiDoc: `pandoc` (the default)
   or `native`, which converts in process and needs nothing installed. `native` is a proof of
   concept — it is the only one whose footnote links work, and the only one that writes a page's
-  headings under the page's own title; what it still gets wrong is a table's declared column
-  widths and one sentence per line.
+  headings under the page's own title; what it still gets wrong is one sentence per line, and the
+  escaping of an inline span that spreads over two text nodes.
   `docs/html2adoc-poc.adoc` compares the two construct by construct.
 
 ### Configuration and tooling

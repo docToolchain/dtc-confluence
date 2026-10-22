@@ -7,6 +7,9 @@ package org.docToolchain.html2adoc.convert;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.jsoup.nodes.Element;
 
@@ -104,6 +107,75 @@ final class Tables {
         } catch (NumberFormatException e) {
             return 1;
         }
+    }
+
+    /**
+     * A width an author declared on a column, as an attribute or inside a style.
+     *
+     * <p>A decimal is read and then rounded, because AsciiDoc's colspec grammar takes integers
+     * only: a single decimal makes the whole specification unparsable, and asciidoctor then takes
+     * the column count from the first line of the table instead - one cell, because this converter
+     * writes one cell per line. A 33.3333/66.6667 table, which is what asciidoctor's own HTML for
+     * {@code cols="1,2"} says, came out as a single column with every cell on a row of its own.</p>
+     */
+    private static final Pattern DECLARED_WIDTH =
+            Pattern.compile("(\\d+(?:\\.\\d+)?)\\s*(%?)\\s*(?:!important)?");
+
+    /**
+     * The column widths the table declares, in order, or an empty list where it declares none.
+     *
+     * <p>A {@code <colgroup>} is how HTML states that a table is not evenly divided, and
+     * {@code cols="2*"} throws that away: a 30/70 table came out 50/50. Only taken where every
+     * column of the table declares one, because a partial list would be read as the whole shape
+     * and the columns left out would vanish.</p>
+     */
+    static List<String> declaredWidths(Element table) {
+        // Only a direct child: jsoup's table insertion mode reparents a colgroup to the table
+        // whatever the markup put it in - before thead, after it, inside thead or inside tbody.
+        List<Element> columns = table.select("> colgroup > col");
+        if (columns.isEmpty()) {
+            return List.of();
+        }
+        List<String> widths = new ArrayList<>();
+        for (Element column : columns) {
+            String width = widthOf(column);
+            if (width.isEmpty()) {
+                return List.of();
+            }
+            // <col span="2"> declares one width for that many columns, and the list has to carry
+            // one entry per column or it would be read as the whole shape of a narrower table.
+            for (int covered = span(column, "span"); covered > 0; covered--) {
+                widths.add(width);
+            }
+        }
+        return widths.size() == columnCount(table) ? widths : List.of();
+    }
+
+    /**
+     * @return the declared width of one column, {@code "30%"} or {@code "30"}, or empty
+     */
+    private static String widthOf(Element column) {
+        // The style first: a CSS width overrides the presentational attribute in a browser, so
+        // reading the attribute first would state the opposite of what a reader sees.
+        String style = styleWidth(column.attr("style"));
+        String declaration = style.isEmpty() ? column.attr("width") : style;
+        Matcher matcher = DECLARED_WIDTH.matcher(declaration.trim());
+        if (!matcher.matches()) {
+            return "";
+        }
+        return Math.round(Double.parseDouble(matcher.group(1))) + matcher.group(2);
+    }
+
+    private static String styleWidth(String style) {
+        for (String declaration : style.split(";")) {
+            String[] property = declaration.split(":", 2);
+            // Lower case: CSS property names are case-insensitive, and WIDTH: 30% is a width.
+            if (property.length == 2
+                    && "width".equals(property[0].trim().toLowerCase(Locale.ROOT))) {
+                return property[1].trim();
+            }
+        }
+        return "";
     }
 
     /**

@@ -52,6 +52,14 @@ Code
   * `LinkConverter`: the condition `isExternalLink(e) || isExternalLink(e)` is
     stated once, and the redundant second `addSpaceIfNeeded` call in each
     branch is gone - the first call already wrote the space.
+  * `Tables` gained `declaredWidths`, and `TableConverter` writes them in the `cols` attribute
+    where a `<colgroup>` divides the table unevenly. Upstream wrote the column count alone, which
+    is N equal columns, so a 30/70 table came out 50/50. Only where every column declares a
+    width, because a partial list would be read as the whole shape; a `span` is expanded, since
+    one `<col>` may declare the width of several columns. Each width is rounded to an integer,
+    which is all AsciiDoc's colspec takes - one decimal makes the whole specification unparsable
+    and the table collapses into a single column. A CSS `width` is preferred over the
+    presentational attribute, as a browser prefers it.
   * `ImageConverter` writes the image's `alt`, `width`, `height` and `align` as named attributes.
     Upstream read only the `src` and wrote an empty list, so the size an author set and the
     alignment they chose were dropped. Named rather than positional, because a width written

@@ -54,7 +54,7 @@ Counted below from the rendered HTML of each page, with the `== <title>` line th
 Both converters render the list title and the table header row on every page that has one, so neither appears above.
 
 Read in one line: the native converter is the only one that produces working links at all, and the lists and the images now agree - what the table counted as native's defects, a flat list and a missing block image, are closed.
-What the counts cannot show is where the two still part: the declared widths of a table's columns, one sentence per line, and the escaping of a span that spreads over two text nodes.
+What the counts cannot show is where the two still part: one sentence per line, and the escaping of a span that spreads over two text nodes.
 
 == Page by page
 
@@ -357,10 +357,14 @@ Footnote
 . A note belonging to the second page.
 ----
 
-*The table. A tie here, pandoc in general.*
+*The table. A tie.*
 The two forms render byte-identical HTML, header row and 50/50 columns included, because `+cols="2*"+` and `cols="50%,50%"` mean the same thing for two columns.
-They stop meaning the same thing the moment the widths are not equal: native measures the column count from the cells and discards `<col style="width: …">`, so a 30/70 table would come out 50/50.
-The corpus has no such table, so this is a gap rather than an observed defect.
+They stopped meaning the same thing the moment the widths were not equal, and native discarded the `<col style="width: …">` that says so: a 30/70 table came out 50/50, which `asciidoctor` confirms - `+cols="2*"+` renders `width: 50%` twice.
+`Tables.declaredWidths` now reads the colgroup, and `TableConverter` writes the widths where they say something `N*` does not. Equal widths are left to `+N*+`, which already states them, so the corpus output is unchanged.
+Each width is rounded to an integer, because that is all AsciiDoc's colspec takes: one decimal makes the whole specification unparsable, and asciidoctor then counts the columns from the first line of the table - one cell, since this converter writes one to a line - so the table came out as a single column with every cell on a row of its own.
+That is not an exotic input: `33.3333%` is what asciidoctor's own HTML says for `+cols="1,2"+`, so any uneven table published from AsciiDoc and exported again carried it.
+
+One place the widths provably do not arrive: `AdocOutput.rowHeaderTables` replaces the attribute line of a table whose first column is a header with `+[cols="h,1,1,…"]+`, because a table carries one colspec and that one states the row header.
 
 *The image. A tie on the block, pandoc on the attributes.*
 This was the worst native defect when the report was first written.
@@ -385,7 +389,7 @@ href="../docToolchain_Confluence_Smoke_Test/First_Page.html#</em>footnotedef_1"
 Neither node contains a closing `+__+`, so neither is escaped - and then both land on the same output line, where `asciidoctor` pairs them up as unconstrained emphasis and eats them.
 The escaping is decided per node and the markup is parsed per line, and the two disagree.
 
-What native cannot do yet: block images, image attributes, non-uniform column widths, and escaping that accounts for what the neighbouring nodes will write on the same line.
+What native cannot do yet: escaping that accounts for what the neighbouring nodes will write on the same line.
 
 === smoke-subpages-1-First_Page.html
 
@@ -501,7 +505,6 @@ Both render the same; it only makes the exported file easier to read and to diff
 
 === What pandoc still does better
 
-* *Declared column widths.* Native discards `<col style="width: …">`. No corpus table is affected, because all of them are equal-width.
 * *Preserved line breaks.* `--wrap preserve` keeps one sentence per line; native joins the paragraph into one line.
 
 === Are the placeholder tokens still needed?
@@ -533,7 +536,6 @@ That is the shape to aim at for the remaining tokens: an anchor, an admonition a
 
 In the order the corpus argues for, smallest first.
 
-. *Column widths.* `TableConverter` measures the column count from the cells; it would have to read `<colgroup>` where one is present.
 . *Escaping across node boundaries.* The `+__+` corruption needs `AdocText` to escape against the output line rather than against the text node. The context already carries what was written last, so the information is there; the decision is made in the wrong place.
 
 None of these is architectural.

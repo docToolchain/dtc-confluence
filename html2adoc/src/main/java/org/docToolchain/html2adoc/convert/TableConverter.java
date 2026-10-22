@@ -5,6 +5,8 @@
  */
 package org.docToolchain.html2adoc.convert;
 
+import java.util.List;
+
 import org.docToolchain.html2adoc.Html2Adoc;
 import org.docToolchain.html2adoc.context.ContextBuilder;
 import org.docToolchain.html2adoc.context.IContext;
@@ -39,12 +41,33 @@ public class TableConverter extends AbstractConverter {
         return false;
     }
 
+    /**
+     * Whether the widths say no more than the column count does: none declared, or all equal.
+     *
+     * <p>Compared as strings, which is enough because a width is rounded to an integer before it
+     * gets here: {@code 30%} and {@code 30.0%} both arrive as {@code 30%}. Unrounded they were
+     * two different strings, so an evenly divided table looked uneven and its widths were written
+     * out - with a decimal in them, which AsciiDoc cannot read.</p>
+     */
+    private static boolean isEvenlyDivided(List<String> widths) {
+        return widths.isEmpty() || widths.stream().distinct().count() == 1;
+    }
+
     @Override
     public IContext convert(IContext context, Node node, StringBuilder sb) {
         startBlock(sb);
         Element table = (Element) node;
         String delimiter = Tables.separator(Tables.nestingDepth(table)) + "===";
-        sb.append("[cols=\"").append(Tables.columnCount(table)).append("*\"");
+        // The widths the table declares, where they say something "N*" does not. "N*" is N equal
+        // columns, so a colgroup of equal widths is already stated by it and writing the
+        // percentages out would only make the source longer. An uneven one is not: a 30/70 table
+        // came out 50/50, which is what this reads the colgroup for.
+        List<String> widths = Tables.declaredWidths(table);
+        sb.append("[cols=\"")
+                .append(isEvenlyDivided(widths)
+                        ? Tables.columnCount(table) + "*"
+                        : String.join(",", widths))
+                .append("\"");
         if (isHeaderRow(Tables.rows(table).get(0))) {
             sb.append(", options=\"header\"");
         }

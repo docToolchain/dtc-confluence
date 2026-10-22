@@ -51,7 +51,7 @@ checked against a run of the seeded converter over this corpus.
 | `sup` | 7 | 4 | handled | `SuperscriptConverter` writes `^…^`; every `sup` here is a footnote marker, see *Gaps* |
 | `ul` | 6 | 3 | handled | `ListConverter` |
 | `br` | 4 | 2 | handled | `BrConverter` writes a space, not an AsciiDoc hard break |
-| `col` | 4 | 2 | not needed | carries only `style="width: 50%;"`; the column count is measured from the cells instead |
+| `col` | 4 | 2 | handled | read for the declared width; equal widths are left to `cols="N*"` |
 | `hr` | 4 | 4 | handled | `HorizontalRuleConverter` writes `'''` on a line of its own |
 | `td` | 4 | 2 | handled | `TableTdConverter`; every cell here is the `<td><p class="tableblock">…</p></td>` that Confluence writes, which the converter reads as one line of text and not as a block |
 | `th` | 4 | 2 | handled | `TableTdConverter` |
@@ -60,7 +60,7 @@ checked against a run of the seeded converter over this corpus.
 | `em` | 3 | 3 | handled | `EmphasisConverter` |
 | `h1` | 3 | 2 | handled | `HeaderConverter` |
 | `strong` | 3 | 3 | handled | `StrongConverter` |
-| `colgroup` | 2 | 2 | not needed | wrapper of `col` |
+| `colgroup` | 2 | 2 | handled | wrapper of `col`, read by `Tables.declaredWidths` |
 | `img` | 2 | 2 | handled | `ImageConverter`, with `alt`, `width`, `height`, `align` |
 | `table` | 2 | 2 | handled | `TableConverter` writes `[cols="n*"]` and the delimiters, so every row lands inside the block — including a `thead` row, which the block opened by `tbody` used to escape |
 | `tbody` | 2 | 2 | handled | `TransparentConverter`; the delimiters it used to write moved to `TableConverter` |
@@ -73,7 +73,7 @@ checked against a run of the seeded converter over this corpus.
 | --- | --- | --- | --- | --- |
 | `class` | 45 | `div`, `p`, `sup`, `table`, `td`, `th` | not needed | no converter reads it; the block semantics it carries are the evidence under *Gaps* |
 | `id` | 10 | `div`, `h1`, `h2` | not needed | every one of them is also present as a `%%ANCHOR%%` token, which is what the export turns into an AsciiDoc anchor |
-| `style` | 4 | `col` | not needed | `width: 50%;` only |
+| `style` | 4 | `col` | handled | the `width` in it is read; nothing else of a style is |
 | `src` | 2 | `img` | handled | `ImageConverter` |
 | `align` | 2 | `img` | handled | `center`, written for a block image |
 | `width` | 2 | `img` | handled | `64`, written as a named attribute |

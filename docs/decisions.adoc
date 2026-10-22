@@ -547,12 +547,15 @@ It dropped the space after a comma before an inline span, which changes the word
 It discards declared column widths, so a 30/70 table would come out 50/50.
 And `--wrap preserve` keeps one sentence per line where native joins the paragraph.
 
-Four of those six are closed since, which is recorded here rather than by rewriting the list above - the measurement is what it was, and the entry is the record of a decision taken on it.
+All six are closed since, which is recorded here rather than by rewriting the list above - the measurement is what it was, and the entry is the record of a decision taken on it.
 The block image is written where the image opens a line, so both images in the corpus are block images on both paths.
 The space is taken from the text node's own whitespace rather than guessed from a character class, which also uncovered two older defects: a space written onto a line already begun, and `lineStarted` lost across an inline element.
 And `Html2Adoc.convert(node, topLevel)` shifts every heading of a fragment by the same amount, so the page's sections sit under its title - here native is now the one that is right, and pandoc writes the sibling.
 A nested list is written at its own depth, which also brought out that an item holding nothing but a nested list wrote a marker with no text - not a list item at all, so the list began at the nested item and the outer items became children of it.
-The column widths, the image attributes and the preserved line breaks are still open; `docs/html2adoc-poc.adoc` carries the current state construct by construct.
+The column widths are read from the `<colgroup>`, rounded to the integers AsciiDoc's colspec takes - a decimal makes the whole specification unparsable, and asciidoctor then counts the columns from the first line of the table, which is one cell wide here, so a 33.3333/66.6667 table collapsed into a single column.
+The image attributes are written by name.
+What is still open is the escaping of an inline span that spreads over two text nodes, and `--wrap preserve`: pandoc keeps one sentence per line where native joins the paragraph.
+`docs/html2adoc-poc.adoc` carries the current state construct by construct.
 
 The placeholder tokens are mostly not made unnecessary by any of this, which was not the expected answer.
 A line beginning `+[[id]]+` is an inline anchor to AsciiDoc whoever wrote it, so `%%ANCHOR%%` is needed just the same, and the measurement added one, `%%BLOCK-TITLE%%`.
