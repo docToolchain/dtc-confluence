@@ -554,7 +554,8 @@ And `Html2Adoc.convert(node, topLevel)` shifts every heading of a fragment by th
 A nested list is written at its own depth, which also brought out that an item holding nothing but a nested list wrote a marker with no text - not a list item at all, so the list began at the nested item and the outer items became children of it.
 The column widths are read from the `<colgroup>`, rounded to the integers AsciiDoc's colspec takes - a decimal makes the whole specification unparsable, and asciidoctor then counts the columns from the first line of the table, which is one cell wide here, so a 33.3333/66.6667 table collapsed into a single column.
 The image attributes are written by name.
-What is still open is the escaping of an inline span that spreads over two text nodes, and `--wrap preserve`: pandoc keeps one sentence per line where native joins the paragraph.
+The escaping of an inline span that spreads over two text nodes turned out not to be an escaping question at all: the `+__+` that broke four footnote links was an anchor id written with one underscore too many, and no escaping of it works - a backslash is consumed where it prevents markup and printed where it does not. `AdocOutput.anchorId` spells an id so that it cannot be markup, which is a fix to the shipping export rather than to the converter.
+What is still open is `--wrap preserve`: pandoc keeps one sentence per line where native joins the paragraph.
 `docs/html2adoc-poc.adoc` carries the current state construct by construct.
 
 The placeholder tokens are mostly not made unnecessary by any of this, which was not the expected answer.

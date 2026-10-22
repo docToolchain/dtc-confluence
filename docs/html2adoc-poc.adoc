@@ -167,7 +167,7 @@ Inline formatting, a footnote reference, and a titled list with one nested item.
 ----
 <p></p><p>A paragraph with <strong>bold</strong>, <em>italic</em> and <code>monospace</code>.<sup class="footnote">[
 <p>%%ANCHOR%%_footnoteref_1%%ANCHOR-END%%</p>
- xref:../docToolchain_Confluence_Smoke_Test/First_Page.adoc#__footnotedef_1[1] ]</sup></p>
+ xref:../docToolchain_Confluence_Smoke_Test/First_Page.adoc#_footnotedef_1[1] ]</sup></p>
 
 %%BLOCK-TITLE%%A list%%BLOCK-TITLE-END%%
 <ul>
@@ -189,7 +189,7 @@ Inline formatting, a footnote reference, and a titled list with one nested item.
 <div class="footnotes"><hr />
 <p>%%ANCHOR%%_footnotedef_1%%ANCHOR-END%%</p>
 <div class="footnote" id="_footnotedef_1">Footnote
- xref:../docToolchain_Confluence_Smoke_Test/First_Page.adoc#__footnoteref_1[1] . A note belonging to the first page.
+ xref:../docToolchain_Confluence_Smoke_Test/First_Page.adoc#_footnoteref_1[1] . A note belonging to the first page.
 </div></div>
 ----
 
@@ -199,7 +199,7 @@ pandoc:
 ----
 A paragraph with *bold*, _italic_ and `monospace`.^++[++^
 
-[[__footnoteref_1]]
+[[_footnoteref_1]]
 xref:../docToolchain++_++Confluence++_++Smoke++_++Test/First++_++Page.adoc++#__++footnotedef++_++1++[++1++]++ ++]++
 
 .A list
@@ -209,7 +209,7 @@ xref:../docToolchain++_++Confluence++_++Smoke++_++Test/First++_++Page.adoc++#__+
 
 '''''
 
-[[__footnotedef_1]]
+[[_footnotedef_1]]
 [[_footnotedef_1]]
 Footnote
 xref:../docToolchain++_++Confluence++_++Smoke++_++Test/First++_++Page.adoc++#__++footnoteref++_++1++[++1++]++ . A note belonging to the first page.
@@ -221,8 +221,8 @@ native:
 ----
 A paragraph with *bold*,_italic_ and `monospace`. ^[^
 
-[[__footnoteref_1]]
-xref:../docToolchain_Confluence_Smoke_Test/First_Page.adoc#__footnotedef_1[1] ]
+[[_footnoteref_1]]
+xref:../docToolchain_Confluence_Smoke_Test/First_Page.adoc#_footnotedef_1[1] ]
 
 .A list
 * First item
@@ -234,8 +234,8 @@ xref:../docToolchain_Confluence_Smoke_Test/First_Page.adoc#__footnotedef_1[1] ]
 
 '''
 
-[[__footnotedef_1]]
-Footnote xref:../docToolchain_Confluence_Smoke_Test/First_Page.adoc#__footnoteref_1[1] . A note belonging to the first page.
+[[_footnotedef_1]]
+Footnote xref:../docToolchain_Confluence_Smoke_Test/First_Page.adoc#_footnoteref_1[1] . A note belonging to the first page.
 ----
 
 Four differences matter here, and they do not point the same way.
@@ -252,14 +252,14 @@ xref:../docToolchain++_++Confluence++_++Smoke++_++Test/First++_++Page.adoc++#__+
 
 [source,html]
 ----
-<p>xref:../docToolchain_Confluence_Smoke_Test/First_Page.adoc#__footnotedef_1[1] ]</p>
+<p>xref:../docToolchain_Confluence_Smoke_Test/First_Page.adoc#_footnotedef_1[1] ]</p>
 ----
 
 Native passes it through, and the same input renders as a link:
 
 [source,html]
 ----
-<p><a href="../docToolchain_Confluence_Smoke_Test/First_Page.html#__footnotedef_1">1</a> ]</p>
+<p><a href="../docToolchain_Confluence_Smoke_Test/First_Page.html#_footnotedef_1">1</a> ]</p>
 ----
 
 This is not a matter of taste.
@@ -277,8 +277,9 @@ It now takes the node's own leading and trailing whitespace as well, which is wh
 
 *The thematic break and the duplicate anchor. Neither.*
 Native writes `'''` and pandoc `'''''`; both render as `<hr>`.
-pandoc writes a second anchor from the `id` attribute of the footnote `div` (`+[[_footnotedef_1]]+` beside `+[[__footnotedef_1]]+`), native writes only the one the token asked for.
-That is noise rather than an error, except that `asciidoctor` then gives the element the *second* id, so pandoc's rendered anchor is `+_footnotedef_1+` while the `xref:` in the document names `+__footnotedef_1+` - a second reason the pandoc footnotes would not resolve even if they were links.
+pandoc writes a second anchor from the `id` attribute of the footnote `div`, native writes only the one the token asked for.
+Both are `+[[_footnotedef_1]]+` since the id fix, so the duplicate is harmless: `asciidoctor` emits one element with that id and no warning.
+Before it, the two spellings differed - `+_footnotedef_1+` against `+__footnotedef_1+` - which was a second reason the pandoc footnotes would not have resolved even if they were links.
 
 What native cannot do yet on this page: nothing that is measured here.
 
@@ -314,7 +315,7 @@ pandoc, with the footnote `xref:` lines shortened:
 |Cell 1 a|
 Cell 2^++[++^
 
-[[__footnoteref_2]]
+[[_footnoteref_2]]
 // two escaped xref: directives, as on the page above, omitted here
 
 |===
@@ -323,7 +324,7 @@ image::{filepath}/1_[{filepath}/1++_++,width=64]
 
 '''''
 
-[[__footnotedef_2]]
+[[_footnotedef_2]]
 [[_footnotedef_2]]
 Footnote
 // one escaped xref: directive omitted here
@@ -344,14 +345,14 @@ native, shortened the same way:
 a|
 Cell 2 ^[^
 
-[[__footnoteref_2]]
+[[_footnoteref_2]]
 // two unescaped xref: directives omitted here
 |===
  image::{filepath}/1_[]
 
 '''
 
-[[__footnotedef_2]]
+[[_footnotedef_2]]
 Footnote
 // one unescaped xref: directive omitted here
 . A note belonging to the second page.
@@ -376,8 +377,8 @@ pandoc keeps the width, loses the alignment, and invents an alt text out of the 
 Native writes the attributes HTML actually carries, by name, and no alt text where the page set none.
 `align` only on a block image, because an inline one has no alignment in AsciiDoc and the attribute would be dead weight - and in lower case, because `align=center` becomes the role `text-center` and an HTML author may write `ALIGN="CENTER"`, which no stylesheet has a rule for.
 
-*Two footnote markers in one cell. Neither, but native breaks here.*
-On this page native's links are not all sound:
+*Two footnote markers in one cell. A tie, and this is where the last of native's broken links was.*
+Native's links on this page used to read:
 
 [source,html]
 ----
@@ -385,11 +386,15 @@ href="../docToolchain_Confluence_Smoke_Test/Second_Page.html#<em>footnotedef_2"
 href="../docToolchain_Confluence_Smoke_Test/First_Page.html#</em>footnotedef_1"
 ----
 
-`AdocText` decides what to escape per HTML text node, and each of the two `<sup>` elements is a text node of its own holding one `+__+`.
-Neither node contains a closing `+__+`, so neither is escaped - and then both land on the same output line, where `asciidoctor` pairs them up as unconstrained emphasis and eats them.
-The escaping is decided per node and the markup is parsed per line, and the two disagree.
+The diagnosis this report gave was that `AdocText` decides what to escape per HTML text node while the markup is parsed per line: each `<sup>` is a text node holding one `+__+`, neither closes within its own node, and both then land on one line where `asciidoctor` pairs them.
+The first half is true and the remedy that follows from it is not.
+There is no escaping that works: a backslash is consumed where it prevents markup and printed where it does not, so escaping both runs leaves the second target reading `+#\__footnotedef_1+`, escaping one leaves the other paired, and a passthrough around the target stops the macro being a macro. All four measured with `asciidoctor` 2.0.26.
 
-What native cannot do yet: escaping that accounts for what the neighbouring nodes will write on the same line.
+The id was the defect, not the escaping. Every anchor id was written with a leading underscore, and AsciiDoctor's own ids already have one, so `+_footnotedef_1+` became `+__footnotedef_1+` - markup, in a document that writes two of them on one line.
+`AdocOutput.anchorId` now spells an id so that it cannot be markup, and the four dead links are gone: 12 anchor links on the native path, none of them corrupted.
+That is a fix to the shipping export rather than to this converter, which is why it is on `develop` and not here.
+
+What native cannot do yet on this page: nothing that is measured here.
 
 === smoke-subpages-1-First_Page.html
 
