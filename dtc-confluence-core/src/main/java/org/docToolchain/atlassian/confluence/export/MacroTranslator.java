@@ -215,10 +215,8 @@ class MacroTranslator {
         String link = "../".repeat(folders(pageId, "adocFilename").size())
                 + joinPath(String.join("/", targetFolders), name + ".adoc");
         if (!anchor.isEmpty()) {
-            // Every anchor id is written with a leading underscore (see AdocOutput), because
-            // AsciiDoc and HTML want an id to start with a letter or an underscore. A reference
-            // to one has to be spelled the same way.
-            link += "#_" + anchor;
+            // Spelled by the same rule as the anchor it points at, underscore included.
+            link += "#" + AdocOutput.anchorId(anchor);
         }
         element.before(" xref:" + link + "[" + linkText + "] ");
         element.remove();
