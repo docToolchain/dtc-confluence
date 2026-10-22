@@ -497,7 +497,7 @@ So correct nesting inside a page costs one level of the depth available across p
 
 What is not decided, and is left open deliberately:
 
-* *Accept and document it.* A tree three levels deep with four body heading levels is the first shape that overflows. Cheapest, and it leaves a silent defect for whoever meets it.
+* *Accept and document it.* Three pages deep - a root, a child, a grandchild - and three heading levels in the deepest page's body is the first shape that overflows, which is what the measurement above shows: `h5`, `h6`, `h7`. Cheapest, and it leaves a silent defect for whoever meets it.
 * *Spend the title's level.* Write each page's title as `= Title` rather than `== Title` - which is what a file read on its own wants anyway - and let `leveloffset` place it. That returns one level and is a change to the shipping pandoc path as well.
 * *Demote the body instead.* Keep the title where it is and have the converter write the page's headings relative to the remaining budget, which means the converter has to know the page's depth in the tree.
 
