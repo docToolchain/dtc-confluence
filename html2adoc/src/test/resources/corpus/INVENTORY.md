@@ -61,7 +61,7 @@ checked against a run of the seeded converter over this corpus.
 | `h1` | 3 | 2 | handled | `HeaderConverter` |
 | `strong` | 3 | 3 | handled | `StrongConverter` |
 | `colgroup` | 2 | 2 | not needed | wrapper of `col` |
-| `img` | 2 | 2 | handled | `ImageConverter`, `src` only |
+| `img` | 2 | 2 | handled | `ImageConverter`, with `alt`, `width`, `height`, `align` |
 | `table` | 2 | 2 | handled | `TableConverter` writes `[cols="n*"]` and the delimiters, so every row lands inside the block — including a `thead` row, which the block opened by `tbody` used to escape |
 | `tbody` | 2 | 2 | handled | `TransparentConverter`; the delimiters it used to write moved to `TableConverter` |
 | `thead` | 2 | 2 | handled | `TransparentConverter` for its rows, and `TableConverter` reads it as the `options="header"` of the table |
@@ -75,8 +75,8 @@ checked against a run of the seeded converter over this corpus.
 | `id` | 10 | `div`, `h1`, `h2` | not needed | every one of them is also present as a `%%ANCHOR%%` token, which is what the export turns into an AsciiDoc anchor |
 | `style` | 4 | `col` | not needed | `width: 50%;` only |
 | `src` | 2 | `img` | handled | `ImageConverter` |
-| `align` | 2 | `img` | **missing** | `center`, dropped |
-| `width` | 2 | `img` | **missing** | `64`, dropped |
+| `align` | 2 | `img` | handled | `center`, written for a block image |
+| `width` | 2 | `img` | handled | `64`, written as a named attribute |
 
 ## Placeholder tokens
 

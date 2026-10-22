@@ -52,6 +52,15 @@ Code
   * `LinkConverter`: the condition `isExternalLink(e) || isExternalLink(e)` is
     stated once, and the redundant second `addSpaceIfNeeded` call in each
     branch is gone - the first call already wrote the space.
+  * `ImageConverter` writes the image's `alt`, `width`, `height` and `align` as named attributes.
+    Upstream read only the `src` and wrote an empty list, so the size an author set and the
+    alignment they chose were dropped. Named rather than positional, because a width written
+    without an alt in front of it would be read as the alt text. A quotation mark, an attribute
+    reference and - inside an inline macro only - a `]` are escaped rather than removed, since
+    AsciiDoc honours `\"`, `\{` and `\]`; blank space in a value is folded, because a newline
+    would end the macro. `align` is written only for a block image, in lower case and only where
+    it is one of the three AsciiDoc builds a role from: an inline image has no alignment, and
+    `ALIGN="CENTER"` would otherwise become the role `text-CENTER`, which no stylesheet has.
   * `ListConverter` counts one list deeper than the list it stands in, and `ListItemConverter`
     writes as many markers as that depth. `IContext`, `Context` and `ContextBuilder` carry it.
     Upstream recorded only which kind of list an item was in, so a `<ul>` inside an `<li>` wrote

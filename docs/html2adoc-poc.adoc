@@ -54,7 +54,7 @@ Counted below from the rendered HTML of each page, with the `== <title>` line th
 Both converters render the list title and the table header row on every page that has one, so neither appears above.
 
 Read in one line: the native converter is the only one that produces working links at all, and the lists and the images now agree - what the table counted as native's defects, a flat list and a missing block image, are closed.
-What the counts cannot show is where the two still part: the attributes of an image, the declared widths of a table's columns, one sentence per line, and the escaping of a span that spreads over two text nodes.
+What the counts cannot show is where the two still part: the declared widths of a table's columns, one sentence per line, and the escaping of a span that spreads over two text nodes.
 
 == Page by page
 
@@ -367,8 +367,10 @@ This was the worst native defect when the report was first written.
 Native wrote the image inline, indented by the space that separates an inline image from the words before it - and an indented line is a literal block, so `asciidoctor` printed the directive as text and the image did not appear at all.
 `ImageConverter` now asks whether the image opens a line rather than which element happens to hold it, which is what decides between the two forms, and both images in the corpus are block images on both paths.
 
-What remains is the attributes: pandoc keeps `width=64`, native drops it along with `align=center`.
-pandoc's own blemish here is that its escaping leaks into the alt text, `pass:[alt="1++_++"]`, where native writes no alt text at all.
+The attributes are native's now as well, and more of them: `+image::…[width="64",align="center"]+` against pandoc's `+image::…[…,width=64]+`.
+pandoc keeps the width, loses the alignment, and invents an alt text out of the file name - which is how the escaping leaks into it as `pass:[alt="1++_++"]`.
+Native writes the attributes HTML actually carries, by name, and no alt text where the page set none.
+`align` only on a block image, because an inline one has no alignment in AsciiDoc and the attribute would be dead weight - and in lower case, because `align=center` becomes the role `text-center` and an HTML author may write `ALIGN="CENTER"`, which no stylesheet has a rule for.
 
 *Two footnote markers in one cell. Neither, but native breaks here.*
 On this page native's links are not all sound:
@@ -462,7 +464,7 @@ The rest of this page differs as the smaller pages do.
 Counted on the AsciiDoc both converters produced: 3 headings each, 1 block image each, and 3 list items each in two nested lists each - the structures agree construct for construct on this page.
 Native's links are the sound ones, pandoc's `xref:` are escaped into prose; 2 of native's carry the `+__+` corruption described above.
 
-What native cannot do yet on this page: the attributes of the image.
+What native cannot do yet on this page: nothing that is measured here.
 
 == Summary
 
@@ -499,7 +501,6 @@ Both render the same; it only makes the exported file easier to read and to diff
 
 === What pandoc still does better
 
-* *Image attributes.* `width` survives pandoc and not native; `align` survives neither.
 * *Declared column widths.* Native discards `<col style="width: …">`. No corpus table is affected, because all of them are equal-width.
 * *Preserved line breaks.* `--wrap preserve` keeps one sentence per line; native joins the paragraph into one line.
 
@@ -532,7 +533,6 @@ That is the shape to aim at for the remaining tokens: an anchor, an admonition a
 
 In the order the corpus argues for, smallest first.
 
-. *Image attributes.* `width` and `align` are dropped by `ImageConverter`, which reads `src` only.
 . *Column widths.* `TableConverter` measures the column count from the cells; it would have to read `<colgroup>` where one is present.
 . *Escaping across node boundaries.* The `+__+` corruption needs `AdocText` to escape against the output line rather than against the text node. The context already carries what was written last, so the information is there; the decision is made in the wrong place.
 

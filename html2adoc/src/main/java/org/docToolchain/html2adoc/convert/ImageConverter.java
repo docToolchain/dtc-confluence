@@ -5,6 +5,12 @@
  */
 package org.docToolchain.html2adoc.convert;
 
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.StringJoiner;
+import java.util.regex.Pattern;
+
 import org.docToolchain.html2adoc.context.IContext;
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
@@ -18,6 +24,17 @@ import org.jsoup.nodes.TextNode;
  * inside a table cell where a block image would break the cell, is inline.</p>
  */
 public class ImageConverter extends AbstractConverter {
+
+    /** The alignments AsciiDoc builds a role out of. */
+    private static final Set<String> ALIGNMENTS = Set.of("left", "center", "right");
+
+    /** Any run of blank space, which a value cannot carry: a newline in it ends the macro. */
+    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
+
+    /** What AsciiDoc resolves when the page is rendered, as {@code AdocText} spells it. */
+    private static final Pattern ATTRIBUTE_REFERENCE =
+            Pattern.compile("\\{(?:\\w[\\w-]*|(?:set|counter2?):[^}]+)}");
+
 
     @Override
     public boolean canConvert(IContext context, Node node) {
@@ -39,7 +56,7 @@ public class ImageConverter extends AbstractConverter {
             sb.append(" image:");
         }
         sb.append(element.attr("src"));
-        sb.append("[]");
+        sb.append(attributesOf(element, imageBloc));
         if (imageBloc) {
             sb.append("\n");
             if ("body".equals(parent.tagName())) {
@@ -102,6 +119,62 @@ public class ImageConverter extends AbstractConverter {
         return true;
     }
 
+    /**
+     * The attribute list, named rather than positional.
+     *
+     * <p>Upstream wrote {@code []} and read only the {@code src}, so the size an author set and
+     * the alignment they chose were dropped: a 64-pixel icon came out at its full size. Named
+     * because the positional order of an image's attributes is alt, width, height, and a width
+     * written without an alt before it would be read as the alt text.</p>
+     *
+     * <p>No alt text is invented where the HTML has none. pandoc derives one from the file name,
+     * which is how {@code alt="1++_++"} reaches an exported page.</p>
+     */
+    private String attributesOf(Element image, boolean imageBloc) {
+        StringJoiner attributes = new StringJoiner(",", "[", "]");
+        for (String name : List.of("alt", "width", "height", "align")) {
+            String value = value(image, name, imageBloc);
+            if (!value.isEmpty()) {
+                attributes.add(name + "=\"" + value + "\"");
+            }
+        }
+        return attributes.toString();
+    }
+
+    /** @return the attribute's value, ready to stand in a quoted attribute list, or empty */
+    private String value(Element image, String name, boolean imageBloc) {
+        String value = WHITESPACE.matcher(image.attr(name)).replaceAll(" ").trim();
+        if ("align".equals(name)) {
+            // Lower case and only the three AsciiDoc builds a role from: it turns align=center
+            // into the role text-center, and HTML lets an author write ALIGN="CENTER", which
+            // would become text-CENTER - a role no stylesheet has a rule for. An inline image
+            // has no alignment at all, so the attribute is left off rather than written dead.
+            String alignment = value.toLowerCase(Locale.ROOT);
+            return imageBloc && ALIGNMENTS.contains(alignment) ? alignment : "";
+        }
+        return escaped(value, imageBloc);
+    }
+
+    /**
+     * Escapes what AsciiDoc would otherwise read as something else.
+     *
+     * <p>A quotation mark ends the value and an attribute reference is resolved when the page is
+     * rendered - a counter in an alt text is even incremented. Both have an escape, {@code \"}
+     * and {@code \{}, and both are honoured. A {@code ]} ends an *inline* macro's attribute list
+     * and needs escaping there; in a block macro the list is the whole line, where an escaped
+     * {@code ]} would print its backslash, so it is left alone. A backslash of the author's own
+     * needs nothing - written raw it comes out raw, while doubling it prints both - except at the
+     * very end, where it would escape the quotation mark that closes the value.</p>
+     */
+    private String escaped(String value, boolean imageBloc) {
+        String escaped = ATTRIBUTE_REFERENCE.matcher(value).replaceAll("\\\\$0")
+                .replace("\"", "\\\"");
+        if (!imageBloc) {
+            escaped = escaped.replace("]", "\\]");
+        }
+        return escaped.endsWith("\\") ? escaped.substring(0, escaped.length() - 1) : escaped;
+    }
+
     private boolean isNotInsideATable(Element parent) {
         Element e = parent;
         while (e != null) {
@@ -113,24 +186,4 @@ public class ImageConverter extends AbstractConverter {
         return true;
     }
 
-    /** Whether {@code parent} holds exactly this one image and, apart from it, only empty space. */
-    private boolean hasNoOtherChild(Element parent) {
-        if (parent.childNodeSize() == 1) {
-            return true;
-        }
-        int images = 0;
-        for (Node n : parent.childNodes()) {
-            if (n instanceof TextNode) {
-                if (!isBlankOrNoBreakSpace(((TextNode) n).text())) {
-                    return false;
-                }
-            } else if (n instanceof Element) {
-                if (!"img".equals(((Element) n).tagName())) {
-                    return false;
-                }
-                images = images + 1;
-            }
-        }
-        return images == 1;
-    }
 }
