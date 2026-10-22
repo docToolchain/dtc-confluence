@@ -1,6 +1,9 @@
 package org.docToolchain.atlassian.confluence.export;
 
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -49,6 +52,50 @@ final class AdocOutput {
     private static final Pattern STATUS = Pattern.compile(
             "%%STATUS-BEGIN-(\\w+)%%([\\s\\S]*?)%%STATUS-END%%");
 
+    /** What the placeholder scheme can carry: hyphens, never underscores, which pandoc escapes. */
+    static final String EMOTICON_NAME = "[a-z0-9][a-z0-9-]*";
+
+    private static final Pattern EMOTICON = Pattern.compile("%%EMOTICON-(" + EMOTICON_NAME + ")%%");
+
+    private static final Pattern EMOTICON_REFERENCE =
+            Pattern.compile("\\{emoticon-(" + EMOTICON_NAME + ")}");
+
+    /**
+     * What an emoticon stands for unless the document says otherwise.
+     *
+     * <p>The glyph Confluence's own icon shows, where Unicode has it as a plain symbol and the
+     * emoticon is read as data rather than as decoration; otherwise the {@code alt} text the
+     * server itself offers a reader who cannot see the image. The storage format carries no
+     * {@code alt}, so these were read off a Confluence DC 9.2 instance, one page holding all 22
+     * emoticons of the editor's palette - see {@code examples/emoticon-alt-text}. Thirteen of the
+     * 22 are not their own {@code alt}, which is why this is a table and not a rule.</p>
+     *
+     * <p>A name that is not here falls back to its own name in parentheses. That is the
+     * {@code alt} text for the remaining seven palette names - {@code question}, {@code plus},
+     * {@code minus}, {@code smile}, {@code sad}, {@code wink}, {@code heart} - and the best
+     * guess there is for a name from outside the palette.</p>
+     *
+     * <p>{@code +} and {@code -} are deliberately not used for {@code plus} and {@code minus}:
+     * alone on a line, which an emoticon in a cell of its own becomes, both are AsciiDoc
+     * markup.</p>
+     */
+    private static final Map<String, String> EMOTICON_DEFAULTS = Map.ofEntries(
+            Map.entry("tick", "✓"),
+            Map.entry("cross", "✗"),
+            Map.entry("warning", "⚠"),
+            Map.entry("cheeky", "(tongue)"),
+            Map.entry("laugh", "(big grin)"),
+            Map.entry("thumbs-up", "(thumbs up)"),
+            Map.entry("thumbs-down", "(thumbs down)"),
+            Map.entry("information", "(info)"),
+            Map.entry("light-on", "(lightbulb)"),
+            Map.entry("light-off", "(grey lightbulb)"),
+            Map.entry("yellow-star", "(star)"),
+            Map.entry("red-star", "(red star)"),
+            Map.entry("green-star", "(green star)"),
+            Map.entry("blue-star", "(blue star)"),
+            Map.entry("broken-heart", "(broken heart)"));
+
     private AdocOutput() {
     }
 
@@ -57,7 +104,10 @@ final class AdocOutput {
      * @return the same document with every placeholder spelled out as AsciiDoc
      */
     static String substitute(String adoc) {
-        return VerbatimBlocks.outside(adoc, AdocOutput::substituteOutsideListings);
+        return VerbatimBlocks.outside(adoc, masked -> {
+            String text = substituteOutsideListings(masked);
+            return emoticonDefinitions(text) + text;
+        });
     }
 
     private static String substituteOutsideListings(String adoc) {
@@ -77,6 +127,7 @@ final class AdocOutput {
         text = anchors(text);
         text = rowHeaderTables(text);
         text = statusBadges(text);
+        text = emoticons(text);
         // Pandoc writes "image:foo[]" even where the image stands on a line of its own, and
         // AsciiDoc needs "image::foo[]" for a block image. Anchored to the start of a line, so
         // that an image inside a sentence stays inline.
@@ -183,6 +234,55 @@ final class AdocOutput {
 
     private static String titleLine(String title) {
         return title == null || title.trim().isEmpty() ? "" : "." + title.trim() + "\n";
+    }
+
+    /**
+     * An emoticon as a reference to the attribute named after it, so that one
+     * {@code -a emoticon-tick=...} changes every one of them.
+     */
+    private static String emoticons(String adoc) {
+        return replaceAll(EMOTICON, adoc, matcher -> "{emoticon-" + matcher.group(1) + "}");
+    }
+
+    /**
+     * A default for every emoticon this page refers to, once each, and for no other.
+     *
+     * <p>Guarded by {@code ifndef::}, the idiom the page header already uses for
+     * {@code imagesdir}: the page renders on its own, and a value set from outside - on the
+     * command line, or in a document that includes this one - still wins.</p>
+     *
+     * <p>Collected from the references this step just wrote rather than from the placeholders
+     * that went into it, and called from inside the masking of verbatim blocks, so that an
+     * emoticon shown in a code sample - a page of ours documenting this very export would have
+     * one - gets neither a substitution nor a definition nothing reads.</p>
+     *
+     * <p>A name already defined in the text is left alone, which keeps a second pass over an
+     * exported page from stacking definitions on the first one's.</p>
+     *
+     * <p>They are written in front of the converted body, which puts them below the page heading
+     * rather than in the document header. An attribute entry is read wherever it stands, and
+     * standing where it does, it is next to the content that needs it.</p>
+     */
+    private static String emoticonDefinitions(String adoc) {
+        Set<String> names = new TreeSet<>();
+        Matcher references = EMOTICON_REFERENCE.matcher(adoc);
+        while (references.find()) {
+            String name = references.group(1);
+            if (!adoc.contains("ifndef::emoticon-" + name + "[")) {
+                names.add(name);
+            }
+        }
+        if (names.isEmpty()) {
+            return "";
+        }
+        StringBuilder definitions = new StringBuilder();
+        for (String name : names) {
+            definitions.append("ifndef::emoticon-").append(name)
+                    .append("[:emoticon-").append(name).append(": ")
+                    .append(EMOTICON_DEFAULTS.getOrDefault(name, "(" + name + ")"))
+                    .append("]\n");
+        }
+        return definitions.append('\n').toString();
     }
 
     private static String replaceAll(Pattern pattern, String text,
