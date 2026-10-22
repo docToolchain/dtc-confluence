@@ -4,6 +4,10 @@ on:
   push:
     branches: [main, develop]
   pull_request:
+  # Startable by hand, which is what you need when a run never appears: a push or a pull
+  # request event is the only other way in, and an event GitHub does not deliver cannot be
+  # asked for again. Also the way to re-run against a branch after changing nothing.
+  workflow_dispatch:
 
 # Cancel superseded runs on the same ref (e.g. rapid pushes to a branch).
 concurrency:
