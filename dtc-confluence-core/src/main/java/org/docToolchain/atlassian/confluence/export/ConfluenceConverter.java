@@ -496,8 +496,13 @@ public class ConfluenceConverter {
             if (child == null) {
                 continue;
             }
+            // All in lower case, and only here is that the rule: an include directive's
+            // attribute list is matched literally against the names the directive knows, so
+            // "levelOffset" landed under a key nothing reads and was ignored without a word -
+            // every child page was included at the level it was written at rather than one below.
+            // Document attributes elsewhere are case-folded, so this says nothing about those.
             includes.add("include::" + parentName + "/" + adocNameOf(child)
-                    + ".adoc[levelOffset=+1]");
+                    + ".adoc[leveloffset=+1]");
         }
         if (includes.isEmpty()) {
             return "";

@@ -113,6 +113,11 @@ confluence:
 ----
 
 Below `destDir` it writes `docs/` with one file per page in folders mirroring the page tree, `docs/images/` with the attachments, and the `_menu.adoc` and `_config.adoc` a microsite reads.
+
+Each page also carries the `include::` lines for its children, wrapped in `ifdef::includeChildren[]`, so that a page can be read on its own or as the root of its subtree - set `includeChildren` to pull the subtree in.
+Each step down the tree writes the included page a level deeper.
+AsciiDoc has six heading levels, and a tree about three levels deep whose pages carry four heading levels of their own exhausts them: below that the headings stop being headings, and nothing reports it.
+The trade-off is written down in xref:docs/decisions.adoc[the design decisions].
 Publishing needs a JRE and the jar; exporting needs pandoc as well, because the conversion back to AsciiDoc goes through it.
 
 The last command, `wipe`, deletes every page in the configured space and refuses to run without `--yes-delete-every-page`.

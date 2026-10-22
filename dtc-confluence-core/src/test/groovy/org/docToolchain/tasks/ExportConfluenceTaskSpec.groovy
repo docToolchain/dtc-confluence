@@ -149,7 +149,7 @@ class ExportConfluenceTaskSpec extends Specification {
 
         and: 'the child included, between the markers that make it optional'
             adoc.readLines().contains('ifdef::includeChildren[]')
-            adoc.readLines().contains('include::Root/Child.adoc[levelOffset=+1]')
+            adoc.readLines().contains('include::Root/Child.adoc[leveloffset=+1]')
             adoc.readLines().contains('endif::includeChildren[]')
     }
 

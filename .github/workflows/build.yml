@@ -38,6 +38,12 @@ jobs:
       # and says it quietly.
       - name: Install pandoc
         run: pandoc --version || { sudo apt-get update && sudo apt-get install -y pandoc; }
+      # Same reason, for the specifications that assert what asciidoctor makes of the AsciiDoc
+      # this project writes: whether a block is read as markup, and whether an include lands a
+      # level deeper. Those are the only assertions that could have caught an include attribute
+      # spelled in a way the directive does not read.
+      - name: Install asciidoctor
+        run: asciidoctor --version || { sudo apt-get update && sudo apt-get install -y asciidoctor; }
       - run: ./mvnw -B -ntp verify
 
   sonar:
