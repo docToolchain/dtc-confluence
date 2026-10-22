@@ -28,6 +28,13 @@ public class ListConverter extends AbstractConverter {
 
     @Override
     public IContext convert(IContext context, Node node, StringBuilder sb) {
+        // A blank line in front of every list, nested ones included. Tried the other way, to
+        // make the source read as the list it is, and reverted: asciidoctor nests a list after a
+        // blank line either way, so on the shape this converter actually meets - Confluence wraps
+        // each item's content in a <p>, which has already written the blank line - it changed
+        // nothing. Where it did change something it destroyed it: an <li> holding only a nested
+        // list writes "* " with nothing after it, which is not a list item, and the "**" markers
+        // that followed without a blank line were swallowed into that paragraph as bold.
         startBlock(sb);
         Element element = (Element) node;
         ListType listType;
@@ -38,7 +45,14 @@ public class ListConverter extends AbstractConverter {
         } else {
             throw new IllegalStateException("Unexpected list type: " + element.tagName());
         }
-        IContext newContext = ContextBuilder.build(context).withListType(listType).withSpaceNeeded(false).create();
+        // One deeper than the list this one stands in, which is what tells a nested item from
+        // an item of the outer list. Written at the parent's depth, a <ul> inside an <li> became
+        // another item of the list around it: three items in two lists came out as three in one.
+        IContext newContext = ContextBuilder.build(context)
+                .withListType(listType)
+                .withListDepth(context.getListDepth() + 1)
+                .withSpaceNeeded(false)
+                .create();
         Html2Adoc.convert(newContext, sb, node);
         sb.append("\n");
         return context;

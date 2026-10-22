@@ -52,6 +52,14 @@ Code
   * `LinkConverter`: the condition `isExternalLink(e) || isExternalLink(e)` is
     stated once, and the redundant second `addSpaceIfNeeded` call in each
     branch is gone - the first call already wrote the space.
+  * `ListConverter` counts one list deeper than the list it stands in, and `ListItemConverter`
+    writes as many markers as that depth. `IContext`, `Context` and `ContextBuilder` carry it.
+    Upstream recorded only which kind of list an item was in, so a `<ul>` inside an `<li>` wrote
+    `*` like its parent and its items joined the list around them.
+  * `ListItemConverter` writes `{empty}` where the item's own content is empty. A marker with
+    nothing after it is not a list item but the start of a paragraph, which an `<li>` holding only
+    a nested list produced: the list then began at the nested item, and the items of the outer
+    list were read as children of it. Upstream wrote the marker either way.
   * `HeaderConverter` writes a heading at its own depth plus the context's heading shift, and
     never deeper than the six markers AsciiDoc has levels for. `IContext`, `Context` and
     `ContextBuilder` carry that shift, and `Html2Adoc` gained

@@ -56,4 +56,12 @@ public interface IContext {
     default int getHeadingShift() {
         return 0;
     }
+
+    /**
+     * How many lists deep the node being converted stands, counting from one inside the outermost
+     * list and zero outside any. It is the number of markers a list item is written with.
+     */
+    default int getListDepth() {
+        return 0;
+    }
 }

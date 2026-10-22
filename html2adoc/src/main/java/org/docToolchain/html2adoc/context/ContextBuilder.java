@@ -31,6 +31,12 @@ public class ContextBuilder {
         context.setSpaceNeeded(originalContext.isSpaceNeeded());
         context.setVerbatim(originalContext.isVerbatim());
         context.setHeadingShift(originalContext.getHeadingShift());
+        context.setListDepth(originalContext.getListDepth());
+        return this;
+    }
+
+    public ContextBuilder withListDepth(int listDepth) {
+        context.setListDepth(listDepth);
         return this;
     }
 

@@ -40,8 +40,9 @@ class ConverterComparisonSpec extends Specification {
      */
     private static final Map<String, Pattern> BLOCKS = [
             heading    : ~/(?m)^=+ \S/,
-            title      : ~/(?m)^\.\S/,
-            listItem   : ~/(?m)^\* \S/,
+            title      : ~/(?m)^\.[^.\s]/,
+            listItem   : ~/(?m)^[*.]+ \S/,
+            nestedItem : ~/(?m)^(?:\*{2,}|\.{2,}) \S/,
             sourceBlock: ~/(?m)^\[source, \w+]$/,
             tableEdge  : ~/(?m)^[|!]===$/,
             blockImage : ~/(?m)^image::/,
@@ -56,17 +57,17 @@ class ConverterComparisonSpec extends Specification {
      */
     private static final Map<String, Map<String, Integer>> EXPECTED = [
             'smoke-subpages-0-docToolchain_Confluence_Smoke_Test':
-                    [heading: 3, title: 1, listItem: 3, sourceBlock: 1, tableEdge: 2, blockImage: 1, crossRef: 5],
+                    [heading: 3, title: 1, listItem: 3, nestedItem: 1, sourceBlock: 1, tableEdge: 2, blockImage: 1, crossRef: 5],
             'smoke-subpages-1-docToolchain_Confluence_Smoke_Test':
-                    [heading: 0, title: 0, listItem: 0, sourceBlock: 0, tableEdge: 0, blockImage: 0, crossRef: 0],
+                    [heading: 0, title: 0, listItem: 0, nestedItem: 0, sourceBlock: 0, tableEdge: 0, blockImage: 0, crossRef: 0],
             'smoke-subpages-1-First_Page':
-                    [heading: 1, title: 1, listItem: 3, sourceBlock: 1, tableEdge: 0, blockImage: 0, crossRef: 2],
+                    [heading: 1, title: 1, listItem: 3, nestedItem: 1, sourceBlock: 1, tableEdge: 0, blockImage: 0, crossRef: 2],
             'smoke-subpages-1-Second_Page':
-                    [heading: 0, title: 0, listItem: 0, sourceBlock: 0, tableEdge: 2, blockImage: 1, crossRef: 3],
+                    [heading: 0, title: 0, listItem: 0, nestedItem: 0, sourceBlock: 0, tableEdge: 2, blockImage: 1, crossRef: 3],
             'smoke-subpages-2-First_Page':
-                    [heading: 0, title: 1, listItem: 3, sourceBlock: 0, tableEdge: 0, blockImage: 0, crossRef: 2],
+                    [heading: 0, title: 1, listItem: 3, nestedItem: 1, sourceBlock: 0, tableEdge: 0, blockImage: 0, crossRef: 2],
             'smoke-subpages-2-Subsection':
-                    [heading: 0, title: 0, listItem: 0, sourceBlock: 1, tableEdge: 0, blockImage: 0, crossRef: 0],
+                    [heading: 0, title: 0, listItem: 0, nestedItem: 0, sourceBlock: 1, tableEdge: 0, blockImage: 0, crossRef: 0],
     ]
 
     @TempDir

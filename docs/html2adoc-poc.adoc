@@ -43,17 +43,18 @@ Counted below from the rendered HTML of each page, with the `== <title>` line th
 |===
 |Page |Links (p) |Links (n) |List items (p) |List items (n) |Images (p) |Images (n)
 
-|`smoke-subpages-0-…Smoke_Test` |0 |5 (2 broken) |3 in 2 lists |3 in 1 list |1 |0
-|`smoke-subpages-1-First_Page` |0 |2 |3 in 2 lists |3 in 1 list |0 |0
-|`smoke-subpages-1-Second_Page` |0 |3 (2 broken) |0 |0 |1 |0
-|`smoke-subpages-2-First_Page` |0 |2 |3 in 2 lists |3 in 1 list |0 |0
+|`smoke-subpages-0-…Smoke_Test` |0 |5 (2 broken) |3 in 2 lists |3 in 2 lists |1 |1
+|`smoke-subpages-1-First_Page` |0 |2 |3 in 2 lists |3 in 2 lists |0 |0
+|`smoke-subpages-1-Second_Page` |0 |3 (2 broken) |0 |0 |1 |1
+|`smoke-subpages-2-First_Page` |0 |2 |3 in 2 lists |3 in 2 lists |0 |0
 |`smoke-subpages-2-Subsection` |0 |0 |0 |0 |0 |0
 |`smoke-subpages-1-…Smoke_Test` |0 |0 |0 |0 |0 |0
 |===
 
 Both converters render the list title and the table header row on every page that has one, so neither appears above.
 
-Read in one line: the native converter is the only one that produces working links at all, pandoc is the only one that produces images, and the lists differ in nesting rather than in how many items reach the page.
+Read in one line: the native converter is the only one that produces working links at all, and the lists and the images now agree - what the table counted as native's defects, a flat list and a missing block image, are closed.
+What the counts cannot show is where the two still part: the attributes of an image, the declared widths of a table's columns, one sentence per line, and the escaping of a span that spreads over two text nodes.
 
 == Page by page
 
@@ -264,21 +265,22 @@ Native passes it through, and the same input renders as a link:
 This is not a matter of taste.
 Every footnote link in every exported page is dead on the pandoc path today, and works on the native one.
 
-*The list. pandoc is right, on nesting alone.*
-Both converters render the title and all three items; the nested `ul` is where they part.
-Native writes it at the same level as its parent, so `nested` becomes a third sibling of `Second item` instead of its child - one `<ul>` of three items against pandoc's two nested lists.
-The blank lines between native's items are noise rather than an error: AsciiDoc keeps blank-separated items in one list, and the rendered HTML has the same three `<li>` either way.
+*The list. A tie, since the depth went into the context.*
+Both converters render the title and all three items, and both now nest: `+*+` twice and `+**+` once on each path, and the rendered HTML is the same three `<li>` in two `<ul>` either way.
+Native used to write the nested `ul` at its parent's level, so `nested` became a third sibling of `Second item` instead of its child - `ListConverter` recorded which kind of list an item stood in and not how deep.
+The blank lines between native's items are noise rather than an error: AsciiDoc keeps blank-separated items in one list.
 
-*The space before `+_italic_+`. pandoc is right.*
-Native writes `+*bold*,_italic_+`, which renders as `bold,italic` - the space the author typed is gone from the page.
-`TextNodeConverter` trims each text node and then re-adds a space only when the last character matches `+[a-zA-Z0-9.:/()]+`; a comma is not in that set, so the trailing space of the text node `", "` is dropped and never replaced.
+*The space before `+_italic_+`. A tie, since the space is taken from the text node itself.*
+Native wrote `+*bold*,_italic_+`, which renders as `bold,italic` - the space the author typed gone from the page.
+`TextNodeConverter` trimmed each text node and re-added a space only when the last character matched `+[a-zA-Z0-9.:/()]+`, and a comma is not in that set.
+It now takes the node's own leading and trailing whitespace as well, which is what HTML actually says.
 
 *The thematic break and the duplicate anchor. Neither.*
 Native writes `'''` and pandoc `'''''`; both render as `<hr>`.
 pandoc writes a second anchor from the `id` attribute of the footnote `div` (`+[[_footnotedef_1]]+` beside `+[[__footnotedef_1]]+`), native writes only the one the token asked for.
 That is noise rather than an error, except that `asciidoctor` then gives the element the *second* id, so pandoc's rendered anchor is `+_footnotedef_1+` while the `xref:` in the document names `+__footnotedef_1+` - a second reason the pandoc footnotes would not resolve even if they were links.
 
-What native cannot do yet: nested lists, and spacing around punctuation that is not in its whitelist.
+What native cannot do yet on this page: nothing that is measured here.
 
 === smoke-subpages-1-Second_Page.html
 
@@ -425,7 +427,7 @@ pandoc is unchanged and still writes `==`:
 === Subsection     // native: inside the page
 ----
 
-Everything else on this page repeats the three pages above: the dead pandoc footnote links, the broken native list, the missing space before `+_italic_+`, and identical admonition and listing blocks.
+Everything else on this page repeats the three pages above: the dead pandoc footnote links, and identical lists, admonition and listing blocks.
 
 What native cannot do yet on this page: nothing that is measured here.
 
@@ -457,10 +459,10 @@ Native writes them one level below the title and keeps the relative order of `h1
 This was the other way round until the heading shift went in, and it was the sharpest heading defect in this report: native's sections used to outrank the title they stood in.
 
 The rest of this page differs as the smaller pages do.
-Counted on the AsciiDoc both converters produced: 3 headings each, 1 block image each, and 3 list items each - but pandoc writes them as two nested lists (`+*+` and `+**+`) where native writes one flat list, which is the gap below.
+Counted on the AsciiDoc both converters produced: 3 headings each, 1 block image each, and 3 list items each in two nested lists each - the structures agree construct for construct on this page.
 Native's links are the sound ones, pandoc's `xref:` are escaped into prose; 2 of native's carry the `+__+` corruption described above.
 
-What native cannot do yet on this page: the nested list, and the attributes of the image.
+What native cannot do yet on this page: the attributes of the image.
 
 == Summary
 
@@ -497,9 +499,7 @@ Both render the same; it only makes the exported file easier to read and to diff
 
 === What pandoc still does better
 
-* *Lists.* Nesting. Both converters now render the title and every item; native writes a nested `ul` at its parent's level, which flattens the list.
 * *Image attributes.* `width` survives pandoc and not native; `align` survives neither.
-* *Spacing around punctuation.* Native drops the space after a comma that precedes an inline span, which changes the words on the page.
 * *Declared column widths.* Native discards `<col style="width: …">`. No corpus table is affected, because all of them are equal-width.
 * *Preserved line breaks.* `--wrap preserve` keeps one sentence per line; native joins the paragraph into one line.
 
@@ -532,8 +532,6 @@ That is the shape to aim at for the remaining tokens: an anchor, an admonition a
 
 In the order the corpus argues for, smallest first.
 
-. *Spacing after punctuation.* `TextNodeConverter` decides "does a space belong here" from a character whitelist, `+[a-zA-Z0-9.:/()]+`, that omits `,` and `;`. Honouring the text node's own trailing whitespace instead of re-deriving it would be the real fix.
-. *Nested lists.* `ListConverter` and `ListItemConverter` need to carry a depth in the context, so that a list inside a list item writes `**` rather than `*`. This is the one the corpus shows most often.
 . *Image attributes.* `width` and `align` are dropped by `ImageConverter`, which reads `src` only.
 . *Column widths.* `TableConverter` measures the column count from the cells; it would have to read `<colgroup>` where one is present.
 . *Escaping across node boundaries.* The `+__+` corruption needs `AdocText` to escape against the output line rather than against the text node. The context already carries what was written last, so the information is there; the decision is made in the wrong place.

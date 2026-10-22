@@ -14,6 +14,7 @@ public class Context implements IContext {
     private boolean spaceNeeded;
     private boolean verbatim;
     private int headingShift;
+    private int listDepth;
 
     Context() {
     }
@@ -57,6 +58,15 @@ public class Context implements IContext {
 
     void setHeadingShift(int headingShift) {
         this.headingShift = headingShift;
+    }
+
+    @Override
+    public int getListDepth() {
+        return listDepth;
+    }
+
+    void setListDepth(int listDepth) {
+        this.listDepth = listDepth;
     }
 
     void setVerbatim(boolean verbatim) {
