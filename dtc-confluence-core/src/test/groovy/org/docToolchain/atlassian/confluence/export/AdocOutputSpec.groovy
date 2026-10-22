@@ -1,6 +1,11 @@
 package org.docToolchain.atlassian.confluence.export
 
+import spock.lang.Requires
 import spock.lang.Specification
+import spock.lang.TempDir
+
+import java.nio.file.Files
+import java.nio.file.Path
 
 /**
  * States what the placeholders become once pandoc has written its AsciiDoc.
@@ -10,6 +15,9 @@ import spock.lang.Specification
  * exported document says, and there is no other test of that.
  */
 class AdocOutputSpec extends Specification {
+
+    @TempDir
+    Path directory
 
     def 'a listing block is left alone by every substitution'() {
         given: '''AsciiDoc substitutes nothing inside a listing block, so neither may this. A code
@@ -173,5 +181,72 @@ done
     def 'a heading marked discrete carries the attribute above it'() {
         expect:
             AdocOutput.substitute('%%DISCRETE%%== Title').contains('[discrete]\n== Title')
+    }
+
+    def 'an id that already starts with an underscore does not get a second: #name'() {
+        given: '''Two underscores are AsciiDoc's unconstrained emphasis, and two such runs on one
+                  line pair up. AsciiDoctor's own ids start with an underscore, so adding one
+                  unconditionally made every footnote id "__footnotedef_N" - and a page writes the
+                  markers of its footnotes on a single line.'''
+        expect:
+            AdocOutput.substitute("%%ANCHOR%%${name}%%ANCHOR-END%%").trim() == "[[${id}]]"
+
+        where:
+            name               | id
+            '_footnotedef_1'   | '_footnotedef_1'
+            '_footnoteref_1'   | '_footnoteref_1'
+            'my_section'       | '_my_section'
+            'Overview'         | '_Overview'
+            '__notes'          | '_notes'
+            '-beta'            | '_beta'
+            '2021-goals'       | '_2021-goals'
+            'a__b'             | '_a_b'
+            'a++__++b'         | '_a_b'
+    }
+
+    @Requires({ AdocOutputSpec.asciidoctorIsInstalled() })
+    def 'two references on one line stay two links'() {
+        given: '''The shape a page of footnotes has: both markers on one line, each pointing at a
+                  definition. With two underscores in each target asciidoctor read the pair as a
+                  span and the two links pointed at "<em>footnotedef_2" and "</em>footnotedef_1",
+                  which are anchors no document has. There is no escape that helps - a backslash
+                  is consumed where it prevents markup and printed where it does not.'''
+            def adoc = 'xref:page.adoc#' + AdocOutput.anchorId(names[0]) + '[2] ' +
+                    'xref:page.adoc#' + AdocOutput.anchorId(names[1]) + '[1]\n'
+
+        when:
+            def rendered = render(adoc)
+
+        then: 'two links, and neither carries emphasis the markup invented'
+            rendered.count('<a href=') == 2
+            !(rendered =~ /href="[^"]*<\/?em>/)
+
+        and: 'each at the anchor the page writes for that name'
+            rendered.contains('#' + AdocOutput.anchorId(names[0]))
+            rendered.contains('#' + AdocOutput.anchorId(names[1]))
+
+        where: 'every shape a name arrives in, because one underscore is not enough on its own'
+            names << [['_footnotedef_2', '_footnotedef_1'],
+                      ['__footnotedef_2', '__footnotedef_1'],
+                      ['-footnotedef_2', '-footnotedef_1'],
+                      ['a__b', 'c__d']]
+    }
+
+    static boolean asciidoctorIsInstalled() {
+        try {
+            return new ProcessBuilder('asciidoctor', '--version').start().waitFor() == 0
+        } catch (IOException ignored) {
+            return false
+        }
+    }
+
+    private String render(String adoc) {
+        Path source = directory.resolve('anchors.adoc')
+        Files.writeString(source, adoc)
+        Process process = new ProcessBuilder('asciidoctor', '-s', '-o', '-', source.toString())
+                .redirectErrorStream(true).start()
+        String rendered = process.inputStream.getText('UTF-8')
+        assert process.waitFor() == 0
+        return rendered
     }
 }

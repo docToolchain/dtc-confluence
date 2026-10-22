@@ -40,6 +40,12 @@ final class AdocOutput {
      */
     private static final Pattern PANDOC_ESCAPE = Pattern.compile("\\+\\+(.+?)\\+\\+");
 
+    /** What may not stand at the start of an id: neither a letter nor a digit, so markup or worse. */
+    private static final Pattern LEADING_NON_WORD = Pattern.compile("^[^\\p{Alnum}]+");
+
+    /** Two underscores or more, which is AsciiDoc's unconstrained emphasis wherever it stands. */
+    private static final Pattern UNDERSCORE_RUN = Pattern.compile("_{2,}");
+
     private static final Pattern STATUS = Pattern.compile(
             "%%STATUS-BEGIN-(\\w+)%%([\\s\\S]*?)%%STATUS-END%%");
 
@@ -114,9 +120,46 @@ final class AdocOutput {
      */
     private static String anchors(String adoc) {
         return replaceAll(ANCHOR, adoc, matcher ->
-                // Leading underscore because AsciiDoc wants an id to start with a letter or one,
-                // and any "++_++" pandoc wrote into the name spelled back as an underscore.
-                "\n\n[[_" + matcher.group(1).replace("++_++", "_") + "]]\n");
+                // Whatever pandoc escaped in the name is spelled back first, and by the same
+                // pattern the passthroughs use: it escapes a run as one group, so a name holding
+                // "__" arrives as "++__++" and a literal replace of "++_++" would miss it.
+                "\n\n[[" + anchorId(PANDOC_ESCAPE.matcher(matcher.group(1)).replaceAll("$1"))
+                        + "]]\n");
+    }
+
+    /**
+     * An anchor id as both the anchor and every reference to it spell it.
+     *
+     * <p>Exactly one leading underscore, because AsciiDoc wants an id to start with a letter or
+     * one - and because more than one is markup. A run of two underscores is AsciiDoc's
+     * unconstrained emphasis, and two such runs on one line pair up: the footnote markers of a
+     * page sit on one line, so {@code #__footnotedef_2 … #__footnotedef_1} is read as a span and
+     * the two references come out as {@code #<em>footnotedef_2} and {@code #</em>footnotedef_1},
+     * links to anchors that do not exist. AsciiDoctor's own ids already begin with an underscore,
+     * so adding one was enough to produce that.</p>
+     *
+     * <p>A single underscore is only safe while a word character follows it: {@code _} before a
+     * hyphen and after a non-space is a *closing* constrained emphasis marker, so {@code #_-beta}
+     * pairs with the {@code _} of an id earlier on the line just as a double run does. The leading
+     * run of anything that is neither a letter nor a digit is therefore dropped, and one
+     * underscore put in front of what remains - {@code _footnotedef_1} unchanged, {@code __notes}
+     * to {@code _notes}, {@code -beta} to {@code _beta}.</p>
+     *
+     * <p>A run inside the name is no safer than one at the start: {@code #_a__b} and
+     * {@code #_c__d} on one line come out as {@code #_a<em>b} and {@code #_c</em>d}. Every run is
+     * therefore collapsed to one underscore. That can make two names one id - {@code a__b} and
+     * {@code a_b} both become {@code _a_b} - which is the price: an id that collides is found by
+     * whoever wrote both anchors, an id that is markup is a dead link in every page that refers
+     * to it.</p>
+     *
+     * <p>No escape helps here, which is worth stating because escaping is the obvious reflex: a
+     * backslash is consumed where it prevents markup and printed where it does not, so escaping
+     * both runs leaves the second reference reading {@code #\__footnotedef_1}, and a passthrough
+     * around the target stops the macro being a macro.</p>
+     */
+    static String anchorId(String name) {
+        String identifying = LEADING_NON_WORD.matcher(name).replaceFirst("");
+        return "_" + UNDERSCORE_RUN.matcher(identifying).replaceAll("_");
     }
 
     /**
