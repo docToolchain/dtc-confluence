@@ -40,8 +40,26 @@ class PreformattedSpec extends Specification {
                     .contains('after $\\{HOME}')
     }
 
-    def 'a code sample does not carry block delimiters of its own'() {
-        expect: 'whoever wrote the pre owns the delimiters; the corpus writes them around it'
+    def 'a pre holding text of its own carries no delimiters'() {
+        expect: 'the HTML does not say which block that is, so whoever wrote it owns the delimiters'
             Html2Adoc.convert('<pre>code</pre>') == 'code'
+    }
+
+    def 'a pre holding one code element is a listing block'() {
+        expect: 'the shape a code macro arrives in, and the shape pandoc reads'
+            Html2Adoc.convert('<pre><code class="language-groovy">def hello = "world"</code></pre>') ==
+                    '[source, groovy]\n----\ndef hello = "world"\n----\n'
+
+        and: 'the sample is the block, not a monospace span inside it'
+            !Html2Adoc.convert('<pre><code>plain</code></pre>').contains('`')
+
+        and: 'and without a language it is still a listing, just unnamed'
+            Html2Adoc.convert('<pre><code>plain</code></pre>') == '----\nplain\n----\n'
+    }
+
+    def 'a listing sample keeps the characters it was written with'() {
+        expect: 'the escaping is off inside the delimiters, the reason this converter exists'
+            Html2Adoc.convert('<pre><code>cp *.txt ${HOME}/out</code></pre>')
+                    .contains('cp *.txt ${HOME}/out')
     }
 }

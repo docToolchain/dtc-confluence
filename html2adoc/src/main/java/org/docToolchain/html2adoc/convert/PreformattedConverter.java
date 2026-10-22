@@ -19,9 +19,14 @@ import org.jsoup.nodes.Node;
  * substitutes nothing there, so a backslash put in front of {@code ${HOME}} to stop an attribute
  * reference reaches the page as part of the code sample.</p>
  *
- * <p>No delimiter line is written, because HTML does not say which AsciiDoc block this is: a
- * {@code <pre>} may be a literal block, a listing block, or source in a named language. Whoever
- * produced the {@code <pre>} knows that and writes the delimiters around it.</p>
+ * <p>A {@code <pre>} holding a single {@code <code>} is the HTML for a listing block, and is
+ * written as one: the delimiters, and a {@code [source, lang]} line where the {@code <code>}
+ * carries a {@code class="language-lang"}. That is the shape a code macro arrives in and the
+ * shape pandoc reads, so both converters write the same block out of the same HTML.</p>
+ *
+ * <p>A {@code <pre>} without that {@code <code>} gets no delimiter line, because then the HTML
+ * does not say which AsciiDoc block it is - it may be a literal block or a listing - and whoever
+ * produced it knows and writes the delimiters around it.</p>
  *
  * <p>Whitespace is collapsed as it is in any other text. Keeping it is the other half of what
  * {@code <pre>} means, and a larger change than this one: it decides where the lines of the block
@@ -38,11 +43,51 @@ public class PreformattedConverter extends AbstractConverter {
         return false;
     }
 
+    /** What a {@code <code>} names its language with, as HTML and as pandoc read it. */
+    private static final String LANGUAGE = "language-";
+
+    /** The listing delimiter. Four is the minimum AsciiDoc accepts. */
+    private static final String DELIMITER = "----";
+
     @Override
     public IContext convert(IContext context, Node node, StringBuilder sb) {
-        IContext newContext = ContextBuilder.build(context).withVerbatim(true).create();
-        Html2Adoc.convert(newContext, sb, node);
-        // Verbatim ends with the element: what follows it is prose again.
+        IContext verbatim = ContextBuilder.build(context).withVerbatim(true).create();
+        Element sample = sampleIn((Element) node);
+        if (sample == null) {
+            Html2Adoc.convert(verbatim, sb, node);
+            // Verbatim ends with the element: what follows it is prose again.
+            return context;
+        }
+        startBlock(sb);
+        String language = languageOf(sample);
+        if (!language.isEmpty()) {
+            sb.append("[source, ").append(language).append("]\n");
+        }
+        // The text rather than a conversion of it: a <code> on its own is inline monospace, and
+        // walking into it here would wrap the sample in backticks inside its own listing block.
+        sb.append(DELIMITER).append('\n')
+                .append(sample.wholeText().strip())
+                .append('\n').append(DELIMITER).append('\n');
         return context;
+    }
+
+    /**
+     * @return the one {@code <code>} this {@code <pre>} holds, or {@code null} where it holds
+     *         anything else - text of its own, or more than one element
+     */
+    private static Element sampleIn(Element pre) {
+        return pre.children().size() == 1
+                && "code".equals(pre.child(0).tagName())
+                && isBlankOrNoBreakSpace(pre.ownText())
+                ? pre.child(0) : null;
+    }
+
+    private static String languageOf(Element sample) {
+        for (String name : sample.classNames()) {
+            if (name.startsWith(LANGUAGE)) {
+                return name.substring(LANGUAGE.length());
+            }
+        }
+        return "";
     }
 }
