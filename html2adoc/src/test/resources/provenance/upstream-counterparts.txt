@@ -1,0 +1,67 @@
+# Where every file of this module comes from.
+#
+# The module is a derivative work of the html2adoc module of
+# https://github.com/jmini/asciidoctorj-experiments, taken as of its last commit, 2019-02-22.
+# Each line names one file of this module and the upstream file it was derived from, relative to
+# the upstream module's own src/main/java/html2adoc and src/test/java/html2adoc. A dash means the
+# file has no upstream counterpart and was written here.
+#
+# ProvenanceSpec keeps this list and the licence header of each file in agreement, and fails on a
+# file that is in neither. The NOTICE beside this module summarises what the derived files changed.
+
+# --- src/main/java/org/docToolchain/html2adoc
+Html2Adoc.java                            = Html2Adoc.java
+context/Context.java                      = context/Context.java
+context/ContextBuilder.java               = context/ContextBuilder.java
+context/IContext.java                     = context/IContext.java
+context/ListType.java                     = context/ListType.java
+convert/AbstractConverter.java            = convert/AbstractConverter.java
+convert/AbstractFormatConverter.java      = convert/AbstractFormatConverter.java
+convert/AdocText.java                     = -
+convert/BrConverter.java                  = convert/BrConverter.java
+convert/EmphasisConverter.java            = convert/EmphasisConverter.java
+convert/HeaderConverter.java              = convert/HeaderConverter.java
+convert/HorizontalRuleConverter.java      = -
+convert/IConverter.java                   = convert/IConverter.java
+convert/ImageConverter.java               = convert/ImageConverter.java
+convert/LinkConverter.java                = convert/LinkConverter.java
+convert/ListConverter.java                = convert/ListConverter.java
+convert/ListItemConverter.java            = convert/ListItemConverter.java
+convert/ListingConverter.java             = convert/ListingConverter.java
+convert/MonospaceConverter.java           = convert/MonospaceConverter.java
+convert/ParagraphConverter.java           = convert/ParagraphConverter.java
+convert/PreformattedConverter.java        = -
+convert/StrongConverter.java              = convert/StrongConverter.java
+convert/SubscriptConverter.java           = convert/SubscriptConverter.java
+convert/SuperscriptConverter.java         = convert/SuperscriptConverter.java
+convert/TableConverter.java               = convert/TableTbodyConverter.java
+convert/TableTdConverter.java             = convert/TableTdConverter.java
+convert/TableTrConverter.java             = convert/TableTrConverter.java
+convert/Tables.java                       = -
+convert/TextNodeConverter.java            = convert/TextNodeConverter.java
+convert/TransparentConverter.java         = -
+
+# --- src/test/groovy/org/docToolchain/html2adoc
+block/BlockStartSpec.groovy               = -
+escape/AsciidoctorRoundTripSpec.groovy    = -
+escape/InlineMarkupSpec.groovy            = -
+escape/LineStartSpec.groovy               = -
+escape/PlainTextSpec.groovy               = -
+escape/QuotingFormSpec.groovy             = -
+format/InlineFormatSpec.groovy            = format/EmphasisTest.java, format/MonospaceTest.java, format/SubscriptTest.java, format/SuperscriptTest.java, format/StrongTest.java
+format/StrongSpacingSpec.groovy           = format/StrongTest.java
+header/HeaderSpec.groovy                  = header/HeaderTest.java
+image/ImageSpec.groovy                    = image/ImageTest.java
+link/LinkSpec.groovy                      = link/LinkTest.java
+list/ListSpec.groovy                      = list/ListTest.java
+listing/ListingSpec.groovy                = listing/ListingTest.java
+paragraph/ParagraphSpec.groovy            = paragraph/ParagraphTest.java
+provenance/ProvenanceSpec.groovy          = -
+rule/HorizontalRuleSpec.groovy            = -
+table/TableCellSpec.groovy                = -
+table/TableHeadSpec.groovy                = -
+table/TableSpanSpec.groovy                = -
+table/TableSpec.groovy                    = table/TableTest.java
+transparent/TransparentSpec.groovy        = -
+unknown/UnknownSpec.groovy                = unknown/UnknownTest.java
+verbatim/PreformattedSpec.groovy          = -

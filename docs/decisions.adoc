@@ -503,3 +503,77 @@ What is not decided, and is left open deliberately:
 
 The fix is kept as it is because an ignored attribute is worse than a visible limit: flat was wrong for every tree, and the limit is wrong only for a deep one.
 
+== Converting HTML to AsciiDoc in process: a proof of concept
+
+`html2adoc` converts HTML to AsciiDoc in process, seeded from the `html2adoc` module of https://github.com/jmini/asciidoctorj-experiments[asciidoctorj-experiments] by Jeremie Bresson, which is Apache-2.0.
+It is a proof of concept and it is not the default.
+`confluence.export.converter` chooses between `pandoc`, which is what the export has always done, and `native`.
+
+This does not reverse the entry above, xref:#_the_export_needs_pandoc_the_publisher_does_not[The export needs pandoc; the publisher does not].
+That entry said the alternative stays open and that a Java implementation can replace the pandoc step behind the same interface.
+The interface now exists, `HtmlToAsciidoc`, and there is something behind it to measure.
+
+=== Why write one at all
+
+Because nothing installable does this.
+Searching for an HTML-to-AsciiDoc converter on the JVM turns up one artifact on Maven Central, and it wraps a JavaScript implementation in Nashorn and was last released in 2017.
+Nashorn left the JDK in 15, so it cannot run on the Java this project releases for.
+Everything else in that space is either a JavaScript library or pandoc.
+
+Because our input is not the web.
+A general HTML-to-AsciiDoc converter has to survive anything; this one has to survive what `fixBody` produces out of the storage format *this project itself publishes*.
+That is a narrow subset, it is written down in `html2adoc/src/test/resources/corpus/INVENTORY.md`, and it is a subset we control from both ends.
+
+And because we already own the problem that makes pandoc expensive.
+pandoc escapes AsciiDoc punctuation indiscriminately, which is why the translation hides every construct it writes behind `%%ANCHOR%%`, `%%ADMON-BEGIN%%`, `%%BLOCK-TITLE%%` and the rest, and why `AdocOutput` carries repairs for what comes back escaped anyway.
+That machinery is not pandoc's fault and it is not free: it exists because the converter cannot be told which characters are markup we wrote and which are text the author typed.
+A converter in process can be told.
+
+=== What was measured
+
+xref:html2adoc-poc.adoc[The comparison] runs both converters over the same six corpus pages, construct by construct.
+Both produce AsciiDoc that `asciidoctor` accepts with no warning and no error on all six, so the differences are in what renders, not in what parses.
+
+Native is better in one way that matters more than the rest.
+The corpus carries 12 `xref:` directives, written into the HTML as text by `fixBody` and `Footnotes` because they already know which document and anchor a footnote points at.
+pandoc escapes all 12 into prose, so *none* of them is a link today; native renders 8 as links and corrupts 4.
+Nothing in `AdocOutput` repairs the pandoc ones, which makes every footnote link in every exported page dead on the path that ships.
+
+As measured when the proof of concept was written, native was worse in six ways, and one of them lost content outright.
+It wrote a block `image::` with a leading space, and an indented line is a literal block, so the image did not appear and the reader saw the markup instead - 1 image against 0, on each page that has one.
+It wrote a nested list at its parent's level, so three items in two nested lists became three items in one flat list.
+It mapped `<h1>` to `=`, a level-0 section, which outranks the `== <page title>` the export writes above it; pandoc's `==` is also wrong, but wrong by less.
+It dropped the space after a comma before an inline span, which changes the words on the page.
+It discards declared column widths, so a 30/70 table would come out 50/50.
+And `--wrap preserve` keeps one sentence per line where native joins the paragraph.
+
+All six are closed since, which is recorded here rather than by rewriting the list above - the measurement is what it was, and the entry is the record of a decision taken on it.
+The block image is written where the image opens a line, so both images in the corpus are block images on both paths.
+The space is taken from the text node's own whitespace rather than guessed from a character class, which also uncovered two older defects: a space written onto a line already begun, and `lineStarted` lost across an inline element.
+And `Html2Adoc.convert(node, topLevel)` shifts every heading of a fragment by the same amount, so the page's sections sit under its title - here native is now the one that is right, and pandoc writes the sibling.
+A nested list is written at its own depth, which also brought out that an item holding nothing but a nested list wrote a marker with no text - not a list item at all, so the list began at the nested item and the outer items became children of it.
+The column widths are read from the `<colgroup>`, rounded to the integers AsciiDoc's colspec takes - a decimal makes the whole specification unparsable, and asciidoctor then counts the columns from the first line of the table, which is one cell wide here, so a 33.3333/66.6667 table collapsed into a single column.
+The image attributes are written by name.
+The escaping of an inline span that spreads over two text nodes turned out not to be an escaping question at all: the `+__+` that broke four footnote links was an anchor id written with one underscore too many, and no escaping of it works - a backslash is consumed where it prevents markup and printed where it does not. `AdocOutput.anchorId` spells an id so that it cannot be markup, which is a fix to the shipping export rather than to the converter.
+What is still open is `--wrap preserve`: pandoc keeps one sentence per line where native joins the paragraph.
+`docs/html2adoc-poc.adoc` carries the current state construct by construct.
+
+The placeholder tokens are mostly not made unnecessary by any of this, which was not the expected answer.
+A line beginning `+[[id]]+` is an inline anchor to AsciiDoc whoever wrote it, so `%%ANCHOR%%` is needed just the same, and the measurement added one, `%%BLOCK-TITLE%%`.
+One did go, and not by this converter: the fix for the mangled listing blocks took the attribute line and the delimiters out of the HTML, and `%%SOURCE-BEGIN%%` and `%%SOURCE-END%%` are gone from the code with them.
+What the native path makes dead is the two pandoc *repairs* in `AdocOutput` - the `%7Bfilepath%7D` rewrite and the stripping of lone `pass:[+]` continuation lines, 2 and 4 occurrences in the corpus.
+
+=== What it costs
+
+pandoc stays the default, and an export still needs it.
+Nothing is taken away: `native` is a value of a setting, refused if misspelled rather than quietly replaced, and `ExportConverterChoiceSpec` runs a whole export through it without a pandoc guard.
+
+What is added is a module to maintain, 23 specifications holding 225 tests, and a second licence in the repository - Apache-2.0 for that module alone, which is why it is a module and not a package of the core.
+The seven gaps the comparison lists are each one class and a specification, and none of them is architectural; that is an estimate, not a measurement, and it is the number a maintainer is being asked to weigh.
+
+=== The route through Markdown was rejected
+
+Two hops - `flexmark-html2md-converter` to Markdown, then `markdown-to-asciidoc` - would have been two maintained artifacts and no code of our own.
+It was rejected because Markdown is too small to carry the middle of this.
+It has no cell spanning and no block content in a cell, and a Confluence table wants both: `colspan` and `rowspan` are what `Tables` exists to compute, and a cell holding a footnote or a list is what the `a|` specifier exists to write.
+A format in the middle that cannot express a construct does not degrade it, it deletes it - and we would be paying two escaping layers in series for the privilege, when one is already one too many.

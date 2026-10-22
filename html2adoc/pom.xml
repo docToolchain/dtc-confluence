@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.doctoolchain</groupId>
+    <artifactId>dtc-confluence</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>html2adoc</artifactId>
+
+  <name>html2adoc</name>
+  <description>Converts HTML to AsciiDoc; knows nothing about Confluence</description>
+
+  <!--
+    The one module of this repository that is not MIT. It is seeded from the html2adoc module of
+    https://github.com/jmini/asciidoctorj-experiments, which is Apache-2.0, and Apache-2.0 requires
+    that its terms travel with the derived work. Declared here rather than in the parent, so that
+    the licence is attached to exactly the artifact it governs. See NOTICE and README.adoc.
+  -->
+  <licenses>
+    <license>
+      <name>Apache License, Version 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+
+  <dependencies>
+    <!-- The only runtime dependency: this module converts HTML and nothing else. In particular it
+         does not depend on dtc-confluence-core, and must not grow such a dependency. -->
+    <dependency>
+      <groupId>org.jsoup</groupId>
+      <artifactId>jsoup</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.groovy</groupId>
+      <artifactId>groovy</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.spockframework</groupId>
+      <artifactId>spock-core</artifactId>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+      </resource>
+      <!-- Apache-2.0 asks that the licence and the notice accompany every distribution of the work,
+           and the jar is one. At the conventional place, for anyone reading this jar on its own. -->
+      <resource>
+        <directory>${project.basedir}</directory>
+        <targetPath>META-INF</targetPath>
+        <includes>
+          <include>LICENSE-APACHE-2.0.txt</include>
+          <include>NOTICE</include>
+        </includes>
+      </resource>
+      <!-- And once more under a path no other artifact can hold, because the CLI is shipped as a
+           fat jar: that unpacks every dependency into one tree, and a second META-INF/NOTICE from
+           any dependency silently replaces this one. The attribution has to survive that, so it
+           travels under the name of the module it belongs to as well. -->
+      <resource>
+        <directory>${project.basedir}</directory>
+        <targetPath>META-INF/notices/${project.artifactId}</targetPath>
+        <includes>
+          <include>LICENSE-APACHE-2.0.txt</include>
+          <include>NOTICE</include>
+        </includes>
+      </resource>
+    </resources>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.gmavenplus</groupId>
+        <artifactId>gmavenplus-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+</project>
