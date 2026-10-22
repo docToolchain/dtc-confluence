@@ -360,22 +360,13 @@ The two forms render byte-identical HTML, header row and 50/50 columns included,
 They stop meaning the same thing the moment the widths are not equal: native measures the column count from the cells and discards `<col style="width: …">`, so a 30/70 table would come out 50/50.
 The corpus has no such table, so this is a gap rather than an observed defect.
 
-*The image. pandoc is right, and this one is the worst native defect.*
-Native writes the image with a leading space.
-An indented line is a literal block in AsciiDoc, so `asciidoctor` renders the markup as text:
+*The image. A tie on the block, pandoc on the attributes.*
+This was the worst native defect when the report was first written.
+Native wrote the image inline, indented by the space that separates an inline image from the words before it - and an indented line is a literal block, so `asciidoctor` printed the directive as text and the image did not appear at all.
+`ImageConverter` now asks whether the image opens a line rather than which element happens to hold it, which is what decides between the two forms, and both images in the corpus are block images on both paths.
 
-[source,html]
-----
-<div class="literalblock">
-<div class="content">
-<pre>image::{filepath}/1_[]</pre>
-</div>
-</div>
-----
-
-The image does not appear at all, and the reader sees the directive instead.
-`AdocOutput` already promotes a line-leading `image:` to `image::`, and it tolerates the indent while doing so, which is why the output looks almost right and renders wrongly.
-pandoc also keeps `width=64`, which native drops along with `align=center`; pandoc's own blemish is that its escaping leaks into the alt text, `pass:[alt="1++_++"]`.
+What remains is the attributes: pandoc keeps `width=64`, native drops it along with `align=center`.
+pandoc's own blemish here is that its escaping leaks into the alt text, `pass:[alt="1++_++"]`, where native writes no alt text at all.
 
 *Two footnote markers in one cell. Neither, but native breaks here.*
 On this page native's links are not all sound:
@@ -503,7 +494,6 @@ Both render the same; it only makes the exported file easier to read and to diff
 === What pandoc still does better
 
 * *Lists.* Nesting. Both converters now render the title and every item; native writes a nested `ul` at its parent's level, which flattens the list.
-* *Block images.* Native emits an indented `image::` line, which renders as a literal block showing the markup. The image is lost.
 * *Image attributes.* `width` survives pandoc and not native; `align` survives neither.
 * *Heading levels.* pandoc's `<h1>` -> `==` is wrong against the export's own `== <title>`, but native's `<h1>` -> `=` is worse: a level-0 section inside a page.
 * *Spacing around punctuation.* Native drops the space after a comma that precedes an inline span, which changes the words on the page.
@@ -539,7 +529,6 @@ That is the shape to aim at for the remaining tokens: an anchor, an admonition a
 
 In the order the corpus argues for, smallest first.
 
-. *The indented `image::`.* `ImageConverter` writes a leading space it should not, or `AdocOutput` should trim the line it promotes to `image::` rather than tolerating the indent. One of the two, and the image is back.
 . *Spacing after punctuation.* `TextNodeConverter` decides "does a space belong here" from a character whitelist, `+[a-zA-Z0-9.:/()]+`, that omits `,` and `;`. Honouring the text node's own trailing whitespace instead of re-deriving it would be the real fix.
 . *Heading levels.* Both converters need to know the level the export writes the page title at. That argues for an option on the converter rather than a constant in it, since `writePage` is the only thing that knows.
 . *Nested lists.* `ListConverter` and `ListItemConverter` need to carry a depth in the context, so that a list inside a list item writes `**` rather than `*`. This is the one the corpus shows most often.

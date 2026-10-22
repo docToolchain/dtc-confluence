@@ -31,7 +31,8 @@ import org.jsoup.nodes.Node;
  */
 public class TransparentConverter extends AbstractConverter {
 
-    private static final Set<String> TAG_NAMES = Set.of("div", "span", "thead", "tbody");
+    /** The wrappers that contribute no markup. Read by {@link ImageConverter}. */
+    static final Set<String> TAG_NAMES = Set.of("div", "span", "thead", "tbody");
 
     @Override
     public boolean canConvert(IContext context, Node node) {

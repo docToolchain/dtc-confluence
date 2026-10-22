@@ -49,19 +49,20 @@ class ConverterComparisonSpec extends Specification {
     ]
 
     /**
-     * The counts the report was written from, per corpus page. {@code blockImage} is zero
-     * throughout: the report records that the native converter writes no block image yet, and this
-     * is where that claim is kept honest in both directions.
+     * The counts the report was written from, per corpus page. {@code blockImage} is one on the two
+     * pages that hold an image and zero elsewhere: it used to be zero throughout, because the
+     * native converter wrote every image inline and the line it opened was indented. This is where
+     * a claim of the report is kept honest in both directions.
      */
     private static final Map<String, Map<String, Integer>> EXPECTED = [
             'smoke-subpages-0-docToolchain_Confluence_Smoke_Test':
-                    [heading: 3, title: 1, listItem: 3, sourceBlock: 1, tableEdge: 2, blockImage: 0, crossRef: 5],
+                    [heading: 3, title: 1, listItem: 3, sourceBlock: 1, tableEdge: 2, blockImage: 1, crossRef: 5],
             'smoke-subpages-1-docToolchain_Confluence_Smoke_Test':
                     [heading: 0, title: 0, listItem: 0, sourceBlock: 0, tableEdge: 0, blockImage: 0, crossRef: 0],
             'smoke-subpages-1-First_Page':
                     [heading: 1, title: 1, listItem: 3, sourceBlock: 1, tableEdge: 0, blockImage: 0, crossRef: 2],
             'smoke-subpages-1-Second_Page':
-                    [heading: 0, title: 0, listItem: 0, sourceBlock: 0, tableEdge: 2, blockImage: 0, crossRef: 3],
+                    [heading: 0, title: 0, listItem: 0, sourceBlock: 0, tableEdge: 2, blockImage: 1, crossRef: 3],
             'smoke-subpages-2-First_Page':
                     [heading: 0, title: 1, listItem: 3, sourceBlock: 0, tableEdge: 0, blockImage: 0, crossRef: 2],
             'smoke-subpages-2-Subsection':

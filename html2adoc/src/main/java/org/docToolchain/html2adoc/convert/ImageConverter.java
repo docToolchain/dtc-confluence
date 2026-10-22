@@ -31,9 +31,7 @@ public class ImageConverter extends AbstractConverter {
     public IContext convert(IContext context, Node node, StringBuilder sb) {
         Element element = (Element) node;
         Element parent = element.parent();
-        boolean imageBloc = parent != null
-                && (("p".equals(parent.tagName()) && hasNoOtherChild(parent)) || "body".equals(parent.tagName()))
-                && isNotInsideATable(parent);
+        boolean imageBloc = parent != null && isNotInsideATable(parent) && opensItsOwnLine(element, sb);
         if (imageBloc) {
             sb.append("\n");
             sb.append("image::");
@@ -52,6 +50,56 @@ public class ImageConverter extends AbstractConverter {
             sb.append(" ");
         }
         return context;
+    }
+
+    /**
+     * Whether the image begins a line of the output, which is what decides the two forms:
+     * {@code image::} is a block image and has to stand at the start of a line, {@code image:}
+     * is inline and follows the words it stands among.
+     *
+     * <p>A Confluence image block arrives as {@code div.imageblock > div.content > img} among the
+     * other blocks of a page. {@link TransparentConverter} drops both divs, so the image stands
+     * where they stood - at the start of a line, after whatever block precedes it. Written as an
+     * inline image it is indented by the space that separates one from preceding words, and an
+     * indented line is a literal block: the page then prints the markup instead of showing the
+     * image.</p>
+     *
+     * <p>A paragraph is asked rather than the output, because a paragraph states it: an image
+     * alone in a {@code <p>} is a block image, and one sharing the paragraph with anything else -
+     * a second image, a word - is not, however the line happens to have broken.</p>
+     */
+    private boolean opensItsOwnLine(Element image, StringBuilder sb) {
+        Element element = image;
+        Element parent = element.parent();
+        while (parent != null
+                && TransparentConverter.TAG_NAMES.contains(parent.tagName())
+                && holdsOnly(parent, element)) {
+            element = parent;
+            parent = element.parent();
+        }
+        if (parent == null) {
+            return false;
+        }
+        if ("p".equals(parent.tagName())) {
+            return holdsOnly(parent, element);
+        }
+        return "body".equals(parent.tagName())
+                || sb.length() == 0
+                || AdocText.lastCharacterOf(sb) == '\n';
+    }
+
+    /** Whether {@code parent} holds {@code only} and, apart from it, nothing but empty space. */
+    private boolean holdsOnly(Element parent, Element only) {
+        for (Node child : parent.childNodes()) {
+            if (child instanceof TextNode) {
+                if (!isBlankOrNoBreakSpace(((TextNode) child).text())) {
+                    return false;
+                }
+            } else if (child != only) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean isNotInsideATable(Element parent) {

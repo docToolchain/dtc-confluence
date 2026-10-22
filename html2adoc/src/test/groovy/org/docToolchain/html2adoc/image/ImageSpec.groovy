@@ -24,6 +24,26 @@ class ImageSpec extends Specification {
             'trailing space'| '<p><img src="images/install002.png" width="360" height="144" /> </p>'
     }
 
+    def 'an image that opens a line is not indented'() {
+        given: '''A Confluence image block, which reaches the converter wrapped in divs: the
+                  wrappers are transparent, so the image stands at the start of the line, and the
+                  space that separates an inline image from the words before it has nothing to
+                  separate it from. Indented, the line is a literal block and the image is printed
+                  as markup rather than shown.'''
+        expect:
+            !Html2Adoc.convert(html).readLines().any { it.startsWith(' image:') }
+
+        and: 'and the line is the image, from its first character'
+            Html2Adoc.convert(html).readLines().grep { it.contains('image:') }
+                    .every { it.startsWith('image:') }
+
+        where:
+            name                | html
+            'a bare wrapper'    | '<div><img src="images/install002.png" /></div>'
+            'a Confluence block'| '<div class="imageblock"><div class="content">' +
+                                    '<img src="images/install002.png" /></div></div>'
+    }
+
     def 'an image directly in the body becomes a block image'() {
         expect:
             Html2Adoc.convert('<body><img src="images/install002.png" width="360" height="144" /></body>') ==

@@ -21,14 +21,14 @@ class HorizontalRuleSpec extends Specification {
 
     def 'a thematic break opens its own line, even where the line was left open'() {
         given:
-            // The corpus shape: the footnotes of a page, following an image block. The image comes
-            // out inline and leaves the line open - that is a known gap of ImageConverter, and the
-            // trailing space below is it; the rule still has to start a line of its own.
+            // The corpus shape: the footnotes of a page, following an image block. The image is a
+            // block image and closes its line; the rule has to start a line of its own whatever
+            // the block before it left behind.
             def html = '<div class="imageblock"><div class="content"><img src="logo.png" /></div></div>' +
                     '<div class="footnotes"><hr /><p>A note</p></div>'
 
         expect:
-            Html2Adoc.convert(html) == ' image:logo.png[] \n' +
+            Html2Adoc.convert(html) == '\nimage::logo.png[]\n' +
                     '\n' +
                     '\'\'\'\n' +
                     '\n' +

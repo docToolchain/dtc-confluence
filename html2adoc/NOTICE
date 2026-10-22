@@ -52,6 +52,11 @@ Code
   * `LinkConverter`: the condition `isExternalLink(e) || isExternalLink(e)` is
     stated once, and the redundant second `addSpaceIfNeeded` call in each
     branch is gone - the first call already wrote the space.
+  * `ImageConverter` decides between `image::` and `image:` by whether the image opens a line of
+    the output, looking through the wrappers that contribute no markup. Upstream asked whether the
+    image's own parent was a `p` holding nothing else or the `body`, so an image inside any wrapper
+    - which is how an image block reaches this converter - was written inline and indented, and an
+    indented line is a literal block.
   * `ListingConverter`: the unused private `findFirstElement` is removed, the
     `<code>` element must now actually contain text (`convert` read
     `textNodes().get(0)` on a structure `canConvert` had not checked that far),
