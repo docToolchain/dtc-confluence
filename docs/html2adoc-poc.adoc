@@ -268,7 +268,10 @@ Every footnote link in every exported page is dead on the pandoc path today, and
 *The list. A tie, since the depth went into the context.*
 Both converters render the title and all three items, and both now nest: `+*+` twice and `+**+` once on each path, and the rendered HTML is the same three `<li>` in two `<ul>` either way.
 Native used to write the nested `ul` at its parent's level, so `nested` became a third sibling of `Second item` instead of its child - `ListConverter` recorded which kind of list an item stood in and not how deep.
-The blank lines between native's items are noise rather than an error: AsciiDoc keeps blank-separated items in one list.
+The blank lines native used to write between its items were noise rather than an error - AsciiDoc keeps blank-separated items in one list, measured: one `<ul>` whether the items are separated by none, one or three blank lines.
+They are gone now.
+Confluence stores every item as `<li><p>…</p></li>`, the paragraph inside ended with the blank line that separates one block from the next, and at the end of an item that line separates nothing; `ListItemConverter` trims it, as `TableTdConverter` already trimmed the same line at the end of a cell.
+On the round trip of a real page the difference is large: the re-export went from 438 lines to 298, and the AsciiDoc that went in differs from the one that came back by 33 added lines instead of 150, of which 2 are blank instead of 117.
 
 *The space before `+_italic_+`. A tie, since the space is taken from the text node itself.*
 Native wrote `+*bold*,_italic_+`, which renders as `bold,italic` - the space the author typed gone from the page.

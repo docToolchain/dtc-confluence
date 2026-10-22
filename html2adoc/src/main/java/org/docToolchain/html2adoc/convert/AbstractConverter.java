@@ -12,6 +12,25 @@ abstract class AbstractConverter implements IConverter {
     private static final String BLANK_OR_NO_BREAK_SPACE = "[\u00A0\\s]*";
 
     /**
+     * Removes the newlines at either end of the content that starts at {@code contentStart}.
+     *
+     * <p>A block converter ends what it writes with a blank line, which is right between blocks
+     * and wrong at the end of something that encloses them: a table cell would carry it past the
+     * end of the cell, and a list item would turn a tight list into a page of single-item lists.
+     * Only newlines are removed - a leading space can be the indentation of a literal block.</p>
+     */
+    protected static void trimNewlines(StringBuilder sb, int contentStart) {
+        while (sb.length() > contentStart && sb.charAt(sb.length() - 1) == '\n') {
+            sb.setLength(sb.length() - 1);
+        }
+        int start = contentStart;
+        while (start < sb.length() && sb.charAt(start) == '\n') {
+            start = start + 1;
+        }
+        sb.delete(contentStart, start);
+    }
+
+    /**
      * Whether {@code text} is empty or holds nothing but whitespace and {@code &nbsp;}.
      *
      * <p>Exported HTML uses {@code &nbsp;} where a word processor had empty space, so a run of it is

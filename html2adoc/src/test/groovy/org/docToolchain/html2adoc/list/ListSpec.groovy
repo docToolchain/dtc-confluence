@@ -52,6 +52,25 @@ class ListSpec extends Specification {
             Html2Adoc.convert('<ul><li>"lorem"</li><li>...</li></ul>') == '* "lorem"\n* ...\n\n'
     }
 
+    def 'an item whose text sits in a paragraph is no looser than one without'() {
+        given: '''what Confluence stores for every list item, and so what every export reads:
+                  AsciiDoctor writes <li><p>text</p></li>, and the paragraph inside ends with the
+                  blank line that separates it from a following block'''
+            def wrapped = '<ul><li><p>lorem</p></li><li><p>ipsum</p></li></ul>'
+
+        expect: 'the same AsciiDoc as the bare form, rather than a blank line between the items'
+            Html2Adoc.convert(wrapped) == Html2Adoc.convert('<ul><li>lorem</li><li>ipsum</li></ul>')
+
+        and:
+            Html2Adoc.convert(wrapped) == '* lorem\n* ipsum\n\n'
+    }
+
+    def 'a nested list under a paragraph item starts on the next line'() {
+        expect: 'no blank line piles up where the item ends and the nested list begins'
+            Html2Adoc.convert('<ul><li><p>lorem</p><ul><li><p>ipsum</p></li></ul></li>' +
+                    '<li><p>dolor</p></li></ul>') == '* lorem\n\n** ipsum\n* dolor\n\n'
+    }
+
     def 'a list inside a list item is a list inside it: #name'() {
         given: '''ListConverter recorded which kind of list an item was in and not how deep it
                   stood, so a <ul> inside an <li> wrote "*" like its parent and its items became

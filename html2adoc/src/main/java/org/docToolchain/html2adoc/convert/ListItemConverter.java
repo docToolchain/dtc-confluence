@@ -57,6 +57,13 @@ public class ListItemConverter extends AbstractConverter {
         if (sb.length() == text || sb.charAt(text) == '\n') {
             sb.insert(text, EMPTY);
         }
+        // A block inside the item ends with the blank line that separates it from the next block,
+        // and at the end of an item that line separates nothing. Confluence writes every list item
+        // as <li><p>...</p></li>, so without this a tight list of twelve items came back as twelve
+        // items with two blank lines between each pair - the same list to AsciiDoc, which never
+        // breaks a list on blank lines, but not a document anybody would have written. The same
+        // blank line is trimmed at the end of a table cell, for the same reason.
+        trimNewlines(sb, text);
         sb.append("\n");
         return context;
     }

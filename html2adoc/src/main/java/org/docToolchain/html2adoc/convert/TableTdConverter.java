@@ -124,21 +124,4 @@ public class TableTdConverter extends AbstractConverter {
                 .filter(node -> !(node instanceof TextNode) || !isBlankOrNoBreakSpace(((TextNode) node).text()))
                 .toList();
     }
-
-    /**
-     * Removes the newlines at either end of the cell content, which starts at {@code contentStart}.
-     *
-     * <p>Only newlines: a leading space can be the indentation of a literal block, and the one a
-     * block converter left behind at the end would otherwise be written past the end of the cell.</p>
-     */
-    private static void trimNewlines(StringBuilder sb, int contentStart) {
-        while (sb.length() > contentStart && sb.charAt(sb.length() - 1) == '\n') {
-            sb.setLength(sb.length() - 1);
-        }
-        int start = contentStart;
-        while (start < sb.length() && sb.charAt(start) == '\n') {
-            start = start + 1;
-        }
-        sb.delete(contentStart, start);
-    }
 }
