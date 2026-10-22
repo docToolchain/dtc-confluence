@@ -184,7 +184,7 @@ class MacroTranslator {
             case "tip", "info", "warning", "note" -> admonition(element, macroName);
             case "expand" -> expand(element);
             case "anchor" -> anchor(element);
-            case "code", "paste-code-macro" -> code(element);
+            case "code", "paste-code-macro", "noformat" -> code(element);
             default -> report("ac:structured-macro " + macroName);
         }
     }
@@ -444,6 +444,17 @@ class MacroTranslator {
         element.remove();
     }
 
+    /**
+     * Writes a macro that carries preformatted text as {@code <pre><code>}.
+     *
+     * <p>{@code noformat} is this macro without a language, and belongs here for that reason.
+     * Untranslated its body did not survive: pandoc wrote it out as escaped prose with its
+     * structure gone - a directory tree came back as {@code ++|++ {plus}- myproj} - and the
+     * native converter dropped it entirely. On the Maven space that body is a directory tree, a
+     * log excerpt or a stack trace. All 27 occurrences measured there carry one plain-text body
+     * and no parameter at all, so a {@code noformat} never reaches the language below; a
+     * {@code code} macro does.</p>
+     */
     private void code(Element element) {
         String language = element.select("ac|parameter[ac:name=language]").text();
         Element body = element.selectFirst("ac|plain-text-body");
