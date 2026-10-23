@@ -16,6 +16,10 @@ import java.util.Map;
  * because a document may refer to an older revision of a diagram, and the folders mirror the page
  * tree so that two pages may each have an {@code overview.png}.</p>
  *
+ * <p>The prefix is read back on the way in: the publish side strips it off, so the attachment goes
+ * back under the name Confluence knows it by, and compares the version it names against the one
+ * Confluence holds. See {@code org.docToolchain.atlassian.confluence.publish.AttachmentName}.</p>
+ *
  * <p>A file that cannot be fetched is reported and skipped. An export of a few hundred pages that
  * stops at one broken attachment is worth less than one that says which files are missing.</p>
  */

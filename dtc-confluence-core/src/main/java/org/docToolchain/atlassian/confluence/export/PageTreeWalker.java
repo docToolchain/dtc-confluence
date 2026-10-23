@@ -21,6 +21,15 @@ import java.util.Set;
  */
 public class PageTreeWalker {
 
+    /**
+     * The media type the draw.io app gives the draft it keeps beside every diagram it draws.
+     *
+     * <p>Measured on two real pages: the draft is called {@code ~<diagram>.tmp} and carries this
+     * type. Recognised by the type rather than by the name, which is the app's own while a file an
+     * author called {@code ~notes.tmp} is theirs.</p>
+     */
+    private static final String DRAWIO_DRAFT_MEDIA_TYPE = "application/x-drawio-draft";
+
     private final ConfluenceReader reader;
     private final String stripPagePrefixRegex;
 
@@ -87,6 +96,9 @@ public class PageTreeWalker {
             tree.getChildrenByParent().put(entry.id(), childIds);
 
             for (Map<?, ?> attachment : reader.fetchAttachments(entry.id())) {
+                if (isAppDraft(attachment)) {
+                    continue;
+                }
                 tree.getAttachments().put(String.valueOf(attachment.get("id")),
                         describe(attachment, entry.id()));
             }
@@ -188,6 +200,22 @@ public class PageTreeWalker {
                 names.add(name);
             }
         }
+    }
+
+    /**
+     * Whether this is an app's working file rather than something somebody attached.
+     *
+     * <p>A draft left beside a diagram is not part of the page. Exported, it would be written to
+     * disk, listed in the document and attached again on the next publish - a file nobody wrote,
+     * travelling in both directions for as long as the round trip is repeated.</p>
+     *
+     * <p>Dropped here rather than while downloading, so that nothing further along sees it: the
+     * document's own list of attachments is built from the same map.</p>
+     */
+    private static boolean isAppDraft(Map<?, ?> attachment) {
+        Object extensions = attachment.get("extensions");
+        Object mediaType = extensions instanceof Map<?, ?> fields ? fields.get("mediaType") : null;
+        return DRAWIO_DRAFT_MEDIA_TYPE.equalsIgnoreCase(text(mediaType));
     }
 
     private static String text(Object value) {

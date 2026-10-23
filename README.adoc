@@ -87,6 +87,20 @@ Every run - dry or not - now names the pages below the document that an earlier 
 They are not deleted: what to do with them is a decision, and this tool is not the one to take it.
 Both halves go away once a page is identified by its id rather than by its title, which is what xref:docs/decisions.adoc[the publish manifest] is for.
 
+Attachments are published under the name Confluence knows them by.
+An export writes a file as `<version>_<name>`, because a document may refer to an older revision of a diagram; that prefix stays on disk, and the attachment goes back as `diagram.png`.
+The version it names is what answers the question that decides whether to write at all: Confluence still holding exactly the revision the export came from means nobody has written it since.
+Where somebody has - the draw.io app writes its own version comment, which no content hash can recognise - the run says so and writes nothing:
+
+[source,yaml]
+----
+confluence:
+  foreignAttachments: fail   # fail (the default), skip, or overwrite
+----
+
+`--foreign-attachments` says the same on the command line.
+An attachment created in Confluence that no export ever saw, and that no run of this publisher wrote, is left alone under every setting but `overwrite`: unknown means not ours.
+
 `CONFLUENCE_CREDENTIALS=user:token` is the alternative where the instance wants basic authentication.
 
 Credentials are read from the environment rather than taken as options, which keeps them out of the process arguments - `ps` shows a command line to every user on the machine.

@@ -594,3 +594,83 @@ has.
 `JiraServers` is an interface with a resolver that answers nothing as its default, because the
 translation has to run without a server: the specifications convert storage format straight to
 HTML, and so does the corpus the native converter is measured against.
+
+== An attachment goes back under its own name, and only where nobody else wrote it
+
+An export writes an attachment as `images/<folders of the page>/<page>/<version>_<filename>`.
+The folders are there so that two pages may each have an `overview.png`, and the version is there because a document may refer to an older revision of a diagram.
+
+The publish side used to derive the attachment name from what the document refers to, so a round trip renamed `diagram.png` into `3_diagram.png`.
+The version prefix is provenance, not a name.
+It now stays on disk and the attachment goes back under the name Confluence knows it by.
+
+This is not cosmetic.
+The draw.io app binds a diagram by exact attachment name: the diagram itself carries no file extension at all - `dummy-diagram`, media type `application/vnd.jgraph.mxfile` - and its preview is attached beside it as `dummy-diagram.png`.
+A renamed attachment leaves the macro pointing at nothing.
+
+=== The clobber guard is the version, not a hash in the comment
+
+`uploadAttachment` writes the content hash into the attachment's version comment, and the publisher read it back out to decide whether to write.
+That breaks against any other writer, which is the defect this entry fixes.
+
+Measured on Confluence Data Center 9.2.21: the draw.io app writes its own version comment, `draw.io diagram`, which carries no hash.
+The old reader applied `replaceAll("(?sm).*#([^#]+)#.*", "$1")` to it, and a `replaceAll` that matches nothing answers the subject unchanged - so the whole comment string came back as the "remote hash".
+It never equalled the local one, the attachment was read as changed, and every publish silently overwrote the user's in-Confluence edit.
+
+The question the guard has to answer is not "has it changed" but "has somebody else touched it since we last wrote it".
+Two things answer it, and either is enough:
+
+* the revision the export took the file from, where Confluence still holds exactly that revision - then nobody has written it since;
+* the hash in the current revision's comment, which only an upload of this publisher puts there - then this publisher wrote what Confluence holds.
+
+Both are needed.
+The version alone refuses every second publish, because our own upload moves the version past the exported one.
+The comment alone refuses the first publish of anything exported, because the revision we exported from carries somebody else's comment - which is the round trip this project exists for.
+
+Equality rather than "no higher than": an attachment deleted and attached again counts from one, so a revision below the exported one is not the revision we exported either.
+A version Confluence does not report equals nothing, which is the same answer.
+
+=== The file name is the carrier
+
+The version reaches the publish side in the file name, because the file name is the only thing that reaches it at all.
+What the publisher sees is HTML that AsciiDoctor rendered from the exported AsciiDoc, and the image path survives both steps unchanged.
+
+A manifest beside the document was the alternative - and remains a good idea for page ids, where `docs/decisions.adoc` already keeps it open - but it buys nothing here that the name does not.
+It would be a second source of truth about the same file, it would have to survive the renders the name survives anyway, and it would have to be kept in step with files an author moves by hand.
+
+What the name costs: a file an author called `2024_report.png` is published as `report.png`, read as revision 2024 of it.
+The page refers to it under the same name, so the page still shows it, and revision 2024 matches nothing in Confluence - which makes the guard refuse rather than overwrite.
+A distinctive separator would end the ambiguity and break every tree exported so far; it is not worth that today.
+
+=== What is not known is not touched
+
+An attachment created in Confluence that no export ever saw has no version to compare against, and no comment of ours.
+It is left alone.
+The rule is "unknown means not ours", never the other way round.
+
+`confluence.foreignAttachments` says what "left alone" means: `fail` (the default), `skip` to name it and carry on, or `overwrite` for what every run did before the guard existed.
+`fail` is the default for the same reason a page whose title is taken fails - the alternative loses somebody's work and says so in a line that scrolls past.
+
+The hash in the comment keeps its other job, which is telling an unchanged attachment from a changed one.
+An attachment Confluence already holds is not written again, so the version does not move and no watcher is notified.
+
+=== The draw.io drafts are not exported
+
+The draw.io app keeps a draft beside every diagram: `~<diagram>.tmp`, media type `application/x-drawio-draft`, measured on two real pages.
+Exported, it was written to disk, listed in the document and attached again on the next publish - a file nobody wrote, travelling in both directions for as long as the round trip is repeated.
+
+It is dropped where attachments enter the exported tree rather than where they are downloaded, so that nothing further along sees it: the document's own list of attachments is built from the same map.
+Recognised by its media type, which is the app's own, rather than by its name, which anybody may choose.
+
+=== Measured against the instance, not only in specifications
+
+Against cwiki, space `GERDASCHEMANNTEST`:
+
+* exporting the page that carries a diagram the app drew reports `attachments: 2 of 2` and writes no draft, where the same export before the filter reported `3 of 3` and wrote `1_~dummy-diagram.tmp`;
+* publishing a document exported that way attaches `live-diagram.png`, not `1_live-diagram.png`;
+* a revision pushed over it with the comment `draw.io diagram` - what the app writes - makes the next publish exit 1 and leave the attachment at that revision, where before it was overwritten without a word;
+* `--foreign-attachments skip` leaves it and finishes, `overwrite` writes revision 3 with our comment, and the publish after that writes nothing at all because the content is already there.
+
+What this does *not* yet do, measured on the same page: the export turns a draw.io macro into a plain image of its preview, so the republished page carries a static image rather than the macro.
+The exported diagram source is written to disk and referred to by nothing, so a publish never sends it back.
+Keeping the macro is `MacroTranslator`'s to do, and the name it would need is now the name it will find.

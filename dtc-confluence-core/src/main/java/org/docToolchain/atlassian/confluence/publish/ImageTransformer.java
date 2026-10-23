@@ -76,6 +76,7 @@ public class ImageTransformer {
         String directory = baseUrl.replaceAll("\\\\", "/").replaceAll("/[^/]*$", "/");
         String url;
         String fileName;
+        int exportedVersion = AttachmentName.NO_VERSION;
         if (source.startsWith("data:image")) {
             EmbeddedImage embedded = EmbeddedImage.parse(source);
             String extension = embedded.fileExtension();
@@ -87,7 +88,13 @@ public class ImageTransformer {
             fileName = stored.fileName();
         } else {
             url = directory + source;
-            fileName = SourcePath.decode(source.substring(source.lastIndexOf('/') + 1));
+            // The file on disk keeps the version an export wrote into its name; the attachment
+            // does not. Confluence knows the diagram under its own name, and the app that drew it
+            // looks for exactly that name.
+            AttachmentName attachment = AttachmentName.of(
+                    SourcePath.decode(source.substring(source.lastIndexOf('/') + 1)));
+            fileName = attachment.fileName();
+            exportedVersion = attachment.exportedVersion();
         }
         url = SourcePath.decode(url);
         System.out.println("    image: " + url);
@@ -97,7 +104,7 @@ public class ImageTransformer {
         image.after("<ac:image ac:align=\"" + alignment + "\" ac:width=\"" + width
                 + "\"><ri:attachment ri:filename=\"" + Entities.escape(fileName)
                 + "\"/></ac:image>");
-        return new Upload(url, fileName, "automatically uploaded");
+        return new Upload(url, fileName, "automatically uploaded", exportedVersion);
     }
 
 

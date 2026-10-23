@@ -175,6 +175,56 @@ class ImageTransformerSpec extends Specification {
             uploads[0].url() == 'docs/a.png'
     }
 
+    def 'an exported image is attached under the name Confluence knows it by'() {
+        given: '''an export writes the revision it took the file from into the file name, because
+                  a document may refer to an older revision of a diagram. Confluence knows the
+                  file without that prefix, and the draw.io app looks for exactly that name.'''
+            def body = bodyOf('<img src="images/Root/Child/3_diagram.png">')
+
+        when:
+            def uploads = transformer().transformImages(body)
+
+        then: 'the file on disk keeps the prefix; the attachment does not'
+            uploads*.fileName() == ['diagram.png']
+            uploads*.url() == ['docs/images/Root/Child/3_diagram.png']
+
+        and: 'and the page refers to it by that name, or it refers to nothing'
+            body.html().contains('<ri:attachment ri:filename="diagram.png" />')
+
+        and: 'the revision travels along, as the only thing that says what we exported from'
+            uploads*.exportedVersion() == [3]
+    }
+
+    def 'an image an author put there themselves carries no revision'() {
+        given:
+            def body = bodyOf('<img src="images/diagram.png">')
+
+        when:
+            def uploads = transformer().transformImages(body)
+
+        then: 'and nothing is stripped off its name'
+            uploads*.fileName() == ['diagram.png']
+            uploads*.exportedVersion() == [AttachmentName.NO_VERSION]
+    }
+
+    def 'a name the image store chose is not read as an export wrote it'() {
+        given: '''The version is in the path the document refers to, and nowhere else. An embedded
+                  image found on disk is attached under the name the store found it under - here a
+                  file an author called "3_dots.png", which is not revision 3 of anything.'''
+            directory.resolve('images').toFile().mkdirs()
+            directory.resolve('images/3_dots.png').toFile().bytes =
+                DATA_URI.substring(DATA_URI.indexOf(',') + 1).decodeBase64()
+            def body = bodyOf("<img src=\"${DATA_URI}\" alt=\"3 dots\">")
+
+        when:
+            def uploads = new ImageTransformer(
+                directory.resolve('manual.html').toString(), ['images/.']).transformImages(body)
+
+        then:
+            uploads*.fileName() == ['3_dots.png']
+            uploads*.exportedVersion() == [AttachmentName.NO_VERSION]
+    }
+
     def 'a document without images asks for no uploads'() {
         expect:
             transformer().transformImages(bodyOf('<p>text</p>')).isEmpty()
