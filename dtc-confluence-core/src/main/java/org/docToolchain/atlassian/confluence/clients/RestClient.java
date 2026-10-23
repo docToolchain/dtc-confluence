@@ -2,6 +2,7 @@ package org.docToolchain.atlassian.confluence.clients;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -92,11 +93,43 @@ public class RestClient extends BasicRestClient {
                 return null;
             }
             if (isNotSuccessful(response)) {
-                throw new RequestFailedException(response, null);
+                throw new RequestFailedException(response,
+                        readRejection(response.getEntity()), null);
             }
             HttpEntity entity = response.getEntity();
             return entity == null ? new byte[0] : EntityUtils.toByteArray(entity);
         }).orElse(null);
+    }
+
+    /**
+     * What the server said with a rejection, or {@code null} if it said nothing readable.
+     *
+     * <p>Nothing here may replace the rejection with an error of its own: the status code is the
+     * more important half of the message and it is already in hand. That rules out
+     * {@code EntityUtils.toString(entity)}, which resolves the charset strictly and answers a
+     * {@code charset=not-a-charset} with an {@code UnsupportedCharsetException} - a runtime
+     * exception, so it would escape past the rejection and take the status with it. Given a
+     * fallback charset the same call keeps it to itself.</p>
+     *
+     * <p>Bounded, because only {@link RequestFailedException#BODY_LIMIT} characters of it are ever
+     * printed: read whole, a rejection with a large body cost 150 MB of heap for a message a
+     * thousand characters long, and a body larger than the heap would have turned a clean
+     * rejection into an {@code OutOfMemoryError}. One character more than is printed, so that the
+     * message can still say it was cut off. What is left on the wire is released in the
+     * {@code finally}, which a bounded read makes load-bearing.</p>
+     */
+    private static String readRejection(HttpEntity entity) {
+        if (entity == null) {
+            return null;
+        }
+        try {
+            return EntityUtils.toString(entity, StandardCharsets.UTF_8,
+                    RequestFailedException.BODY_LIMIT + 1);
+        } catch (IOException | ParseException e) {
+            return null;
+        } finally {
+            EntityUtils.consumeQuietly(entity);
+        }
     }
 
     private static boolean isNotSuccessful(ClassicHttpResponse response) {
@@ -190,12 +223,14 @@ public class RestClient extends BasicRestClient {
         public String handleResponse(ClassicHttpResponse response) throws IOException {
             HttpEntity entity = response.getEntity();
             if (isNotSuccessful(response)) {
-                // Consume once, here, and stop. Reading the entity afterwards is what used to
-                // turn every rejected request into a StreamClosedException.
-                EntityUtils.consume(entity);
+                // Read here and nowhere else. Reading the entity after this check is what used to
+                // turn every rejected request into a StreamClosedException - and consuming it
+                // unread, which is what this did before, threw away the one sentence that says
+                // what went wrong, which a rejection often carries.
                 if (!onRejection.isAcceptable(response)) {
-                    throw new RequestFailedException(response, null);
+                    throw new RequestFailedException(response, readRejection(entity), null);
                 }
+                EntityUtils.consume(entity);
                 System.out.println("Got status code " + response.getCode());
                 return null;
             }

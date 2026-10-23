@@ -22,6 +22,10 @@ class RestClientSpec extends Specification {
     @Shared
     String body = '{"id":"42","title":"Some Page"}'
 
+    /** What the server declares the body to be, which is what decides how it is read. */
+    @Shared
+    String contentType = null
+
     @Shared
     List<Map<String, String>> received = []
 
@@ -30,6 +34,9 @@ class RestClientSpec extends Specification {
         server.createContext('/') { exchange ->
             received << exchange.requestHeaders.collectEntries { k, v -> [(k.toLowerCase()): v.first()] }
             byte[] payload = body.bytes
+            if (contentType != null) {
+                exchange.responseHeaders.set('Content-Type', contentType)
+            }
             exchange.sendResponseHeaders(status, payload.length)
             exchange.responseBody.withStream { it.write(payload) }
         }
@@ -44,6 +51,7 @@ class RestClientSpec extends Specification {
         received.clear()
         status = 200
         body = '{"id":"42","title":"Some Page"}'
+        contentType = null
     }
 
     private ConfigService configService(Map confluence) {
@@ -140,6 +148,65 @@ class RestClientSpec extends Specification {
         then:
             def e = thrown(RequestFailedException)
             e.message.contains('404')
+    }
+
+    def 'a rejection carries what the server wrote in its body'() {
+        given: 'what cwiki answers a publish of a document whose title is empty'
+            status = 400
+            body = '{"statusCode":400,"data":{"authorized":true,"valid":false,' +
+                    '"errors":[{"message":{"key":"You must specify a title for new content."}}]},' +
+                    '"reason":"Bad Request"}'
+
+        when:
+            new RestClient(configService([credentials: 'x'])).doRequestAndFailIfNot20x(new HttpGet('/page'))
+
+        then: '''the sentence that says what is wrong reaches the user, rather than being consumed
+                 and discarded on the way out'''
+            def e = thrown(RequestFailedException)
+            e.message.contains('You must specify a title for new content.')
+    }
+
+    def 'a rejection with an empty body still reports the status'() {
+        given:
+            status = 400
+            body = ''
+
+        when:
+            new RestClient(configService([credentials: 'x'])).doRequestAndFailIfNot20x(new HttpGet('/page'))
+
+        then: 'an empty body is no body, and the status still comes through'
+            def e = thrown(RequestFailedException)
+            e.message.contains('400')
+            e.message.contains('reason: <none>')
+    }
+
+    def 'a rejection whose charset is nonsense still reports the status'() {
+        given: '''the charset decides how the body is read, and reading it must not replace the
+                  rejection with an error of its own - the status is the more important half'''
+            status = 400
+            contentType = 'application/json; charset=not-a-charset'
+            body = '{"message":"bad charset"}'
+
+        when:
+            new RestClient(configService([credentials: 'x'])).doRequestAndFailIfNot20x(new HttpGet('/page'))
+
+        then:
+            def e = thrown(RequestFailedException)
+            e.message.contains('400')
+            e.message.contains('possible solution:')
+    }
+
+    def 'a rejected download reports what the server said too'() {
+        given: 'the attachment path builds the same exception, and had no test at all'
+            status = 403
+            body = '{"message":{"key":"attachment is gone"}}'
+
+        when:
+            new RestClient(configService([credentials: 'x'])).doRequestAndReturnBytes(new HttpGet('/download/x'))
+
+        then:
+            def e = thrown(RequestFailedException)
+            e.message.contains('attachment is gone')
     }
 
     def 'doRequestAndReturnOrNull answers null for a missing page'() {
