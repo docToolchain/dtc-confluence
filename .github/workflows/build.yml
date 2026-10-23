@@ -22,6 +22,10 @@ jobs:
   build:
     name: JDK ${{ matrix.java }}
     runs-on: ubuntu-latest
+    # The whole job takes about a minute. Twice it has instead sat in apt for
+    # longer than twenty, which without a limit of its own runs into GitHub's
+    # six-hour default and holds up a merge for an afternoon.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -41,23 +45,34 @@ jobs:
       # export end to end skips itself without it. A skipped test says nothing,
       # and says it quietly.
       - name: Install pandoc
+        timeout-minutes: 5
         run: pandoc --version || { sudo apt-get update && sudo apt-get install -y pandoc; }
       # Same reason, for the specifications that assert what asciidoctor makes of the AsciiDoc
       # this project writes: whether a block is read as markup, and whether an include lands a
       # level deeper. Those are the only assertions that could have caught an include attribute
       # spelled in a way the directive does not read.
       - name: Install asciidoctor
+        timeout-minutes: 5
         run: asciidoctor --version || { sudo apt-get update && sudo apt-get install -y asciidoctor; }
       - run: ./mvnw -B -ntp verify
 
   sonar:
     name: SonarQube Cloud
-    # push only. On a pull_request this job would run the PR's own Maven build
-    # with SONAR_TOKEN in the environment, and a PR can change the build to
-    # exfiltrate it. Guarding on an empty secret does not isolate untrusted code.
-    # main only. develop is the working stream; the analysed state should be the
-    # one that has been reviewed.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Analysis has to see every pull request, or the coverage number it guards
+    # arrives too late to act on. A fork cannot abuse this: GitHub withholds
+    # secrets from a pull_request raised out of a fork, so SONAR_TOKEN is empty
+    # there and the steps below skip themselves. (pull_request_target would hand
+    # the token to the fork's own code - that is the trigger to stay away from.)
+    # The repository check keeps a fork's own pushes from analysing into this
+    # organisation's project.
+    # Both long-lived branches, not just main. main is the released state and
+    # has to stay visible; develop is the stream that is merged into. Gating on
+    # main alone analysed nothing for six weeks, because main had not moved.
+    if: >-
+      github.repository == 'docToolchain/dtc-confluence' &&
+      (github.event_name == 'pull_request' ||
+       (github.event_name == 'push' &&
+        (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')))
     runs-on: ubuntu-latest
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
