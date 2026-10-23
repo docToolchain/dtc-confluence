@@ -69,6 +69,15 @@ public class ConfluenceConverter {
             "(<h[1-9](?:\\s[^>]*)?>)\\s*(?:\\d+(?:\\.\\d+)+\\.?|\\d+\\.|\\d{1,2})\\s+");
 
     /**
+     * Where the Jira a {@code jira} macro names is, which only a server can answer.
+     *
+     * <p>{@link JiraServers#NONE} by default, so that a conversion runs without one: an issue key
+     * then reaches the page as text rather than as a link. The export sets a resolver that reads
+     * the answer off the rendered page.</p>
+     */
+    private JiraServers jiraServers = JiraServers.NONE;
+
+    /**
      * Strips a hand-written chapter number from a heading ("5.2.4. Title" -> "Title").
      * AsciiDoc can number sections itself, so the number carried over from Confluence is noise.
      */
@@ -109,6 +118,14 @@ public class ConfluenceConverter {
 
     public void setStripChapterNumbering(boolean stripChapterNumbering) {
         this.stripChapterNumbering = stripChapterNumbering;
+    }
+
+    public JiraServers getJiraServers() {
+        return jiraServers;
+    }
+
+    public void setJiraServers(JiraServers jiraServers) {
+        this.jiraServers = jiraServers == null ? JiraServers.NONE : jiraServers;
     }
 
     /**
@@ -234,7 +251,7 @@ public class ConfluenceConverter {
         unwrapEditorSpans(dom);
 
         List<String> unknownTags = new MacroTranslator(pageId, pages, attachments, users,
-                lucidChartsIframe, lucidInfoFile, unknownTagsStats).translate(dom);
+                lucidChartsIframe, lucidInfoFile, unknownTagsStats, jiraServers).translate(dom);
 
         String html = dom.html()
                 // Some last dirty hacks.

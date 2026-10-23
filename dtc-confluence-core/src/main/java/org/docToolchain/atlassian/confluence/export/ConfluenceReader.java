@@ -32,6 +32,9 @@ public class ConfluenceReader {
             "body.storage", "version", "space", "ancestors",
             "history.createdBy", "history.contributors.publishers.users");
 
+    /** The page as the server renders it, which is where a macro's own output can be read. */
+    private static final String RENDERED_EXPAND = "body.view";
+
     private final RestClient restClient;
     private final int pageLimit;
 
@@ -62,6 +65,32 @@ public class ConfluenceReader {
         URI uri = uri("/content/" + pageId, "expand", PAGE_EXPANDS);
         Object response = restClient.doRequestAndReturnOrNull(new HttpGet(uri));
         return response instanceof Map<?, ?> page ? page : null;
+    }
+
+    /**
+     * The page as Confluence renders it, which is where a macro's own output can be read.
+     *
+     * <p>Storage format records what a macro was asked to do, not what it produced: a
+     * {@code jira} macro names a server by a UUID and carries no URL at all. The rendered view
+     * carries the links the server built from that UUID, so this is the only way to learn where
+     * the Jira behind a page actually is - the application-link endpoints that would answer it
+     * directly are open to administrators only, which the user running an export generally is
+     * not.</p>
+     *
+     * <p>A second request per page, so it is asked for only where a page needs it.</p>
+     *
+     * @return the rendered body, or {@code null} if there is no such page or it has none
+     */
+    public String fetchRenderedBody(String pageId) {
+        URI uri = uri("/content/" + pageId, "expand", RENDERED_EXPAND);
+        Object response = restClient.doRequestAndReturnOrNull(new HttpGet(uri));
+        if (!(response instanceof Map<?, ?> page)) {
+            return null;
+        }
+        Object body = page.get("body");
+        Object view = body instanceof Map<?, ?> bodies ? bodies.get("view") : null;
+        Object value = view instanceof Map<?, ?> rendered ? rendered.get("value") : null;
+        return value == null ? null : value.toString();
     }
 
     /**

@@ -88,6 +88,35 @@ class ConfluenceReaderSpec extends Specification {
             reader().fetchPage('404') == null
     }
 
+    def 'the rendered page is asked for, because a macro\'s own output is only there'() {
+        given:
+            responses << '{"id":"1","body":{"view":{"value":"<p>rendered</p>"}}}'
+
+        when:
+            def rendered = reader().fetchRenderedBody('1')
+
+        then:
+            rendered == '<p>rendered</p>'
+
+        and: 'the view and nothing else: it is a second request and it is asked for sparingly'
+            requests.first().uri == '/confluence/rest/api/content/1?expand=body.view'
+    }
+
+    def 'a page with no rendered body is answered with nothing: #what'() {
+        given:
+            responses << answer
+
+        expect:
+            reader().fetchRenderedBody('1') == null
+
+        where:
+            what                   | answer
+            'no such page'         | '404:{"message":"gone"}'
+            'no body at all'       | '{"id":"1"}'
+            'no view in the body'  | '{"id":"1","body":{}}'
+            'no value in the view' | '{"id":"1","body":{"view":{}}}'
+    }
+
     def 'children are followed to the end of the paging'() {
         given: 'two full pages of results and then a short one'
             responses << '{"results":[{"id":"10"},{"id":"11"}]}'

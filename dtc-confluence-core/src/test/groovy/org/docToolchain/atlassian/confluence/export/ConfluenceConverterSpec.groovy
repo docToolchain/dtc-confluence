@@ -90,6 +90,148 @@ class ConfluenceConverterSpec extends Specification {
             convert(storage).contains('Worth knowing.')
     }
 
+    def 'a jira macro naming one issue becomes a link to it'() {
+        given: 'the macro as the Maven space writes it, and a resolved server'
+            converter.setJiraServers({ id, page -> 'https://issues.apache.org/jira' } as JiraServers)
+            def storage = '<p>see <ac:structured-macro ac:name="jira">' +
+                    '<ac:parameter ac:name="server">ASF JIRA</ac:parameter>' +
+                    '<ac:parameter ac:name="serverId">5aa69414-a9e9-3523-82ec-879b028fb15b</ac:parameter>' +
+                    '<ac:parameter ac:name="key">MNG-5958</ac:parameter>' +
+                    '</ac:structured-macro></p>'
+
+        when:
+            def html = convert(storage)
+
+        then:
+            html.contains('<a href="https://issues.apache.org/jira/browse/MNG-5958">MNG-5958</a>')
+
+        and: '''and the parameters are gone: they used to reach the page as text, so a sentence
+                read "see ASF JIRA 5aa69414-a9e9-3523-82ec-879b028fb15b MNG-5958"'''
+            !html.contains('ASF JIRA')
+            !html.contains('5aa69414')
+
+        and:
+            unknownTagsIn(storage).isEmpty()
+    }
+
+    def 'an issue whose server cannot be resolved keeps its key'() {
+        given: 'no resolver, which is what a conversion without a server has'
+            def storage = '<p><ac:structured-macro ac:name="jira">' +
+                    '<ac:parameter ac:name="key">MNG-5958</ac:parameter>' +
+                    '</ac:structured-macro></p>'
+
+        when:
+            def html = convert(storage)
+
+        then: 'the key is the content and is kept, written rather than left to leak as a parameter'
+            html.contains('<span>MNG-5958</span>')
+
+        and: 'but no link is invented that would point at some other Jira'
+            !html.contains('href')
+    }
+
+    def 'a jira macro carrying a query becomes the query'() {
+        given: '''296 of the 499 occurrences measured are queries rather than issues, and a query
+                  is a live listing whose rows are not in the storage format at all'''
+            converter.setJiraServers({ id, page -> 'https://issues.apache.org/jira' } as JiraServers)
+            def storage = '<ac:structured-macro ac:name="jira">' +
+                    '<ac:parameter ac:name="serverId">5aa69414-a9e9-3523-82ec-879b028fb15b</ac:parameter>' +
+                    '<ac:parameter ac:name="jqlQuery">project = MSHARED AND component = file-management </ac:parameter>' +
+                    '<ac:parameter ac:name="maximumIssues">20</ac:parameter>' +
+                    '<ac:parameter ac:name="columns">key,summary,status</ac:parameter>' +
+                    '</ac:structured-macro>'
+
+        when:
+            def html = convert(storage)
+
+        then: '''as a code block a converter writes as [source,jira] - the <pre> is what makes it
+                 a block rather than inline code, so it is part of the claim'''
+            html.contains('<pre><code class="language-jira">' +
+                    'project = MSHARED AND component = file-management</code></pre>')
+
+        and: '''and a link to the filter, the query percent-encoded as it stands. Confluence's own
+                link may differ, because the server re-serialises the JQL through Jira; both find
+                the same issues'''
+            html.contains('https://issues.apache.org/jira/issues/?jql=' +
+                    'project%20%3D%20MSHARED%20AND%20component%20%3D%20file-management')
+
+        and: 'the link says what it leads to, since the listing itself cannot be shown'
+            html.contains('>the issues this lists</a>')
+
+        and: '''what the listing was to look like is a property of the listing and not of the
+                query, so it goes with the macro - columns is on 76 of the measured occurrences'''
+            !html.contains('maximumIssues')
+            !html.contains('>20<')
+            !html.contains('columns')
+            !html.contains('summary')
+    }
+
+    def 'a query without a resolved server is still written out'() {
+        when:
+            def html = convert('<ac:structured-macro ac:name="jira">' +
+                    '<ac:parameter ac:name="jqlQuery">project = MNG</ac:parameter>' +
+                    '</ac:structured-macro>')
+
+        then:
+            html.contains('<pre><code class="language-jira">project = MNG</code></pre>')
+
+        and:
+            !html.contains('href')
+    }
+
+    def 'a counted query becomes an inline link where its number stood'() {
+        given: '''285 of the 296 query macros measured carry count=true, which Confluence renders
+                  as a bare number in the middle of a sentence'''
+            converter.setJiraServers({ id, page -> 'https://issues.apache.org/jira' } as JiraServers)
+            def storage = '<p>There are currently <ac:structured-macro ac:name="jira">' +
+                    '<ac:parameter ac:name="count">true</ac:parameter>' +
+                    '<ac:parameter ac:name="serverId">5aa69414-a9e9-3523-82ec-879b028fb15b</ac:parameter>' +
+                    '<ac:parameter ac:name="jqlQuery">filter=12338619</ac:parameter>' +
+                    '</ac:structured-macro> flagged as waiting.</p>'
+
+        when:
+            def html = convert(storage)
+
+        then: '''an inline link, labelled rather than carrying the query: a link's text is an
+                 attribute list in AsciiDoc, and a query full of = renders with no text at all'''
+            html.contains('<a href="https://issues.apache.org/jira/issues/?jql=filter%3D12338619">' +
+                    '(count)</a>')
+
+        and: 'and the sentence around it stays one sentence, which a block would cut in three'
+            !html.contains('<pre>')
+            html.contains('There are currently')
+            html.contains('flagged as waiting.')
+    }
+
+    def 'a counted query with no resolved server keeps the query'() {
+        when:
+            def html = convert('<p><ac:structured-macro ac:name="jira">' +
+                    '<ac:parameter ac:name="count">true</ac:parameter>' +
+                    '<ac:parameter ac:name="jqlQuery">filter=1</ac:parameter>' +
+                    '</ac:structured-macro></p>')
+
+        then:
+            html.contains('<code>filter=1</code>')
+
+        and:
+            !html.contains('href')
+    }
+
+    def 'a jira macro that names neither an issue nor a query is reported'() {
+        when:
+            def unknown = unknownTagsIn('<ac:structured-macro ac:name="jira">' +
+                    '<ac:parameter ac:name="server">ASF JIRA</ac:parameter>' +
+                    '</ac:structured-macro>')
+
+        then: 'there is nothing to write, so the page says something was lost'
+            unknown == ['ac:structured-macro jira']
+
+        and: 'and the macro goes anyway, rather than leaving its parameters as text'
+            !convert('<ac:structured-macro ac:name="jira">' +
+                    '<ac:parameter ac:name="server">ASF JIRA</ac:parameter>' +
+                    '</ac:structured-macro>').contains('ASF JIRA')
+    }
+
     def 'an image embedded from a URL keeps the URL'() {
         given: """An ac:image names either an attachment of the page or, with ri:url, an image
                   somewhere else. Only the attachment was read, so the URL became an "1_" - a

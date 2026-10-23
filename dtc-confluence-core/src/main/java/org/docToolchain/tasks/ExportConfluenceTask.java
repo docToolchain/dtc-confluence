@@ -18,6 +18,7 @@ import org.docToolchain.atlassian.confluence.clients.RestClient;
 import org.docToolchain.atlassian.confluence.export.AttachmentDownloader;
 import org.docToolchain.atlassian.confluence.export.ConfluenceConverter;
 import org.docToolchain.atlassian.confluence.export.ConfluenceReader;
+import org.docToolchain.atlassian.confluence.export.RenderedJiraServers;
 import org.docToolchain.atlassian.confluence.export.ExportedTree;
 import org.docToolchain.atlassian.confluence.export.PageNaming;
 import org.docToolchain.atlassian.confluence.export.PageTreeWalker;
@@ -95,6 +96,9 @@ public class ExportConfluenceTask extends AbstractConfluenceTask {
         File destDir = destinationDirectory();
         String rootPageId = rootPageId();
         converter.setStripChapterNumbering(flag("stripChapterNumbering", true));
+        // Built from the reader this export runs with, so a test that swaps the reader for
+        // fixtures gets a resolver that answers from the same fixtures.
+        converter.setJiraServers(new RenderedJiraServers(reader));
 
         System.out.println("exporting page " + rootPageId + " and everything below it");
         System.out.println("destination:           " + destDir.getAbsolutePath());

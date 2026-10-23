@@ -25,6 +25,9 @@ publisher verified against a real instance (ASF cwiki, Confluence Data Center 9.
 
 - `export` fetches a page and everything below it and writes AsciiDoc, with attachments, a menu
   and a report of the macros it could not translate. Needs pandoc on the PATH.
+- A `jira` macro becomes a link rather than its own parameters: one issue becomes a link to it, a
+  counted query an inline link to the issues it counted, a listing the query plus a link to them.
+  The Jira's address is read off the page Confluence rendered, so nothing has to be configured.
 
 ### Configuration and tooling
 

@@ -2,6 +2,7 @@ package org.docToolchain.atlassian.confluence.export;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
@@ -55,6 +56,14 @@ class MacroTranslator {
     private final boolean lucidChartsIframe;
     private final File lucidInfoFile;
     private final Map<String, List<String>> unknownTagsStats;
+    private final JiraServers jiraServers;
+
+    /** What a link to a listing's issues is called, where the listing itself cannot be shown. */
+    private static final String ISSUES_THIS_LISTS = "the issues this lists";
+
+    /** What stands where a counted query's number stood. Free of {@code =}, which AsciiDoc would
+     * read as a named attribute of the link. */
+    private static final String COUNT_LABEL = "(count)";
 
     /** The tags of this page the translation did not recognise, each named once. */
     private final Set<String> unknownTags = new LinkedHashSet<>();
@@ -65,7 +74,8 @@ class MacroTranslator {
                     Map<String, Map<String, Object>> users,
                     boolean lucidChartsIframe,
                     File lucidInfoFile,
-                    Map<String, List<String>> unknownTagsStats) {
+                    Map<String, List<String>> unknownTagsStats,
+                    JiraServers jiraServers) {
         this.pageId = pageId;
         this.pages = pages;
         this.attachments = attachments;
@@ -73,6 +83,7 @@ class MacroTranslator {
         this.lucidChartsIframe = lucidChartsIframe;
         this.lucidInfoFile = lucidInfoFile;
         this.unknownTagsStats = unknownTagsStats;
+        this.jiraServers = jiraServers;
     }
 
     /**
@@ -184,6 +195,7 @@ class MacroTranslator {
             case "tip", "info", "warning", "note" -> admonition(element, macroName);
             case "expand" -> expand(element);
             case "anchor" -> anchor(element);
+            case "jira" -> jira(element);
             case "code", "paste-code-macro", "noformat" -> code(element);
             default -> report("ac:structured-macro " + macroName);
         }
@@ -296,6 +308,111 @@ class MacroTranslator {
             element.before("\n<p>%%ANCHOR%%" + anchor + "%%ANCHOR-END%%</p>\n");
         }
         unwrapBody(element);
+    }
+
+    /**
+     * Writes a {@code jira} macro as a link to the issue, or to the issues a query finds.
+     *
+     * <p>Untranslated it was the worst leak the export had: the macro's parameters came through as
+     * text, so the Maven space's pages read {@code ASF JIRA 5aa69414-a9e9-3523-82ec-879b028fb15b
+     * MNG-5958} - the display name, the server UUID and the key, run together, and no link. 499
+     * occurrences on 19 of 136 pages measured.</p>
+     *
+     * <p>Three forms, and they are three different things. 203 of the 499 name one issue, which is
+     * a link and loses nothing as one. 285 carry a query and {@code count=true}: Confluence renders
+     * those as a bare number, in the middle of a sentence - "there are currently 57 flagged as" -
+     * and the number is nowhere in the storage format, so the honest reading is a link to the
+     * issues it counted, inline, where the number stood. The remaining 11 are listings whose rows
+     * are not in the storage format either and which no AsciiDoc construct can reproduce; for
+     * those the query itself is written out as a block, and a reader who wants the rows follows
+     * the link.</p>
+     */
+    private void jira(Element element) {
+        String key = directParameter(element, "key");
+        String jql = directParameter(element, "jqlQuery");
+        String baseUrl = jiraServers.baseUrlFor(directParameter(element, "serverId"), pageId);
+        if (!key.isEmpty()) {
+            element.before(issueLink(key, baseUrl));
+        } else if (jql.isEmpty()) {
+            // Neither an issue nor a query: there is nothing here to write.
+            report("ac:structured-macro jira");
+        } else if ("true".equals(directParameter(element, "count"))) {
+            element.before(issueCount(jql, baseUrl));
+        } else {
+            element.before(issueListing(jql, baseUrl));
+        }
+        element.remove();
+    }
+
+    /**
+     * The issue as a link, or as its key alone where the Jira behind the page is not known.
+     *
+     * <p>Built through the DOM rather than written as markup, so that neither the key nor the URL
+     * can carry anything into the page as markup of its own.</p>
+     */
+    private static Element issueLink(String key, String baseUrl) {
+        if (baseUrl == null) {
+            // The key is the content and is kept; only the link is lost, and a link invented
+            // without knowing the server would point somewhere that is not this issue.
+            return new Element("span").text(key);
+        }
+        return new Element("a").attr("href", baseUrl + "/browse/" + key).text(key);
+    }
+
+    /**
+     * A counted query as an inline link, because that is where its number stood.
+     *
+     * <p>Inline, because a block would cut the sentence the number stood in: "there are currently
+     * 57 flagged as" would become three paragraphs. The link is labelled rather than carrying the
+     * query, because a link's text in AsciiDoc is an attribute list - measured, {@code [project =
+     * MSHARED AND component = x]} is read as a named attribute and the link renders with no text
+     * at all. {@link #COUNT_LABEL} says plainly that a number stood here and the query is in the
+     * URL.</p>
+     *
+     * <p>Where the Jira is not known there is no URL to put it in, so the query is written out
+     * instead: it is then the only thing left of what was counted.</p>
+     */
+    private static Element issueCount(String jql, String baseUrl) {
+        if (baseUrl == null) {
+            return new Element("code").text(jql);
+        }
+        return new Element("a").attr("href", filterUrl(jql, baseUrl)).text(COUNT_LABEL);
+    }
+
+    /**
+     * A listing as the query it runs, with a link to the issues it finds.
+     *
+     * <p>A code block because {@code <pre><code class="language-jira">} is what a converter writes
+     * as {@code [source,jira]}, which keeps the query readable and gives a renderer that knows
+     * about Jira something to work with. The {@code <pre>} is what makes it a block rather than
+     * inline code.</p>
+     */
+    private static Element issueListing(String jql, String baseUrl) {
+        Element block = new Element("div");
+        Element code = new Element("code").attr("class", "language-jira");
+        code.text(jql);
+        block.appendChild(new Element("pre").appendChild(code));
+        if (baseUrl != null) {
+            block.appendChild(new Element("p").appendChild(new Element("a")
+                    .attr("href", filterUrl(jql, baseUrl)).text(ISSUES_THIS_LISTS)));
+        }
+        return block;
+    }
+
+    /**
+     * The query as a URL that opens it in Jira.
+     *
+     * <p>The query percent-encoded as it stands. The link Confluence itself renders may differ:
+     * the server runs the JQL through Jira and writes back what Jira made of it, so {@code and}
+     * comes back as {@code AND} and a renamed component resolved - of four such links measured on
+     * one page, two matched this character for character and two differed that way. Both find the
+     * same issues. {@link #directParameter} has already normalised the parameter's whitespace,
+     * because jsoup's {@code text()} collapses internal runs as well as dropping the surrounding
+     * ones.</p>
+     */
+    private static String filterUrl(String jql, String baseUrl) {
+        return baseUrl + "/issues/?jql="
+                + URLEncoder.encode(jql, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     private void status(Element element) {
