@@ -32,6 +32,12 @@ publisher verified against a real instance (ASF cwiki, Confluence Data Center 9.
   than as a section of its own. The page reads on its own, its own headings sit inside its title
   instead of beside it, and the tree reaches one page deeper before AsciiDoc's six heading levels
   run out — six pages, where it was five.
+- A link to a page the export does not hold keeps its destination: it becomes a URL into the
+  Confluence it was read from, where it used to become the bare words of its link text. A link to
+  an anchor the page sets becomes a reference into the exported document. What no URL can be built
+  for - a mention of a user, which the storage format identifies by a key and not by the name a
+  profile URL is built from - is reported among the constructs that did not translate, so a lost
+  link is never silent.
 
 ### Configuration and tooling
 

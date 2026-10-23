@@ -132,6 +132,28 @@ class ExportConfluenceTaskSpec extends Specification {
             task.converter.unknownTagsStats.keySet().any { it.startsWith('ac:structured-macro profile') }
     }
 
+    def 'a link to a page outside the export reaches the document as a link'() {
+        given: '''the shape measured on Maven Ecosystem Cleanup: a link to a page of the same
+                  space that this export does not hold. It used to arrive as the bare words
+                  "see here".'''
+            reader.fetchPage('1') >> page('1', 'Root',
+                '<p>see <ac:link><ri:page ri:content-title="Somewhere Else"/>' +
+                    '<ac:plain-text-link-body><![CDATA[see here]]></ac:plain-text-link-body>' +
+                    '</ac:link></p>')
+            reader.fetchChildPages('1') >> []
+            reader.fetchAttachments('1') >> []
+
+        when:
+            taskFor().execute()
+            def adoc = exported('Root.adoc').getText('utf-8')
+
+        then: '''a link, and not an escaped one: pandoc writes a URL in an <a> element as
+                 "url[text]", while the same link spelled out as AsciiDoc by hand comes back with
+                 its brackets escaped as "++[++text++]++"'''
+            adoc.contains(
+                'https://confluence.example/confluence/display/SPACE/Somewhere+Else[see here]')
+    }
+
     def 'an exported page carries its title, its attributes and its children'() {
         given:
             treeOfTwoPages()

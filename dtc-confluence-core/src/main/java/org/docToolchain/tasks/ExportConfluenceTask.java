@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.Set;
 
 import groovy.util.ConfigObject;
+import org.docToolchain.atlassian.confluence.clients.ConfluenceClient;
 import org.docToolchain.atlassian.confluence.clients.RestClient;
 import org.docToolchain.atlassian.confluence.export.AttachmentDownloader;
 import org.docToolchain.atlassian.confluence.export.ConfluenceConverter;
@@ -99,6 +100,9 @@ public class ExportConfluenceTask extends AbstractConfluenceTask {
         // Built from the reader this export runs with, so a test that swaps the reader for
         // fixtures gets a resolver that answers from the same fixtures.
         converter.setJiraServers(new RenderedJiraServers(reader));
+        // Where a link to a page this export does not hold keeps pointing: at the Confluence the
+        // export was read from.
+        converter.setConfluenceBaseUrl(ConfluenceClient.baseUrlFor(configService));
 
         System.out.println("exporting page " + rootPageId + " and everything below it");
         System.out.println("destination:           " + destDir.getAbsolutePath());

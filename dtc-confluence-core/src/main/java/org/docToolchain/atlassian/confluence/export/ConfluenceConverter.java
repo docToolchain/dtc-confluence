@@ -78,6 +78,16 @@ public class ConfluenceConverter {
     private JiraServers jiraServers = JiraServers.NONE;
 
     /**
+     * Where the Confluence this reads from is served, as {@code https://host/confluence}.
+     *
+     * <p>Empty by default, so that a conversion runs without one, as {@link JiraServers#NONE}
+     * lets it run without a Jira: the specifications convert storage format straight to HTML. A
+     * link whose target was not exported then keeps its words and is reported, rather than
+     * becoming a URL with no host in it. The export sets it from the configured API URL.</p>
+     */
+    private String confluenceBaseUrl = "";
+
+    /**
      * Strips a hand-written chapter number from a heading ("5.2.4. Title" -> "Title").
      * AsciiDoc can number sections itself, so the number carried over from Confluence is noise.
      */
@@ -118,6 +128,14 @@ public class ConfluenceConverter {
 
     public void setStripChapterNumbering(boolean stripChapterNumbering) {
         this.stripChapterNumbering = stripChapterNumbering;
+    }
+
+    public String getConfluenceBaseUrl() {
+        return confluenceBaseUrl;
+    }
+
+    public void setConfluenceBaseUrl(String confluenceBaseUrl) {
+        this.confluenceBaseUrl = confluenceBaseUrl == null ? "" : confluenceBaseUrl;
     }
 
     public JiraServers getJiraServers() {
@@ -251,7 +269,8 @@ public class ConfluenceConverter {
         unwrapEditorSpans(dom);
 
         List<String> unknownTags = new MacroTranslator(pageId, pages, attachments, users,
-                lucidChartsIframe, lucidInfoFile, unknownTagsStats, jiraServers).translate(dom);
+                lucidChartsIframe, lucidInfoFile, unknownTagsStats, jiraServers,
+                new ConfluenceSite(confluenceBaseUrl, text(space.get("key")))).translate(dom);
 
         String html = dom.html()
                 // Some last dirty hacks.
