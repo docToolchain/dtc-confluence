@@ -28,6 +28,10 @@ publisher verified against a real instance (ASF cwiki, Confluence Data Center 9.
 - A `jira` macro becomes a link rather than its own parameters: one issue becomes a link to it, a
   counted query an inline link to the issues it counted, a listing the query plus a link to them.
   The Jira's address is read off the page Confluence rendered, so nothing has to be configured.
+- An exported page carries its title as the document title (`= Title`, with `:showtitle:`) rather
+  than as a section of its own. The page reads on its own, its own headings sit inside its title
+  instead of beside it, and the tree reaches one page deeper before AsciiDoc's six heading levels
+  run out — six pages, where it was five.
 
 ### Configuration and tooling
 
