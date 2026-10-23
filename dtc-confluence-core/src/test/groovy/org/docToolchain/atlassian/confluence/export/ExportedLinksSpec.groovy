@@ -149,7 +149,7 @@ class ExportedLinksSpec extends Specification {
                   so the document was left with nothing where a name stood. The storage format
                   carries no name, and the profile URL is built from one.'''
             def storage =
-                '<p><ac:link><ri:user ri:userkey="8aa980874e36a1eb014e36a2c30c772e"/></ac:link></p>'
+                '<p><ac:link><ri:user ri:userkey="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"/></ac:link></p>'
 
         when:
             def converted = convert(storage)
@@ -163,15 +163,15 @@ class ExportedLinksSpec extends Specification {
 
     def 'a mention that carries a name keeps the name'() {
         given: 'the other 25, which name the user they mention in the body of the link'
-            def storage = '<p><ac:link><ri:user ri:userkey="8aa980874e36a1eb014e36a2cf291190"/>' +
-                '<ac:plain-text-link-body><![CDATA[Hervé Boutemy]]>' +
+            def storage = '<p><ac:link><ri:user ri:userkey="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"/>' +
+                '<ac:plain-text-link-body><![CDATA[A Committer]]>' +
                 '</ac:plain-text-link-body></ac:link></p>'
 
         when:
             def converted = convert(storage)
 
         then:
-            converted.html().contains('Hervé Boutemy')
+            converted.html().contains('A Committer')
 
         and: 'and the link it was is still reported, because the profile it pointed at is gone'
             converted.unknownTags() == ['ac:link ri:user']
