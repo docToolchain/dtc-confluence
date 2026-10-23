@@ -2,12 +2,17 @@ package org.docToolchain.atlassian.confluence.publish;
 
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import org.docToolchain.atlassian.confluence.image.EmbeddedImage;
 import org.docToolchain.atlassian.confluence.image.ImageStore;
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Entities;
+import org.jsoup.select.Elements;
 
 /**
  * Turns the images of a document into what Confluence understands.
@@ -55,7 +60,9 @@ public class ImageTransformer {
      */
     public List<Upload> transformImages(Element body) {
         List<Upload> uploads = new ArrayList<>();
-        for (Element image : body.select("img")) {
+        Elements images = body.select("img");
+        Set<String> merging = namesTwoFilesWouldShare(images);
+        for (Element image : images) {
             String source = image.attr("src");
             String width = valueOr(image.attr("width"), DEFAULT_WIDTH);
             String alignment = valueOr(image.attr("align"), DEFAULT_ALIGNMENT);
@@ -65,14 +72,70 @@ public class ImageTransformer {
                 image.after("<ac:image ac:align=\"" + alignment + "\" ac:width=\"" + width
                         + "\"><ri:url ri:value=\"" + source + "\"/></ac:image>");
             } else {
-                uploads.add(attach(image, source, width, alignment));
+                uploads.add(attach(image, source, width, alignment, merging));
             }
             image.remove();
         }
         return uploads;
     }
 
-    private Upload attach(Element image, String source, String width, String alignment) {
+    /**
+     * The attachment names that two different files of this page would end up sharing.
+     *
+     * <p>Taking the version off a name can merge two pictures into one: a page showing
+     * {@code 1_diagram.png} beside {@code 2_diagram.png} - which is what the prefix is there for -
+     * would attach both as {@code diagram.png}, and both positions would then show whichever was
+     * uploaded last. An author numbering their screenshots {@code 01_step.png},
+     * {@code 02_step.png} is the same case and the more common one.</p>
+     *
+     * <p>Decided over the whole body before anything is written, because it is a property of the
+     * page rather than of one image, and a name is only safe to shorten once every other name on
+     * the page is known.</p>
+     *
+     * @return the shortened names that more than one file lays claim to
+     */
+    private static Set<String> namesTwoFilesWouldShare(Elements images) {
+        Map<String, Set<String>> filesByName = new LinkedHashMap<>();
+        for (Element image : images) {
+            String source = image.attr("src");
+            if (source.startsWith("http") || source.startsWith("data:image")) {
+                continue;
+            }
+            filesByName
+                    .computeIfAbsent(AttachmentName.of(lastSegmentOf(source)).fileName(),
+                            name -> new LinkedHashSet<>())
+                    .add(SourcePath.decode(source));
+        }
+        Set<String> merging = new LinkedHashSet<>();
+        filesByName.forEach((name, files) -> {
+            if (files.size() > 1) {
+                merging.add(name);
+                report(name, files);
+            }
+        });
+        return merging;
+    }
+
+    /**
+     * Says which files are affected and what happens to them, because the alternative - picking
+     * one of them and attaching it twice - is a document that shows the wrong picture and says
+     * nothing about it.
+     */
+    private static void report(String name, Set<String> files) {
+        Set<String> kept = new LinkedHashSet<>();
+        files.forEach(file -> kept.add(segmentOf(file)));
+        System.out.println(">>> WARN: more than one file would be attached as '" + name + "': "
+                + String.join(", ", files) + ". Confluence holds one attachment per name.");
+        System.out.println(kept.size() > 1
+                ? "    They are attached under the names the document refers to instead, so "
+                        + "nothing is merged that the document tells apart. A diagram an app has "
+                        + "to find under its own name needs a name of its own."
+                : "    The document refers to them all by that one name, so the page will show "
+                        + "whichever is uploaded last.");
+    }
+
+    private Upload attach(Element image, String source, String width, String alignment,
+                          Set<String> merging) {
         String directory = baseUrl.replaceAll("\\\\", "/").replaceAll("/[^/]*$", "/");
         String url;
         String fileName;
@@ -91,10 +154,19 @@ public class ImageTransformer {
             // The file on disk keeps the version an export wrote into its name; the attachment
             // does not. Confluence knows the diagram under its own name, and the app that drew it
             // looks for exactly that name.
-            AttachmentName attachment = AttachmentName.of(
-                    SourcePath.decode(source.substring(source.lastIndexOf('/') + 1)));
-            fileName = attachment.fileName();
-            exportedVersion = attachment.exportedVersion();
+            String segment = lastSegmentOf(source);
+            AttachmentName attachment = AttachmentName.of(segment);
+            if (merging.contains(attachment.fileName())) {
+                // Shortening this one would merge it with another file of this page. The name the
+                // document refers to is kept, and with it the version is dropped: the revision we
+                // exported from belongs to an attachment of the shortened name, and comparing it
+                // against a different attachment's revision could authorise a write over
+                // somebody else's file.
+                fileName = segment;
+            } else {
+                fileName = attachment.fileName();
+                exportedVersion = attachment.exportedVersion();
+            }
         }
         url = SourcePath.decode(url);
         System.out.println("    image: " + url);
@@ -107,6 +179,16 @@ public class ImageTransformer {
         return new Upload(url, fileName, "automatically uploaded", exportedVersion);
     }
 
+
+    /** @return the file name at the end of what the document refers to, URL escapes decoded */
+    private static String lastSegmentOf(String source) {
+        return SourcePath.decode(segmentOf(source));
+    }
+
+    /** @return the last segment of a path, as it is - decoded again, a literal escape would go */
+    private static String segmentOf(String path) {
+        return path.substring(path.lastIndexOf('/') + 1);
+    }
 
     private static String valueOr(String value, String fallback) {
         return value == null || value.isEmpty() ? fallback : value;

@@ -50,6 +50,28 @@ class ConfluenceClientBaseSpec extends Specification {
         return new ConfluenceClientV1(new ConfigService(config))
     }
 
+    def 'the hash in a version comment is read only where it is one of ours'() {
+        expect: '''An upload of this publisher writes an MD5 between hash marks. Carrying the hash
+                   is what says "this publisher wrote the revision Confluence holds", so anything
+                   else that happens to have hash marks in it must not count - a comment reading
+                   "see #123#" would otherwise have authorised a write over somebody else's
+                   revision.'''
+            ConfluenceClient.hashIn(comment) == hash
+
+        where:
+            comment                                              || hash
+            'automatically uploaded\r\n#a937de4e4d3a556d0b8886d7ecb5e0c5#' || 'a937de4e4d3a556d0b8886d7ecb5e0c5'
+            '#a937de4e4d3a556d0b8886d7ecb5e0c5#'                 || 'a937de4e4d3a556d0b8886d7ecb5e0c5'
+            'Manually revised; see #123#'                        || ''
+            'draw.io diagram'                                    || ''
+            'see #MNG-5958# and #PR-7#'                          || ''
+            '#A937DE4E4D3A556D0B8886D7ECB5E0C5#'                 || ''
+            '#a937de4e4d3a556d0b8886d7ecb5e0c#'                  || ''
+            '#a937de4e4d3a556d0b8886d7ecb5e0c5a#'                || ''
+            null                                                 || ''
+            ''                                                   || ''
+    }
+
     def 'verifyCredentials accepts a resolved user'() {
         given:
             body = '{"type":"known","username":"ascheman","displayName":"Gerd Aschemann"}'

@@ -101,6 +101,10 @@ confluence:
 `--foreign-attachments` says the same on the command line.
 An attachment created in Confluence that no export ever saw, and that no run of this publisher wrote, is left alone under every setting but `overwrite`: unknown means not ours.
 
+The prefix is dropped only where the shorter name stays unique on that page.
+Two revisions of one picture shown side by side - and screenshots an author numbered `01_step.png`, `02_step.png` - keep the names the document refers to, because one attachment cannot be two pictures; the run names the files it did that for.
+A name that Confluence holds with a space, a colon or a path separator in it does not survive the round trip at all: the export replaces those characters with `_`, so `my diagram.png` comes back as a second attachment called `my_diagram.png` rather than as a new revision of the original.
+
 `CONFLUENCE_CREDENTIALS=user:token` is the alternative where the instance wants basic authentication.
 
 Credentials are read from the environment rather than taken as options, which keeps them out of the process arguments - `ps` shows a command line to every user on the machine.

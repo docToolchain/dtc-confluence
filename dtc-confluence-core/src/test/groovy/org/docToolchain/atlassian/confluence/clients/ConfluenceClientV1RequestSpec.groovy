@@ -119,12 +119,13 @@ class ConfluenceClientV1RequestSpec extends Specification {
     def 'attachmentOf reads the id, the version and the comment out of the answer'() {
         given:
             def remote = [results: [[id: 'att99', version: [number: 4],
-                                     extensions: [comment: 'some note\r\n#abc123#']]]]
+                                     extensions: [comment: 'some note\r\n#a937de4e4d3a556d0b8886d7ecb5e0c5#']]]]
 
         expect:
             client().attachmentOf(remote).id() == 'att99'
             client().attachmentOf(remote).version() == 4
-            ConfluenceClient.hashIn(client().attachmentOf(remote).comment()) == 'abc123'
+            ConfluenceClient.hashIn(client().attachmentOf(remote).comment()) ==
+                'a937de4e4d3a556d0b8886d7ecb5e0c5'
     }
 
     def 'retrievePageIdByName answers the id, not the search result'() {

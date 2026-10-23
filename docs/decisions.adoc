@@ -642,6 +642,58 @@ What the name costs: a file an author called `2024_report.png` is published as `
 The page refers to it under the same name, so the page still shows it, and revision 2024 matches nothing in Confluence - which makes the guard refuse rather than overwrite.
 A distinctive separator would end the ambiguity and break every tree exported so far; it is not worth that today.
 
+=== Shortening a name must not merge two pictures
+
+Taking the version off a name can turn two files into one attachment.
+A page showing `1_diagram.png` beside `2_diagram.png` - which is the case the prefix exists for - would attach both as `diagram.png`, both positions would show whichever was uploaded last, and the first upload's hash would be what authorises the second.
+An author numbering their screenshots `01_step.png`, `02_step.png` is the same case and the more common one by far.
+
+So the decision is taken over a page rather than over a file: a name is shortened only where nothing else on the page lays claim to the short form.
+Where two files do, both keep the name the document refers to, and the run says which files and why.
+That is the behaviour of every version before this change, so a document that published correctly yesterday publishes correctly today - it is the shortening that is new, and it is applied only where it is unambiguous.
+
+Refusing the publish instead was the other candidate, and is what this project does for a page whose title is taken.
+It was rejected here because there is an unambiguous fallback that loses nothing, and because `01_step.png`/`02_step.png` is ordinary in a documentation repository: failing it would break builds that are not wrong.
+
+A name kept this way also drops its version.
+The revision we exported from belongs to the attachment of the *short* name; comparing it against the revision of a differently named attachment would be comparing two different files, and could authorise a write over somebody else's.
+No version means "unknown", which is the answer that leaves it alone.
+
+=== The hash in a comment has to look like one of ours
+
+`hashIn` reads the content hash out of a version comment, and carrying one is what says "this publisher wrote the revision Confluence holds".
+Read as any text between hash marks, a human comment of `Manually revised; see #123#` carried a "hash" of `123`.
+It never equalled a local hash, so it did not make an attachment look unchanged - but it did make the revision look like ours, and the guard then wrote over it under every setting.
+
+So the shape is required: an MD5 in lower-case hex, 32 characters, between two hash marks, which is exactly what `uploadAttachment` writes and what docToolchain's Groovy wrote before it.
+Not anchored to the end of the comment: the note in front of the hash is configurable, and what Confluence does to whitespace in a version comment was not measured.
+The payload's shape is what distinguishes an upload of ours from a sentence with a number in it.
+
+=== Which names survive a round trip, and which cannot
+
+The export writes one file per attachment through `PageNaming.sanitizeAttachmentName`, which replaces `\`, `/`, `:` and every whitespace character with `_`.
+This section says plainly what that costs, because "cannot restore spaces" understates it and a branch building on this one depends on the answer.
+
+A name survives a round trip exactly, and can be rebound by name in Confluence, when it contains none of those characters.
+`dummy-diagram`, `dummy-diagram.png`, `01_step.png`, `diagram.png`: all survive.
+
+A name containing whitespace, a colon or a path separator does not survive, and no part of this change recovers it.
+`my diagram.png` is exported as `3_my_diagram.png` and published as `my_diagram.png`, which is not the attachment Confluence holds.
+What follows from that, and is worth knowing before relying on it:
+
+* the page refers to `my_diagram.png`, so publishing *creates a second attachment* beside the original rather than replacing it;
+* the original is untouched, so the guard never fires - there is nothing of the published name to guard, and nothing is lost, but nothing is rebound either;
+* a draw.io diagram whose name contains a space can never be rebound after a round trip, because the app binds by exact attachment name;
+* the mapping is not invertible even in principle: `my diagram.png` and `my_diagram.png` are two different attachments that export to the same file name.
+
+Two carriers would fix it, and this change deliberately takes neither:
+
+. *Keep the original name on disk.* A space is legal in a file name and in an AsciiDoc image target; a colon and a separator are not, so this fixes most names rather than all of them, and it changes what every tree exported so far is named.
+. *A sidecar per page, mapping file name to attachment name.* Lossless for every name, and the only option that is - at the price of the second source of truth this entry argues against for versions, and of a file an author can move out of step with the images.
+
+A third option is not a fix but would end the silence: on publish, where the page already holds an attachment whose name sanitises to the one about to be created, say so.
+One extra request per page that has uploads, and it turns "a second attachment quietly appeared" into a line naming both names.
+
 === What is not known is not touched
 
 An attachment created in Confluence that no export ever saw has no version to compare against, and no comment of ours.
@@ -669,7 +721,9 @@ Against cwiki, space `GERDASCHEMANNTEST`:
 * exporting the page that carries a diagram the app drew reports `attachments: 2 of 2` and writes no draft, where the same export before the filter reported `3 of 3` and wrote `1_~dummy-diagram.tmp`;
 * publishing a document exported that way attaches `live-diagram.png`, not `1_live-diagram.png`;
 * a revision pushed over it with the comment `draw.io diagram` - what the app writes - makes the next publish exit 1 and leave the attachment at that revision, where before it was overwritten without a word;
-* `--foreign-attachments skip` leaves it and finishes, `overwrite` writes revision 3 with our comment, and the publish after that writes nothing at all because the content is already there.
+* `--foreign-attachments skip` leaves it and finishes, `overwrite` writes revision 3 with our comment, and the publish after that writes nothing at all because the content is already there;
+* a revision pushed over it with the comment `Manually revised, see #123#` is refused as well - exit 1, attachment untouched - where any hash-delimited text counting as ours had made that revision look like one of ours;
+* a page showing `1_shot.png` beside `2_shot.png` attaches both under those names, 70 and 78 bytes with their own hashes, and names the pair in a warning; shortened, one attachment would have held both pictures.
 
 What this does *not* yet do, measured on the same page: the export turns a draw.io macro into a plain image of its preview, so the republished page carries a static image rather than the macro.
 The exported diagram source is written to disk and referred to by nothing, so a publish never sends it back.

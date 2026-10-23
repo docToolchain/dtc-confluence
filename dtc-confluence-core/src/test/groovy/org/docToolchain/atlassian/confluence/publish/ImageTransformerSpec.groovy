@@ -225,6 +225,96 @@ class ImageTransformerSpec extends Specification {
             uploads*.exportedVersion() == [AttachmentName.NO_VERSION]
     }
 
+    def 'two pictures that differ only in the version keep the names the document uses'() {
+        given: '''What the prefix is there for: a page may show an older revision of a diagram
+                  beside the current one. Shortened, both would be attached as "diagram.png" and
+                  both positions would show whichever was uploaded last.
+
+                  The tags are closed here because this parses as XML, where an unclosed img
+                  makes the next one its child; a real document wraps each image in its own div,
+                  which closes it.'''
+            def body = bodyOf('<img src="images/1_diagram.png"/><img src="images/2_diagram.png"/>')
+
+        when:
+            def uploads = transformer().transformImages(body)
+
+        then:
+            uploads*.fileName() == ['1_diagram.png', '2_diagram.png']
+            body.html().contains('ri:filename="1_diagram.png"')
+            body.html().contains('ri:filename="2_diagram.png"')
+
+        and: '''and neither carries a revision any more: the revision belongs to the attachment of
+                the shortened name, and comparing it against a differently named attachment could
+                authorise a write over somebody else's file'''
+            uploads*.exportedVersion() == [AttachmentName.NO_VERSION, AttachmentName.NO_VERSION]
+    }
+
+    def 'screenshots an author numbered keep their numbers'() {
+        given: 'the same case, and the more common one'
+            def body = bodyOf('<img src="images/01_step.png"/><img src="images/02_step.png"/>')
+
+        when:
+            def uploads = transformer().transformImages(body)
+
+        then:
+            uploads*.fileName() == ['01_step.png', '02_step.png']
+    }
+
+    def 'a picture used twice on one page is one attachment, under its own name'() {
+        given: 'the same file twice is not two files, so there is nothing to keep apart'
+            def body = bodyOf('<img src="images/3_diagram.png"/><img src="images/3_diagram.png"/>')
+
+        when:
+            def uploads = transformer().transformImages(body)
+
+        then:
+            uploads*.fileName() == ['diagram.png', 'diagram.png']
+            uploads*.exportedVersion() == [3, 3]
+    }
+
+    def 'a shortened name colliding with a plain one leaves both as they are'() {
+        given: 'the plain file has the name the other one would be shortened to'
+            def body = bodyOf('<img src="images/diagram.png"/><img src="images/2_diagram.png"/>')
+
+        when:
+            def uploads = transformer().transformImages(body)
+
+        then:
+            uploads*.fileName() == ['diagram.png', '2_diagram.png']
+    }
+
+    def 'two pictures of one name in different folders are named, not merged silently'() {
+        given: '''An export writes a folder per page, so two pages may each have an overview.png.
+                  Published onto one page they are one attachment either way - this says so
+                  instead of showing the wrong picture without a word.'''
+            def body = bodyOf('<img src="images/A/1_overview.png"/><img src="images/B/1_overview.png"/>')
+            def uploads = []
+
+        when:
+            def said = outputOf { uploads = transformer().transformImages(body) }
+
+        then:
+            uploads*.fileName() == ['1_overview.png', '1_overview.png']
+
+        and:
+            said.contains("more than one file would be attached as 'overview.png'")
+            said.contains('images/A/1_overview.png')
+            said.contains('images/B/1_overview.png')
+            said.contains('whichever is uploaded last')
+    }
+
+    private String outputOf(Closure work) {
+        def captured = new ByteArrayOutputStream()
+        def previous = System.out
+        System.out = new PrintStream(captured, true, 'UTF-8')
+        try {
+            work()
+        } finally {
+            System.out = previous
+        }
+        return captured.toString('UTF-8')
+    }
+
     def 'a document without images asks for no uploads'() {
         expect:
             transformer().transformImages(bodyOf('<p>text</p>')).isEmpty()

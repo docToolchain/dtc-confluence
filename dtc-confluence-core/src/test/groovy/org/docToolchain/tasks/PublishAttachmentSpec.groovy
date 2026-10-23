@@ -29,18 +29,26 @@ class PublishAttachmentSpec extends Specification {
 
     private ConfluenceClient client = Mock(ConfluenceClient)
 
+    /** One file per image of a page, so two images of one page are not the same content. */
+    private static byte[] diagram(int index) {
+        return (DIAGRAM.toList() + [index as byte]) as byte[]
+    }
+
     /** What the publisher writes into the comment of what it uploads. */
-    private static String localHash() {
-        return ContentHash.md5(new String(DIAGRAM, Charset.defaultCharset()))
+    private static String localHash(int index = 0) {
+        return ContentHash.md5(new String(diagram(index), Charset.defaultCharset()))
     }
 
     /** The HTML AsciiDoctor produces from an exported document: the path carries the version. */
-    private static String documentReferring(String source) {
+    private static String documentReferring(List<String> sources) {
+        String blocks = sources.collect {
+            "<div class=\"imageblock\"><div class=\"content\"><img src=\"${it}\" alt=\"Diagram\"></div></div>"
+        }.join('\n')
         return """<!DOCTYPE html>
 <html lang=""><head><meta charset="UTF-8"><title>Diagrams</title></head><body class="article">
 <div id="header"><h1>Diagrams</h1></div>
 <div id="content"><div class="sect1"><h2 id="_s">S</h2><div class="sectionbody">
-<div class="imageblock"><div class="content"><img src="${source}" alt="Diagram"></div></div>
+${blocks}
 </div></div></div></body></html>"""
     }
 
@@ -48,10 +56,17 @@ class PublishAttachmentSpec extends Specification {
     private String published = ''
 
     private Asciidoc2ConfluenceTask taskFor(String source, Object foreignAttachments = null) {
-        Path image = documents.resolve(source)
-        Files.createDirectories(image.parent)
-        Files.write(image, DIAGRAM)
-        new File(documents.toFile(), 'diagrams.html').text = documentReferring(source)
+        return taskForAll([source], foreignAttachments)
+    }
+
+    private Asciidoc2ConfluenceTask taskForAll(List<String> sources,
+                                               Object foreignAttachments = null) {
+        sources.eachWithIndex { source, index ->
+            Path image = documents.resolve(source)
+            Files.createDirectories(image.parent)
+            Files.write(image, diagram(index))
+        }
+        new File(documents.toFile(), 'diagrams.html').text = documentReferring(sources)
 
         def config = new ConfigObject()
         config.docDir = documents.toString()
@@ -147,9 +162,11 @@ class PublishAttachmentSpec extends Specification {
 
     def 'an attachment this publisher wrote is written again'() {
         given: '''the hash in the comment is what says who wrote the revision Confluence holds;
-                  this one is ours, and says the content was different when we wrote it'''
+                  this one has the shape only an upload of ours writes - an MD5 between hash
+                  marks - and says the content was different when we wrote it'''
             def task = taskFor('images/Root/Child/3_diagram.png')
-            holding(new RemoteAttachment('att1', 9, 'automatically uploaded\r\n#0123456789abcdef#'))
+            holding(new RemoteAttachment('att1', 9,
+                'automatically uploaded\r\n#0123456789abcdef0123456789abcdef#'))
 
         when:
             task.execute()
@@ -196,6 +213,40 @@ class PublishAttachmentSpec extends Specification {
 
         then: 'the page is published, the attachment is not'
             noExceptionThrown()
+            0 * client.updateAttachment(_, _, _, _, _, _)
+    }
+
+    def 'two pictures of one page are two attachments, under the names the document uses'() {
+        given: '''Shortening both names would attach one file twice: the page would show one
+                  picture in both places, and the first upload's hash would authorise the
+                  second.'''
+            def task = taskForAll(['images/Root/1_diagram.png', 'images/Root/2_diagram.png'])
+
+        when:
+            task.execute()
+
+        then:
+            1 * client.createAttachment('1000', _, '1_diagram.png', _, localHash(0))
+            1 * client.createAttachment('1000', _, '2_diagram.png', _, localHash(1))
+            0 * client.createAttachment('1000', _, 'diagram.png', _, _)
+
+        and: 'and the page refers to each of them by the name it was attached under'
+            published.contains('ri:filename="1_diagram.png"')
+            published.contains('ri:filename="2_diagram.png"')
+    }
+
+    def 'a comment that merely has hash marks in it is not a comment of ours'() {
+        given: '''Carrying a hash is what says this publisher wrote the revision Confluence
+                  holds. Any hash-delimited text used to count, so a sentence such as this one
+                  authorised a write over somebody else's revision.'''
+            def task = taskFor('images/Root/Child/3_diagram.png')
+            holding(new RemoteAttachment('att1', 4, 'Manually revised; see #123#'))
+
+        when:
+            task.execute()
+
+        then:
+            thrown(IllegalStateException)
             0 * client.updateAttachment(_, _, _, _, _, _)
     }
 

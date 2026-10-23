@@ -31,8 +31,15 @@ public abstract class ConfluenceClient {
     private static final String API_V1_IDENTIFIER = "/rest/api";
     private static final String API_V2_IDENTIFIER = "/api/v2";
 
-    /** The content hash an upload of ours leaves in the version comment, between two hash marks. */
-    private static final Pattern HASH_IN_COMMENT = Pattern.compile("#([^#]+)#");
+    /**
+     * The content hash an upload of ours leaves in the version comment, between two hash marks.
+     *
+     * <p>An MD5 in hex, and nothing else. Any hash-delimited text used to count: a comment
+     * reading "Manually revised; see #123#" then carried a "hash" of "123". Never equal to a
+     * local hash, so it did not make an attachment look unchanged - but it did make the revision
+     * look like one this publisher wrote, which let the publisher write over it.</p>
+     */
+    private static final Pattern HASH_IN_COMMENT = Pattern.compile("#([0-9a-f]{32})#");
 
     /** What a version number of 0 means: the answer carried none. Confluence counts from 1. */
     private static final int NO_VERSION_REPORTED = 0;
@@ -192,12 +199,17 @@ public abstract class ConfluenceClient {
     /**
      * @return the hash a comment of ours carries, or empty where the comment is not one of ours -
      *         which is the answer for a comment another writer left, such as the draw.io app's
-     *         "draw.io diagram"
+     *         "draw.io diagram", and for one that merely has hash marks in it
      *
      *     <p>Read with {@code find} rather than with a {@code replaceAll} over the whole string.
      *     A {@code replaceAll} that matches nothing answers the subject unchanged, so a foreign
      *     comment came back as the "remote hash" itself: never equal to any local hash, and
      *     therefore read as a change of ours to overwrite.</p>
+     *
+     *     <p>Not anchored to the end of the comment on purpose: the note in front of the hash is
+     *     configurable, and what Confluence does to whitespace in a version comment is not
+     *     something measured here. The shape of the payload is what tells an upload of ours from
+     *     a sentence that happens to carry a number between hash marks.</p>
      */
     public static String hashIn(Object comment) {
         Matcher matcher = HASH_IN_COMMENT.matcher(comment == null ? "" : String.valueOf(comment));
