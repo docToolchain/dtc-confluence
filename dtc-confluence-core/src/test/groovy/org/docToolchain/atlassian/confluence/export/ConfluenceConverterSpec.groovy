@@ -111,6 +111,75 @@ class ConfluenceConverterSpec extends Specification {
             !converter.unknownTagsStats.isEmpty()
     }
 
+    def 'an emoticon reaches the document instead of being left to the converter'() {
+        given: 'a table cell answering its column with a tick, shaped as the Maven space writes it'
+            def storage = '<table><tbody><tr><th>Done?</th></tr>' +
+                    '<tr><td><p> <ac:emoticon ac:name="tick" /> </p></td></tr></tbody></table>'
+
+        when:
+            def html = convert(storage)
+
+        then: 'as the placeholder that survives pandoc and becomes an attribute reference'
+            html.contains('%%EMOTICON-tick%%')
+
+        and: 'and the export no longer reports a loss it does not suffer'
+            unknownTagsIn(storage).isEmpty()
+    }
+
+    def 'the placeholder stands where the emoticon stood'() {
+        given: 'a link, a tick and a remark, as they stand on the Branch Protection page'
+            def storage = '<p><a href="https://example.org/1">PR</a> ' +
+                    '<ac:emoticon ac:name="tick" /> + branches (TBD)</p>'
+
+        when:
+            def html = convert(storage)
+
+        then: 'in place of the element, with the text on either side untouched'
+            html.contains('PR</a> %%EMOTICON-tick%% + branches (TBD)')
+    }
+
+    def 'an emoticon this class cannot name an attribute after is reported, not dropped quietly'() {
+        when:
+            def result = converter.fixBody('1', "<p>before${emoticon}after</p>",
+                    NO_USERS, PAGES, NO_ATTACHMENTS, SPACE)
+
+        then: 'the tag goes, because it has no spelling in AsciiDoc'
+            result.html().contains('beforeafter')
+
+        and: 'but the page says that something was lost, which is this project\'s one guarantee'
+            result.unknownTags().any { it.startsWith('ac:emoticon') }
+
+        where: 'a brace, an underscore pandoc would escape, and no name at all'
+            emoticon << ['<ac:emoticon ac:name="smile}{" />',
+                         '<ac:emoticon ac:name="thumbs_up" />',
+                         '<ac:emoticon />']
+    }
+
+    def 'a name that was dropped is named in the report'() {
+        when:
+            def unknown = unknownTagsIn('<p><ac:emoticon ac:name="thumbs_up" /></p>')
+
+        then: 'so that the summary says which emoticon went, not only that one did'
+            unknown == ['ac:emoticon thumbs_up']
+    }
+
+    def 'an emoticon name is read without regard to case'() {
+        when: 'a name the palette spells in lower case'
+            def html = convert('<p><ac:emoticon ac:name="Tick" /></p>')
+
+        then: 'the same placeholder, rather than a tag reported as unusable'
+            html.contains('%%EMOTICON-tick%%')
+    }
+
+    def 'an emoticon name cannot carry markup into the page'() {
+        when: 'a name built to close the attribute reference and open an element'
+            def html = convert('<p><ac:emoticon ac:name="tick%%<b>x</b>" /></p>')
+
+        then: 'it is refused outright, so nothing of it is parsed'
+            !html.contains('<b>')
+            !html.contains('EMOTICON')
+    }
+
     def 'a heading loses a hand-written chapter number'() {
         when:
             def html = convert('<h2>5.2.4. Deployment</h2>')

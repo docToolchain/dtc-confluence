@@ -19,6 +19,125 @@ class AdocOutputSpec extends Specification {
     @TempDir
     Path directory
 
+    def 'an emoticon becomes an attribute reference with a default beside it'() {
+        when:
+            def adoc = AdocOutput.substitute('A cell says %%EMOTICON-tick%% here.\n')
+
+        then: 'the reference, so that one -a emoticon-tick=... changes every one of them'
+            adoc.contains('A cell says {emoticon-tick} here.')
+
+        and: 'and a default, guarded so that a value from outside still wins'
+            adoc.contains('ifndef::emoticon-tick[:emoticon-tick: ✓]')
+
+        and: 'written in front of the content that needs it'
+            adoc.indexOf('ifndef::emoticon-tick') < adoc.indexOf('{emoticon-tick}')
+    }
+
+    def 'only the emoticons a page uses are defined on it'() {
+        when:
+            def adoc = AdocOutput.substitute('%%EMOTICON-cross%%\n')
+
+        then:
+            adoc.contains(':emoticon-cross: ✗')
+
+        and: 'a page without a tick carries no definition for one'
+            !adoc.contains('emoticon-tick')
+    }
+
+    def 'a document without emoticons gains nothing'() {
+        expect: 'nothing in front of a page that never had one'
+            AdocOutput.substitute('Just a sentence.\n') == 'Just a sentence.\n'
+    }
+
+    def 'an emoticon inside a listing block is left alone and defines nothing'() {
+        given: 'a page documenting this very conversion'
+            def adoc = '[source,text]\n----\n%%EMOTICON-tick%%\n----\n'
+
+        expect: 'the sample keeps its placeholder, and no attribute is invented for it'
+            AdocOutput.substitute(adoc) == adoc
+    }
+
+    def 'an emoticon used more than once is defined once'() {
+        when: 'three ticks, as a status table has dozens'
+            def adoc = AdocOutput.substitute(
+                    '|%%EMOTICON-tick%% |%%EMOTICON-tick%% |%%EMOTICON-tick%%\n')
+
+        then: 'all three are references'
+            adoc.count('{emoticon-tick}') == 3
+
+        and: 'and there is one definition, not one per reference'
+            adoc.count('ifndef::emoticon-tick[') == 1
+    }
+
+    def 'substituting an already substituted page adds no second definition'() {
+        given: 'a page read back and put through the substitution again'
+            def once = AdocOutput.substitute('A cell says %%EMOTICON-tick%% here.\n')
+
+        expect: 'the definition the first pass wrote is left alone'
+            AdocOutput.substitute(once) == once
+    }
+
+    def 'a definition further down the page does not count as one'() {
+        given: '''a page that shows what an exported emoticon looks like, in prose rather than in
+                  a listing block, after using one itself'''
+            def adoc = '%%EMOTICON-tick%% then ifndef::emoticon-tick[:emoticon-tick: custom]\n'
+
+        when:
+            def result = AdocOutput.substitute(adoc)
+
+        then: 'the reference gets a definition of its own'
+            result.contains('ifndef::emoticon-tick[:emoticon-tick: ✓]')
+
+        and: '''in front of it: AsciiDoc reads an attribute entry from where it stands
+                onwards, so the one further down the page would come too late'''
+            result.indexOf('ifndef::emoticon-tick[:emoticon-tick: ✓]') <
+                    result.indexOf('{emoticon-tick}')
+
+        and: 'and what the page itself wrote is left where it was'
+            result.contains('then ifndef::emoticon-tick[:emoticon-tick: custom]')
+    }
+
+    def 'every emoticon default is the glyph or the text the server offers for it'() {
+        when:
+            def adoc = AdocOutput.substitute("%%EMOTICON-${name}%%\n")
+
+        then: 'measured against a DC 9.2 instance, see examples/emoticon-alt-text'
+            adoc.contains("ifndef::emoticon-${name}[:emoticon-${name}: ${expected}]")
+
+        where: 'the three read as data get a glyph, the rest the server\'s own alt text'
+            name           || expected
+            'tick'         || '✓'
+            'cross'        || '✗'
+            'warning'      || '⚠'
+            'cheeky'       || '(tongue)'
+            'laugh'        || '(big grin)'
+            'thumbs-up'    || '(thumbs up)'
+            'thumbs-down'  || '(thumbs down)'
+            'information'  || '(info)'
+            'light-on'     || '(lightbulb)'
+            'light-off'    || '(grey lightbulb)'
+            'yellow-star'  || '(star)'
+            'red-star'     || '(red star)'
+            'green-star'   || '(green star)'
+            'blue-star'    || '(blue star)'
+            'broken-heart' || '(broken heart)'
+            'question'     || '(question)'
+            'plus'         || '(plus)'
+            'minus'        || '(minus)'
+            'smile'        || '(smile)'
+            'sad'          || '(sad)'
+            'wink'         || '(wink)'
+            'heart'        || '(heart)'
+    }
+
+    def 'an attribute reference inside a listing block defines nothing either'() {
+        given: 'a page of ours showing what an exported emoticon looks like'
+            def adoc = '[source,asciidoc]\n----\n{emoticon-tick}\n----\n'
+
+        expect: 'the sample is content, not a reference this page has to define'
+            AdocOutput.substitute(adoc) == adoc
+    }
+
     def 'a listing block is left alone by every substitution'() {
         given: '''AsciiDoc substitutes nothing inside a listing block, so neither may this. A code
                   sample is the one place where text that looks like markup is not markup.'''

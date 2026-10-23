@@ -12,9 +12,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Entities;
+import org.jsoup.nodes.TextNode;
 
 /**
  * Turns the {@code ac:} and {@code ri:} markup of the Confluence storage format into the HTML
@@ -31,6 +33,15 @@ import org.jsoup.nodes.Entities;
 class MacroTranslator {
 
     /** What an admonition macro is called here, and what it is called in AsciiDoc. */
+    /**
+     * What an emoticon may be called for its name to become an AsciiDoc attribute name.
+     *
+     * <p>The rule belongs to {@link AdocOutput}, which reads the placeholder back: a name it
+     * cannot carry - an underscore, which pandoc escapes - would leave the placeholder in the
+     * page as text, and with nothing reported.</p>
+     */
+    private static final Pattern EMOTICON_NAME = Pattern.compile(AdocOutput.EMOTICON_NAME);
+
     private static final Map<String, String> ADMONITIONS = Map.of(
             "info", "NOTE",
             "warning", "WARNING",
@@ -93,6 +104,7 @@ class MacroTranslator {
             case "ac:inline-comment-marker" ->
                 // A comment marker wraps text without marking it up. Keep the text, drop the tag.
                     element.unwrap();
+            case "ac:emoticon" -> emoticon(element);
             case "ac:layout", "ac:layout-section", "ac:layout-cell" ->
                 // Multi-column layouts have no counterpart. Keep the children, drop the wrapper,
                 // so that pandoc does not see a tag it knows nothing about.
@@ -105,6 +117,39 @@ class MacroTranslator {
             }
             default -> report(element.tagName());
         }
+    }
+
+    /**
+     * Writes an emoticon as a reference to a document attribute named after it.
+     *
+     * <p>Until now this class had no case for {@code ac:emoticon}, so the element was reported and
+     * left in the document, and whichever converter ran next decided its fate: pandoc dropped it,
+     * and the native converter dropped it and swallowed the spaces on either side with it. In a
+     * table that is not a lost ornament but a lost answer: on the Maven space's own
+     * <em>Branch Protection</em> page every one of 127 ticks is the answer its row gives.</p>
+     *
+     * <p>An attribute rather than a fixed spelling, because no spelling is right for everyone: a
+     * check mark reads well in a table and says nothing to a screen reader, and Confluence's own
+     * {@code alt} text reads clumsily where a glyph would do. {@link AdocOutput} writes a default
+     * for every emoticon the page uses, guarded by {@code ifndef::} - the idiom the page header
+     * already uses for {@code imagesdir} - so a page renders on its own and one
+     * {@code -a emoticon-tick=...} still overrides it everywhere.</p>
+     *
+     * <p>A placeholder rather than the attribute reference itself: pandoc escapes the brace and
+     * would write {@code ++{++emoticon-tick}}.</p>
+     */
+    private void emoticon(Element element) {
+        String name = element.attr("ac:name").toLowerCase(Locale.ROOT);
+        if (!EMOTICON_NAME.matcher(name).matches()) {
+            // Nothing to name an attribute after. Reported with the name, so that the summary
+            // says which emoticon went rather than only that one did.
+            report(element.tagName() + (name.isEmpty() ? "" : " " + name));
+            element.remove();
+            return;
+        }
+        // A text node rather than element.before(String), which re-parses what it is given: the
+        // guard above leaves nothing to re-parse, and this keeps it that way if the guard widens.
+        element.replaceWith(new TextNode("%%EMOTICON-" + name + "%%"));
     }
 
     private void structuredMacro(Element element) {
