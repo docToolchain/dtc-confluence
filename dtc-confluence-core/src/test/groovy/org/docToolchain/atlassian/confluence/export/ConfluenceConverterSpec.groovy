@@ -42,6 +42,44 @@ class ConfluenceConverterSpec extends Specification {
             html.contains('<pre><code class="language-groovy">def hello = "world"</code></pre>')
     }
 
+    def 'a noformat macro keeps its body and every character of it'() {
+        given: '''the shape all 27 occurrences in the Maven space have: preformatted text in a
+                  plain-text body, with no parameter and no language'''
+            def storage = '<ac:structured-macro ac:name="noformat"><ac:plain-text-body>' +
+                    '<![CDATA[repository\n+- org\n   \\- myproj-1.0.jar]]>' +
+                    '</ac:plain-text-body></ac:structured-macro>'
+
+        when:
+            def html = convert(storage)
+
+        then: 'as a code block, which is what pandoc writes out verbatim'
+            html.contains('<pre><code>')
+
+        and: 'with the tree that is the whole point of it, indentation intact'
+            html.contains('repository\n+- org\n   \\- myproj-1.0.jar')
+
+        and: 'and no language, because the macro names none'
+            !html.contains('class="language-')
+    }
+
+    def 'a preformatted body is handed on untrimmed'() {
+        given: '''a body opening and closing with a newline, which 26 of the 27 occurrences in the
+                  Maven space do - Confluence puts the text of the macro on lines of its own'''
+            def storage = '<ac:structured-macro ac:name="noformat"><ac:plain-text-body>' +
+                    '<![CDATA[\nmvn install\n]]></ac:plain-text-body></ac:structured-macro>'
+
+        expect: '''both newlines reach the output: what a block delimiter does with them is the
+                   converter's business, and stripping them here would decide it'''
+            convert(storage).contains('<pre><code>\nmvn install\n</code></pre>')
+    }
+
+    def 'a noformat macro is no longer reported as a loss'() {
+        expect:
+            unknownTagsIn('<ac:structured-macro ac:name="noformat">' +
+                    '<ac:plain-text-body><![CDATA[x]]></ac:plain-text-body>' +
+                    '</ac:structured-macro>').isEmpty()
+    }
+
     def 'an admonition keeps its text'() {
         given:
             def storage = '''<ac:structured-macro ac:name="info">
