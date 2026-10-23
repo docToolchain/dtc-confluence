@@ -804,4 +804,102 @@ class ConfluenceConverterSpec extends Specification {
         then:
             html.contains('href="Root.html"')
     }
+
+    def 'an inline comment keeps the ref that anchors it'() {
+        given: 'a marker as the stored body of the Maven Ecosystem Cleanup page writes it'
+            def storage = '<p>we need to keep its "bridging" capability (see ' +
+                    '<ac:inline-comment-marker ac:ref="8277a302-9001-4aff-84ef-2b62f77ec7fc">' +
+                    'Drop</ac:inline-comment-marker> ServiceLocator)</p>'
+
+        when:
+            def html = convert(storage)
+
+        then: 'as a role, which is what pandoc carries out and Asciidoctor renders back'
+            html.contains('class="inline-comment-marker comment-ref-8277a302-9001-4aff-84ef-2b62f77ec7fc"')
+
+        and: 'with the marked words where they stood'
+            html.contains('(see <span class="inline-comment-marker ' +
+                    'comment-ref-8277a302-9001-4aff-84ef-2b62f77ec7fc">Drop</span> ServiceLocator)')
+    }
+
+    def 'the space at the edge of a marked phrase stays outside the span'() {
+        given: '''a comment anchored to "widely " - Confluence lets the marked text end in a space,
+                  and pandoc writes such a span constrained, which AsciiDoc does not read as a span
+                  at all: one of that page's eight markers was lost to it'''
+            def storage = '<p>this is <ac:inline-comment-marker ac:ref="498c3ceb">widely ' +
+                    '</ac:inline-comment-marker>used</p>'
+
+        when:
+            def html = convert(storage)
+
+        then: 'the words are marked and the space is not'
+            html.contains('this is <span class="inline-comment-marker ' +
+                    'comment-ref-498c3ceb">widely</span> used')
+    }
+
+    def 'a marked phrase that is nothing but space is left as it is'() {
+        given: 'because there is no word to move the space off'
+            def storage = '<p>a<ac:inline-comment-marker ac:ref="498c3ceb"> ' +
+                    '</ac:inline-comment-marker>b</p>'
+
+        expect:
+            convert(storage).contains('>a<span class="inline-comment-marker ' +
+                    'comment-ref-498c3ceb"> </span>b<')
+    }
+
+    def 'a marker carries no id, so one comment may mark several places'() {
+        given: '''one comment split over two elements, which is how a stored body writes an anchor
+                  whose text spans inline markup - three of the eight markers on that page are one
+                  comment'''
+            def storage = '<p>this is <ac:inline-comment-marker ac:ref="498c3ceb">widely' +
+                    '</ac:inline-comment-marker> <em>very</em> ' +
+                    '<ac:inline-comment-marker ac:ref="498c3ceb">used</ac:inline-comment-marker></p>'
+
+        when:
+            def html = convert(storage)
+
+        then: 'both places name the comment'
+            html.count('comment-ref-498c3ceb') == 2
+
+        and: '''and neither names it as an id: AsciiDoctor rejects a duplicate id, so the identity
+                travels as a role'''
+            !html.contains('id=')
+    }
+
+    def 'a marker is no longer reported as a loss'() {
+        expect:
+            unknownTagsIn('<p><ac:inline-comment-marker ac:ref="6cc14366-cefd">x' +
+                    '</ac:inline-comment-marker></p>').isEmpty()
+    }
+
+    def 'a marker whose ref cannot be carried is reported, not dropped quietly'() {
+        when:
+            def result = converter.fixBody('1', "<p>before${marker}after</p>",
+                    NO_USERS, PAGES, NO_ATTACHMENTS, SPACE)
+
+        then: 'the words stay, because they are the page'
+            result.html().contains('beforemarkedafter')
+
+        and: '''but the page says the anchor went: all 38 markers on the 136 pages measured carry a
+                ref, so a marker without a usable one is worth a word'''
+            result.unknownTags() == ['ac:inline-comment-marker']
+
+        where: 'no ref, an empty one, and one that would be two roles'
+            marker << ['<ac:inline-comment-marker>marked</ac:inline-comment-marker>',
+                       '<ac:inline-comment-marker ac:ref="">marked</ac:inline-comment-marker>',
+                       '<ac:inline-comment-marker ac:ref="a b">marked</ac:inline-comment-marker>']
+    }
+
+    def 'a ref cannot carry markup into the page'() {
+        when: 'a ref built to close the class attribute and open an element'
+            def html = convert('<p><ac:inline-comment-marker ac:ref=\'x"><b>y</b>\'>marked' +
+                    '</ac:inline-comment-marker></p>')
+
+        then: 'it is refused outright, so nothing of it is parsed'
+            !html.contains('<b>')
+            !html.contains('comment-ref-')
+
+        and: 'and the marked words are still there'
+            html.contains('marked')
+    }
 }

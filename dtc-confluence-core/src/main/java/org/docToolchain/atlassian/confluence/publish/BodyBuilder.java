@@ -10,6 +10,7 @@ import org.docToolchain.atlassian.transformer.CalloutStyle;
 import org.docToolchain.atlassian.transformer.CollapsibleTransformer;
 import org.docToolchain.atlassian.transformer.DescriptionListTransformer;
 import org.docToolchain.atlassian.transformer.HtmlTransformer;
+import org.docToolchain.atlassian.transformer.InlineCommentTransformer;
 import org.docToolchain.atlassian.transformer.MarkTransformer;
 import org.docToolchain.atlassian.transformer.OpenApiTransformer;
 import org.docToolchain.configuration.ConfigService;
@@ -73,6 +74,7 @@ public class BodyBuilder {
         uploads.addAll(transformAttachmentLinks(body));
 
         new MarkTransformer().transformMarks(body);
+        new InlineCommentTransformer().transformInlineComments(body);
         new DescriptionListTransformer().transformDescriptionLists(body);
 
         return new PublishedBody(toStorageFormat(body, anchors, pageAnchors), uploads);

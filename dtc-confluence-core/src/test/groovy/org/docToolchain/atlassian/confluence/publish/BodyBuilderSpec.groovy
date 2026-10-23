@@ -14,6 +14,9 @@ import java.nio.file.Path
  * The hash a dry run compares is the hash of the body a real run would send, so the body has to
  * be built either way - and building it names every embedded image, because the name of such an
  * image is the hash of its content. Naming one is computation; writing it is not.
+ *
+ * It also states which transformers a built body has been through, for the ones whose absence
+ * would be a silent loss rather than a visible one.
  */
 class BodyBuilderSpec extends Specification {
 
@@ -78,6 +81,19 @@ class BodyBuilderSpec extends Specification {
         then:
             dry.storageFormat().contains('ri:attachment')
             !imageDirectory().exists()
+    }
+
+    def 'the body carries back the anchor of an inline comment'() {
+        when: 'the span the export left for a marked phrase, as Asciidoctor renders it'
+            def built = builder(null).build(bodyOf('<p>see <span class="inline-comment-marker ' +
+                'comment-ref-6cc14366-cefd-4ae3-af80-9f5839ca348c">these words</span> here</p>'),
+                [:], [:])
+
+        then: '''as the element that anchors the comment: a publish replaces the whole body, so a
+                 comment whose marker this leaves out is left dangling on the page'''
+            built.storageFormat().contains('<ac:inline-comment-marker ' +
+                'ac:ref="6cc14366-cefd-4ae3-af80-9f5839ca348c">these words' +
+                '</ac:inline-comment-marker>')
     }
 
     def 'a run that is not a dry run writes the image'() {

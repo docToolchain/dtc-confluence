@@ -25,6 +25,11 @@ publisher verified against a real instance (ASF cwiki, Confluence Data Center 9.
 
 - `export` fetches a page and everything below it and writes AsciiDoc, with attachments, a menu
   and a report of the macros it could not translate. Needs pandoc on the PATH.
+- An inline comment keeps its anchor across a round trip. The export carries the marker's
+  `ac:ref` out as a role on the marked span, and a publish writes it back as
+  `ac:inline-comment-marker`, so a comment made in Confluence stays on the words it was made on
+  instead of being left dangling. The comment itself is never touched, so author, date and thread
+  stay as they are.
 - A `jira` macro becomes a link rather than its own parameters: one issue becomes a link to it, a
   counted query an inline link to the issues it counted, a listing the query plus a link to them.
   The Jira's address is read off the page Confluence rendered, so nothing has to be configured.
@@ -55,3 +60,6 @@ publisher verified against a real instance (ASF cwiki, Confluence Data Center 9.
   one behind. The run reports it; it does not fix it.
 - The public API still exposes Groovy's `ConfigObject`.
 - Exporting needs pandoc; publishing does not.
+- An inline comment's anchor survives only where the AsciiDoc came out of an export and still
+  carries the ref. A page written as AsciiDoc from the start and commented on in Confluence loses
+  its anchors on the next publish.
