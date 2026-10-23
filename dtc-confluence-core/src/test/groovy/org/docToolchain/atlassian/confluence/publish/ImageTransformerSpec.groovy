@@ -37,6 +37,12 @@ class ImageTransformerSpec extends Specification {
         return new ImageTransformer(baseUrl, ['images/.'])
     }
 
+    /** A transformer publishing onto a page that already holds these attachments. */
+    private ImageTransformer transformerFor(String... held) {
+        return new ImageTransformer('docs/manual.html', ['images/.'], true,
+            new AttachmentNameLookup({ held as List }))
+    }
+
     def 'an image on another host stays a reference to that host'() {
         given:
             def body = bodyOf('<img src="https://example.org/icon.png" width="16">')
@@ -320,6 +326,51 @@ class ImageTransformerSpec extends Specification {
         return captured.toString('UTF-8')
     }
 
+    def 'an image the export renamed goes back to the attachment it was taken from'() {
+        given: '''Confluence allows a space in an attachment name and the export does not, so the
+                  document refers to "my_image.png". Attached under that name, the page gets a
+                  second picture beside the one it came from, and the macros that bind the
+                  original by name keep pointing at the original.'''
+            def body = bodyOf('<img src="images/Root/3_my_image.png">')
+
+        when:
+            def uploads = transformerFor('my image.png').transformImages(body)
+
+        then:
+            uploads*.fileName() == ['my image.png']
+            body.html().contains('ri:filename="my image.png"')
+
+        and: 'the file on disk is the one the export wrote, prefix and all'
+            uploads*.url() == ['docs/images/Root/3_my_image.png']
+
+        and: 'and the revision travels, because it is the revision of that attachment'
+            uploads*.exportedVersion() == [3]
+    }
+
+    def 'a name no attachment of the page could be is attached as it is'() {
+        given: '''"my_image.png" is a legal attachment name of its own, so a name that matches
+                  nothing on the page is a name, not a sanitised one.'''
+            def body = bodyOf('<img src="images/Root/3_my_image.png">')
+
+        when:
+            def uploads = transformerFor('diagram.png').transformImages(body)
+
+        then:
+            uploads*.fileName() == ['my_image.png']
+            body.html().contains('ri:filename="my_image.png"')
+    }
+
+    def 'a page nothing is known about leaves every name as the document has it'() {
+        given: 'a page about to be created holds nothing to match against'
+            def body = bodyOf('<img src="images/my_image.png">')
+
+        when:
+            def uploads = transformer().transformImages(body)
+
+        then:
+            uploads*.fileName() == ['my_image.png']
+    }
+
     def 'a document without images asks for no uploads'() {
         expect:
             transformer().transformImages(bodyOf('<p>text</p>')).isEmpty()
@@ -357,6 +408,12 @@ class ImageTransformerSpec extends Specification {
     private ImageTransformer inDirectory(boolean writing = true) {
         return new ImageTransformer(directory.resolve('manual.html').toString(), ['images/.'],
             writing)
+    }
+
+    /** In the temporary directory, publishing onto a page that already holds these attachments. */
+    private ImageTransformer inDirectoryFor(String... held) {
+        return new ImageTransformer(directory.resolve('manual.html').toString(), ['images/.'],
+            true, new AttachmentNameLookup({ held as List }))
     }
 
     def 'a picture carrying a draw.io diagram becomes the editable diagram'() {
@@ -551,6 +608,25 @@ class ImageTransformerSpec extends Specification {
 
         and: 'said rather than merged silently'
             said.contains("more than one file would be attached as 'arch.png'")
+    }
+
+    def 'a diagram takes its name from the attachment the page holds, not from the exported file'() {
+        given: '''The page holds 'my arch.png' and the diagram beside it as 'my arch', the name the
+                  app binds to. The export sanitised the space, so the document refers to
+                  1-1_my_arch.png. Resolving the name after the picture had become a diagram would
+                  attach a second diagram called my_arch and point the macro at it, leaving the one
+                  the app drew untouched and unreferenced.'''
+            carrying('1-1_my_arch.png', DIAGRAM)
+            def body = bodyOf('<img src="images/1-1_my_arch.png" width="700" />')
+
+        when:
+            def uploads = inDirectoryFor('my arch.png').transformImages(body)
+
+        then: 'both go up under the names Confluence knows them by'
+            uploads*.fileName() == ['my arch', 'my arch.png']
+
+        and: 'and the macro names the diagram the app will look for'
+            body.html().contains('<ac:parameter ac:name="diagramName">my arch</ac:parameter>')
     }
 
     def 'a dry run names the same attachments and writes nothing'() {

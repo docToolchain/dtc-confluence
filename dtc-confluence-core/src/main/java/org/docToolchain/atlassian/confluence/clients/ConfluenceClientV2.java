@@ -114,6 +114,13 @@ public class ConfluenceClientV2 extends ConfluenceClient {
     }
 
     @Override
+    public Object getAttachments(Object pageId) {
+        URI uri = uri(API_V2_PATH + "/pages/" + pageId + "/attachments",
+                Map.of("limit", String.valueOf(ATTACHMENT_LIMIT)), List.of("limit"));
+        return callApiAndReturnOrNull(new HttpGet(uri));
+    }
+
+    @Override
     public Object updateAttachment(String pageId, String attachmentId, InputStream inputStream,
                                    String fileName, String note, String localHash) {
         // v2 has no attachment upload, so this goes through v1.

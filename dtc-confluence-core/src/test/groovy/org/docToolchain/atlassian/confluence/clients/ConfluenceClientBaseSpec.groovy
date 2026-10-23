@@ -183,4 +183,29 @@ class ConfluenceClientBaseSpec extends Specification {
         then: 'the title is percent-encoded, not form-encoded, so a space stays a space'
             paths.first() == '/wiki/rest/api/content?title=Some%20Page&spaceKey=SPACE'
     }
+
+    def 'the names of a page attachments are read out of the listing'() {
+        given: 'both APIs call an attachment name its title, so one reading serves both'
+            body = '{"results":[{"id":"1","title":"my image.png"},{"id":"2","title":"plan.pdf"}]}'
+
+        expect:
+            client().attachmentNames('4711') == ['my image.png', 'plan.pdf']
+    }
+
+    def 'a page with no attachments answers no names'() {
+        given:
+            body = '{"results":[]}'
+
+        expect:
+            client().attachmentNames('4711') == []
+    }
+
+    def 'an answer that lists nothing is no names rather than a failure'() {
+        given: 'a page that is gone answers 404, and a name that matches nothing is the fallback'
+            status = 404
+            body = 'not found'
+
+        expect:
+            client().attachmentNames('4711') == []
+    }
 }

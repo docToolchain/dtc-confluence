@@ -27,6 +27,12 @@ publisher verified against a real instance (ASF cwiki, Confluence Data Center 9.
   picture named `Übersicht.png` became an attachment called `%C3%9Cbersicht.png` while the page
   body still referred to the name with the umlaut - the page pointed at an attachment that does
   not exist and the picture did not render. Measured on Data Center 9.2.21.
+- An attachment reference the export had to sanitise is matched against what the target page
+  holds, and the file goes back under the name Confluence knows it by: `my image.png` exported as
+  `my_image.png` is a new revision of that attachment rather than a second one beside it. A
+  lookup, not a calculation - `my_image.png` is a legal name of its own. Where a page holds two
+  attachments that export to one name, the run names both and uses the name the document refers
+  to. `confluence.resolveAttachmentNames: false` (`--no-resolve-attachment-names`) switches it off.
 - An attachment somebody else wrote since the export this document came from is not overwritten.
   The signal is the revision, not the hash in the version comment: the draw.io app writes its own
   comment, which no hash comparison can recognise, so every publish used to discard its edit.
@@ -101,6 +107,12 @@ publisher verified against a real instance (ASF cwiki, Confluence Data Center 9.
   file per view has no pinned views and does not meet this.
 - On a Confluence without the draw.io app, a picture that carries a diagram becomes a macro nothing
   renders. The run says what it did, per picture; there is no setting to turn it off.
+- An attachment name containing whitespace, a colon or a path separator still reaches the disk
+  sanitised, so the file in an exported tree is not named as Confluence names it. The publish side
+  looks the name up on the page, which is what makes the round trip work; a page that holds more
+  than 200 attachments is read short, and a name not found among them is published as it is.
+- Exporting a draw.io macro writes a plain image of its preview, not the macro, so a round trip
+  flattens the diagram.
 - A page is identified by its title, so renaming a heading creates a new page and leaves the old
   one behind. The run reports it; it does not fix it.
 - The public API still exposes Groovy's `ConfigObject`.

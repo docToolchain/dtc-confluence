@@ -678,27 +678,43 @@ The payload's shape is what distinguishes an upload of ours from a sentence with
 === Which names survive a round trip, and which cannot
 
 The export writes one file per attachment through `PageNaming.sanitizeAttachmentName`, which replaces `\`, `/`, `:` and every whitespace character with `_`.
-This section says plainly what that costs, because "cannot restore spaces" understates it and a branch building on this one depends on the answer.
+This section says plainly what that costs, because "cannot restore spaces" understates it and the lookup in the next section is built on the answer.
 
 A name survives a round trip exactly, and can be rebound by name in Confluence, when it contains none of those characters.
 `dummy-diagram`, `dummy-diagram.png`, `01_step.png`, `diagram.png`: all survive.
 
-A name containing whitespace, a colon or a path separator does not survive, and no part of this change recovers it.
-`my diagram.png` is exported as `3_my_diagram.png` and published as `my_diagram.png`, which is not the attachment Confluence holds.
-What follows from that, and is worth knowing before relying on it:
+A name containing whitespace, a colon or a path separator does not survive the export.
+`my diagram.png` is written to disk as `3_my_diagram.png`, and the document refers to it under that name.
+Published literally, as every version before the lookup below did, that is a *second attachment* beside the original: the original is untouched and nothing is lost, but nothing is rebound either, and a draw.io diagram whose name has a space in it can never be rebound after a round trip, because the app binds by exact attachment name.
 
-* the page refers to `my_diagram.png`, so publishing *creates a second attachment* beside the original rather than replacing it;
-* the original is untouched, so the guard never fires - there is nothing of the published name to guard, and nothing is lost, but nothing is rebound either;
-* a draw.io diagram whose name contains a space can never be rebound after a round trip, because the app binds by exact attachment name;
-* the mapping is not invertible even in principle: `my diagram.png` and `my_diagram.png` are two different attachments that export to the same file name.
-
-Two carriers would fix it, and this change deliberately takes neither:
+Two carriers on the export side would have avoided it, and neither is taken:
 
 . *Keep the original name on disk.* A space is legal in a file name and in an AsciiDoc image target; a colon and a separator are not, so this fixes most names rather than all of them, and it changes what every tree exported so far is named.
 . *A sidecar per page, mapping file name to attachment name.* Lossless for every name, and the only option that is - at the price of the second source of truth this entry argues against for versions, and of a file an author can move out of step with the images.
 
-A third option is not a fix but would end the silence: on publish, where the page already holds an attachment whose name sanitises to the one about to be created, say so.
-One extra request per page that has uploads, and it turns "a second attachment quietly appeared" into a line naming both names.
+=== The name is looked up on the page, not computed back
+
+The mapping is not invertible, and no amount of care makes it so: `my diagram.png` and `my_diagram.png` are two different attachments Confluence can hold at once, and both are written to disk as `my_diagram.png`.
+Reversing the sanitisation - reading an `_` as "was probably a space" - would therefore write a new revision of a file the document was never exported from, which is the one outcome worse than attaching a second file.
+
+So the question is put to the page instead: of the attachments it holds, which one does the export write under the name this document refers to?
+That is `sanitizeAttachmentName` read forwards, over names the server gave, and it is the export's own function rather than a copy of it - the two cannot drift apart while they are the same code.
+`AttachmentNameLookup` answers it, `confluence.resolveAttachmentNames` (`--resolve-attachment-names`) switches it off, and it is on by default because the literal name is a defect rather than a choice.
+
+The lookup happens *before* the reference is written, where the `ri:attachment` and the view-file macro parameter are emitted.
+Correcting the finished body instead would mean rewriting storage format with a regular expression, and the body is what the page hash is taken of - a dry run would then compare one body and a real run send another.
+
+What it costs: one further request per page that is already there and has attachments to publish, and nothing at all for a page being created or a document with no attachments.
+The names are asked for on the first reference that has to be matched, and once per page.
+A page holding more than 200 attachments is read short; a name that is then not among them is published as the document refers to it, which is the behaviour this replaces.
+
+Where two attachments of a page sanitise to one name, there is nothing to pick between: the run names both and publishes under the name the document refers to.
+That is deliberately a warning and not a refusal, by the same argument as `01_step.png` beside `02_step.png` - the fallback loses nothing, and refusing would break builds that are not wrong.
+Such a name keeps the revision the export wrote into it, as it did before, so the file is guarded no worse and no better than it was.
+
+Not handled, and not worth code until somebody meets it: a page whose document refers to both `my image.png` and `my_image.png` as files on disk, where Confluence holds `my image.png`.
+The first matches nothing and stays as it is, the second resolves onto it, and the two local files then share one attachment.
+It takes an author keeping two files that differ only in a space, one of them named exactly as Confluence holds it.
 
 === What is not known is not touched
 
@@ -730,6 +746,13 @@ Against cwiki, space `GERDASCHEMANNTEST`:
 * `--foreign-attachments skip` leaves it and finishes, `overwrite` writes revision 3 with our comment, and the publish after that writes nothing at all because the content is already there;
 * a revision pushed over it with the comment `Manually revised, see #123#` is refused as well - exit 1, attachment untouched - where any hash-delimited text counting as ours had made that revision look like one of ours;
 * a page showing `1_shot.png` beside `2_shot.png` attaches both under those names, 70 and 78 bytes with their own hashes, and names the pair in a warning; shortened, one attachment would have held both pictures.
+
+The name lookup is *not* among the measurements above: it is specified and mutation-tested against a stubbed client only, and a page holding `my image.png` has still to be published to from a real export.
+Until that is done, the claim of this entry is what the specifications state and no more.
+
+What this does *not* yet do, measured on the same page: the export turns a draw.io macro into a plain image of its preview, so the republished page carries a static image rather than the macro.
+The exported diagram source is written to disk and referred to by nothing, so a publish never sends it back.
+Keeping the macro is `MacroTranslator`'s to do, and the name it would need is now the name it will find.
 
 == The external tools are pinned, because their output is the behaviour under test
 

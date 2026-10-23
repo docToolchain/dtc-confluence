@@ -64,6 +64,13 @@ public class ConfluenceClientV1 extends ConfluenceClient {
     }
 
     @Override
+    public Object getAttachments(Object pageId) {
+        URI uri = uri(API_V1_PATH + "/content/" + pageId + "/child/attachment",
+                List.of(new BasicNameValuePair("limit", String.valueOf(ATTACHMENT_LIMIT))));
+        return callApiAndReturnOrNull(new HttpGet(uri));
+    }
+
+    @Override
     public Object updateAttachment(String pageId, String attachmentId, InputStream inputStream,
                                    String fileName, String note, String localHash) {
         String uri = API_V1_PATH + "/content/" + pageId + "/child/attachment/" + attachmentId + "/data";

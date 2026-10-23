@@ -159,6 +159,14 @@ class ConfluenceClientV2RequestSpec extends Specification {
             sent().uri == '/wiki/api/v2/pages/4711/attachments?filename=diagram.png'
     }
 
+    def 'the attachments of a page are asked for through the v2 collection'() {
+        when:
+            client().attachmentNames('4711')
+
+        then:
+            sent().uri == '/wiki/api/v2/pages/4711/attachments?limit=200'
+    }
+
     def 'attachments and labels are written through the v1 API'() {
         when:
             def c = client()

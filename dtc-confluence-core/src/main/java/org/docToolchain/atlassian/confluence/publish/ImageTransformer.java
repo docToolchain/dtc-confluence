@@ -62,6 +62,9 @@ public class ImageTransformer {
     /** Whether an embedded image that is not on disk yet is written there. */
     private final boolean writing;
 
+    /** What the page already holds, for a name the export could not write as it was. */
+    private final AttachmentNameLookup attachmentNames;
+
     public ImageTransformer(String baseUrl, List<String> imageDirs) {
         this(baseUrl, imageDirs, true);
     }
@@ -71,9 +74,19 @@ public class ImageTransformer {
      *                the body it compares and must not leave the files behind
      */
     public ImageTransformer(String baseUrl, List<String> imageDirs, boolean writing) {
+        this(baseUrl, imageDirs, writing, AttachmentNameLookup.NONE);
+    }
+
+    /**
+     * @param attachmentNames the attachments of the page this body goes onto, which a reference
+     *                        the export sanitised is matched against
+     */
+    public ImageTransformer(String baseUrl, List<String> imageDirs, boolean writing,
+                            AttachmentNameLookup attachmentNames) {
         this.baseUrl = baseUrl;
         this.imageDirs = imageDirs;
         this.writing = writing;
+        this.attachmentNames = attachmentNames;
     }
 
     /**
@@ -233,6 +246,10 @@ public class ImageTransformer {
         }
         url = SourcePath.decode(url);
         System.out.println("    image: " + url);
+        // Here rather than over the finished body: the body refers to the attachment by name, so
+        // the name has to be the one Confluence holds before it is written down - and the upload
+        // has to go up under the same name, or the page points at a file nobody attached.
+        fileName = attachmentNames.resolve(fileName);
         if (namedByTheDocument && asDiagram(image, url, fileName, width, exportedVersion,
                 diagramVersion, uploads, diagrams)) {
             return;

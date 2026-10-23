@@ -36,6 +36,7 @@ import org.docToolchain.atlassian.confluence.page.PageDecorator;
 import org.docToolchain.atlassian.confluence.page.PageTree;
 import org.docToolchain.atlassian.confluence.page.PageTreeBuilder;
 import org.docToolchain.atlassian.confluence.publish.AttachmentName;
+import org.docToolchain.atlassian.confluence.publish.AttachmentNameLookup;
 import org.docToolchain.atlassian.confluence.publish.AttachmentProvenance;
 import org.docToolchain.atlassian.confluence.publish.BodyBuilder;
 import org.docToolchain.atlassian.confluence.publish.ForeignAttachments;
@@ -92,6 +93,14 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
      */
     private final ForeignAttachments foreignAttachments;
 
+    /**
+     * Whether a reference the export had to sanitise is matched against what the target page
+     * holds. On unless switched off: publishing the sanitised name attaches a second file beside
+     * the one it came from, which is a defect rather than a choice - the switch is there for a
+     * tree whose names need no correcting and for the request per page it costs.
+     */
+    private final boolean resolveAttachmentNames;
+
     /** What a dry run counts, so the run can end with a sentence rather than a wall of lines. */
     private final Map<Verdict, Integer> verdicts = new EnumMap<>(Verdict.class);
 
@@ -130,6 +139,8 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
         this.moveExistingPages = configService.isSwitchedOn("confluence.moveExistingPages");
         this.foreignAttachments =
                 ForeignAttachments.from(configService.getConfigProperty("confluence.foreignAttachments"));
+        this.resolveAttachmentNames =
+                configService.isSwitchedOn("confluence.resolveAttachmentNames", true);
     }
 
     /** What publishing would do to one page. */
@@ -548,13 +559,18 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
         String parentId = localPage.getParent();
         String title = realTitle(localPage.getTitle());
 
+        // The page is read before the body is built, because the body refers to this page's
+        // attachments by name and the names it may use are the ones the page already holds. It
+        // costs nothing: the listing this reads was fetched for the first page of the run.
+        Map<?, ?> existing = existingPage(title);
+
         PublishedBody built = new BodyBuilder(configService, baseUrl,
                 confluencePagePrefix, confluencePageSuffix)
+                .withAttachmentNames(attachmentsOf(existing))
                 .build(localPage.getBody(), anchors, pageAnchors);
         String localHash = ContentHash.md5(built.storageFormat());
         String body = decorate(built.storageFormat());
 
-        Map<?, ?> existing = existingPage(title);
         boolean elsewhere = existing != null && !hasRequestedParent(existing, parentId);
         Map<?, ?> page = existing != null && !elsewhere
                 ? asMap(confluenceClient.retrieveFullPageById(String.valueOf(existing.get("id"))))
@@ -648,6 +664,25 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
                 text(configService.getConfigProperty("confluence.extraPageContent")),
                 text(configService.getConfigProperty("confluence.tableOfContents")),
                 text(configService.getConfigProperty("confluence.tableOfChildren"))).decorate(body);
+    }
+
+    /**
+     * What the page holds, for a reference the export had to sanitise to be matched against.
+     *
+     * <p>A page that does not exist yet holds nothing, and is not asked. Neither is a page whose
+     * document refers to no attachment: the names are fetched on the first reference that has to
+     * be matched, so a document without pictures pays nothing for this.</p>
+     *
+     * <p>A dry run asks as well. The name goes into the body, the body is what the hash is taken
+     * of, and a dry run that compared a different body would report a page as changed that a real
+     * run then leaves alone.</p>
+     */
+    private AttachmentNameLookup attachmentsOf(Map<?, ?> existing) {
+        if (!resolveAttachmentNames || existing == null) {
+            return AttachmentNameLookup.NONE;
+        }
+        String pageId = String.valueOf(existing.get("id"));
+        return new AttachmentNameLookup(() -> confluenceClient.attachmentNames(pageId));
     }
 
     private Map<?, ?> existingPage(String title) {
