@@ -43,6 +43,34 @@ public abstract class ConfluenceClient {
         return constructApiContext(String.valueOf(configService.getConfigProperty("confluence.api")));
     }
 
+    /**
+     * Where Confluence is served, as a URL a browser can follow: scheme, host, the port where the
+     * configuration names one, and the context path.
+     *
+     * <p>What a link into Confluence is built from, for an export that meets a link to a page it
+     * did not export itself. The path is the one {@link #contextPathFor} derives rather than
+     * whatever was configured, because that value ranges from a bare host to a full API
+     * endpoint.</p>
+     *
+     * @return the base URL, without a trailing slash, or empty where the configuration names no
+     *         host at all - a URL built without one would point nowhere
+     */
+    public static String baseUrlFor(ConfigService configService) {
+        String apiConfigItem = String.valueOf(configService.getConfigProperty("confluence.api"));
+        try {
+            URIBuilder configured = new URIBuilder(apiConfigItem);
+            if (configured.getScheme() == null || configured.getHost() == null) {
+                return "";
+            }
+            String port = configured.getPort() < 0 ? "" : ":" + configured.getPort();
+            return configured.getScheme() + "://" + configured.getHost() + port
+                    + contextPathFor(configService);
+        } catch (URISyntaxException e) {
+            throw new IllegalArgumentException(
+                    "confluence.api is not a valid URI: '" + apiConfigItem + "'", e);
+        }
+    }
+
     protected final String API_V1_PATH;
     protected final String API_V2_PATH;
     protected final String editorVersion;

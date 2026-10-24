@@ -57,6 +57,7 @@ class MacroTranslator {
     private final File lucidInfoFile;
     private final Map<String, List<String>> unknownTagsStats;
     private final JiraServers jiraServers;
+    private final ConfluenceSite site;
 
     /** What a link to a listing's issues is called, where the listing itself cannot be shown. */
     private static final String ISSUES_THIS_LISTS = "the issues this lists";
@@ -68,6 +69,15 @@ class MacroTranslator {
     /** The tags of this page the translation did not recognise, each named once. */
     private final Set<String> unknownTags = new LinkedHashSet<>();
 
+    /**
+     * The anchors this page declares, read before anything is translated.
+     *
+     * <p>Before, because an {@code anchor} macro becomes a placeholder as soon as the translation
+     * reaches it, and a link standing further down the page would then find nothing. What they
+     * answer is whether a link to an anchor has somewhere in this document to point.</p>
+     */
+    private Set<String> declaredAnchors = Set.of();
+
     MacroTranslator(String pageId,
                     Map<String, Map<String, Object>> pages,
                     Map<String, Map<String, Object>> attachments,
@@ -75,7 +85,8 @@ class MacroTranslator {
                     boolean lucidChartsIframe,
                     File lucidInfoFile,
                     Map<String, List<String>> unknownTagsStats,
-                    JiraServers jiraServers) {
+                    JiraServers jiraServers,
+                    ConfluenceSite site) {
         this.pageId = pageId;
         this.pages = pages;
         this.attachments = attachments;
@@ -84,6 +95,7 @@ class MacroTranslator {
         this.lucidInfoFile = lucidInfoFile;
         this.unknownTagsStats = unknownTagsStats;
         this.jiraServers = jiraServers;
+        this.site = site;
     }
 
     /**
@@ -102,10 +114,28 @@ class MacroTranslator {
         if (acTags.isEmpty()) {
             return List.of();
         }
+        declaredAnchors = anchorsDeclaredIn(dom);
         for (Element element : dom.select(String.join(", ", acTags))) {
             translateOne(element);
         }
         return new ArrayList<>(unknownTags);
+    }
+
+    /**
+     * @return the names of the anchors this page sets, from the two macros that set one: the
+     *         {@code anchor} macro, whose only parameter is the name, and {@code captioneditem},
+     *         which names its own under {@code anchor}
+     */
+    private static Set<String> anchorsDeclaredIn(Document dom) {
+        Set<String> declared = new LinkedHashSet<>();
+        for (Element macro : dom.select("ac|structured-macro[ac:name=anchor]")) {
+            declared.add(macro.select("ac|parameter").text());
+        }
+        for (Element macro : dom.select("ac|structured-macro[ac:name=captioneditem]")) {
+            declared.add(directParameter(macro, "anchor"));
+        }
+        declared.remove("");
+        return declared;
     }
 
     private void translateOne(Element element) {
@@ -122,7 +152,7 @@ class MacroTranslator {
                     element.unwrap();
             case "ac:placeholder" -> element.remove();
             case "ac:structured-macro" -> structuredMacro(element);
-            case "ac:plain-text-link-body", "ac:parameter", "ac:rich-text-body",
+            case "ac:plain-text-link-body", "ac:link-body", "ac:parameter", "ac:rich-text-body",
                  "ac:plain-text-body" -> {
                 // Part of the element that carries them, and handled there.
             }
@@ -248,35 +278,162 @@ class MacroTranslator {
         return img;
     }
 
+    /**
+     * Writes an {@code ac:link} as a cross reference where its target was exported too, and as a
+     * URL into Confluence where it was not.
+     *
+     * <p>Only the first was ever written. Where the title named no exported page the element was
+     * left in the document, the converter that ran next kept its text alone, and the link was
+     * gone with nothing said about it: on the Maven space's <em>Maven Ecosystem Cleanup</em> page
+     * the link to <em>Baseline Upgrade to Maven 3.5.4</em> exported as the bare words
+     * {@code see here} - a link text that says nothing once it no longer links. Of the 173
+     * {@code ac:link} elements in the 136 pages measured, 82 name a page that way, and a page
+     * outside the export is the usual case rather than the exception.</p>
+     *
+     * <p>What no URL can be built for is reported: a mention of a user, which the storage format
+     * identifies by a key while the profile URL is built from the name (78 of the 173, and 53 of
+     * those carry no text either, so they reached the document as nothing at all), and any shape
+     * the corpus does not contain. {@link #report} rather than silence, because the complaint
+     * that started this was not the loss but that nothing said a word.</p>
+     *
+     * <p>Every link this writes is built as an {@code <a>} element rather than spelled out as
+     * AsciiDoc, because pandoc escapes the punctuation AsciiDoc is made of: measured,
+     * {@code xref:A/B.adoc#_part[there]} written as text arrives as
+     * {@code xref:A/B.adoc++#_++part++[++there++]++}, while the same link in an {@code <a>}
+     * comes back as {@code link:...[there]}. The {@code xref:} branch below predates that
+     * measurement and is left exactly as it was - it writes a path to a {@code .adoc}, which
+     * only {@code xref:} resolves - but nothing new is written that way.</p>
+     */
     private void link(Element element) {
         if (element.children().isEmpty()) {
             return;
         }
         String anchor = element.attr("ac:anchor");
-        String title = element.select("ri|page").attr("ri:content-title");
-        String linkText = element.select("ac|plain-text-link-body").text();
-        if (linkText.trim().isEmpty()) {
-            linkText = element.select("ac|link-body").text();
+        String linkText = linkText(element);
+        Element target = element.selectFirst("ri|page");
+        if (target != null) {
+            pageLink(element, target, anchor, linkText);
+        } else if (!anchor.isEmpty()) {
+            anchorLink(element, anchor, linkText);
+        } else {
+            // Nothing here names a page or an anchor: a mention of a user, or a shape the
+            // corpus does not contain. Either way there is no destination to write.
+            unresolved(element, linkText);
         }
-        String targetId = idOfPageTitled(title);
-        if (targetId == null) {
-            // A link to an attachment rather than to a page, or to a page outside this export.
+    }
+
+    /**
+     * @return what the link reads as. {@code ac:link-body} is the rich-text form, which is what
+     *         Confluence writes once someone has left an inline comment on a link - so not an
+     *         exotic shape but what any commented link looks like. Only its words are read; the
+     *         markup inside it, the comment's own highlight included, is not this method's
+     *         business.
+     */
+    private static String linkText(Element element) {
+        String plain = element.select("ac|plain-text-link-body").text();
+        return plain.trim().isEmpty() ? element.select("ac|link-body").text() : plain;
+    }
+
+    private void pageLink(Element element, Element target, String anchor, String linkText) {
+        String title = target.attr("ri:content-title");
+        // A space of its own means a page this export never looked at, whatever its title says
+        // here - two spaces may both hold a page of that name.
+        String space = target.attr("ri:space-key");
+        String targetId = space.isEmpty() ? idOfPageTitled(title) : null;
+        if (targetId != null) {
+            element.before(" xref:" + xrefTo(targetId, anchor) + "[" + linkText + "] ");
+            element.remove();
             return;
         }
+        // The title where the link carries no text of its own, which is what Confluence itself
+        // shows for such a link; 46 of the 82 measured carry none.
+        String text = linkText.isEmpty() ? title : linkText;
+        if (title.isEmpty() || !site.isKnown()) {
+            unresolved(element, text);
+            return;
+        }
+        element.before(hyperlink(site.pageUrl(space, title, anchor), text));
+        element.remove();
+    }
+
+    /**
+     * Writes a link that names an anchor and no page, which is a link within this page.
+     *
+     * <p>As a reference into this document where the page sets that anchor itself, which 8 of the
+     * 13 measured do. The other 5 name an anchor Confluence generated for a heading, and those
+     * keep their destination in Confluence instead: the export carries the heading, but its id is
+     * the renderer's and not Confluence's, and a reference to an id that no anchor declares
+     * renders as its own name in brackets - a broken link where this is a working one.</p>
+     */
+    private void anchorLink(Element element, String anchor, String linkText) {
+        String text = linkText.isEmpty() ? anchor : linkText;
+        if (declaredAnchors.contains(anchor)) {
+            // Spelled by the same rule as the anchor it points at, underscore included.
+            element.before(hyperlink("#" + AdocOutput.anchorId(anchor), text));
+            element.remove();
+            return;
+        }
+        String title = text(page(pageId).get("title"));
+        if (title.isEmpty() || !site.isKnown()) {
+            unresolved(element, text);
+            return;
+        }
+        element.before(hyperlink(site.pageUrl("", title, anchor), text));
+        element.remove();
+    }
+
+    /**
+     * Keeps the words of a link whose destination cannot be written, and reports that it had one.
+     *
+     * <p>The words were all that survived before, for every link this class could not place. They
+     * still do; what is new is that the summary says so, and names the kind of target the link
+     * had.</p>
+     */
+    private void unresolved(Element element, String linkText) {
+        report("ac:link" + targetKind(element));
+        if (!linkText.isEmpty()) {
+            // A text node, so that neither a quote nor an angle bracket in the words is read as
+            // markup of its own.
+            element.before(new TextNode(linkText));
+        }
+        element.remove();
+    }
+
+    /**
+     * @return what the link names its target by, as {@code " ri:user"}, or nothing where it names
+     *         no target at all. What the report is grouped by, and deliberately without the key
+     *         itself: a userkey would make one entry per user out of what is one gap.
+     */
+    private static String targetKind(Element element) {
+        for (Element child : element.children()) {
+            if (child.tagName().startsWith("ri:")) {
+                return " " + child.tagName();
+            }
+        }
+        return "";
+    }
+
+    /** @return the path from this page to another page of this export, anchor included */
+    private String xrefTo(String targetId, String anchor) {
         // The AsciiDoc names, the same ones writePage writes under: with a page prefix stripped
         // the two differ, and a link built from the original name points at a file that was never
         // written. The folders are the AsciiDoc ones for the same reason.
         List<String> targetFolders = folders(targetId, "adocFilename");
         String name = firstOf(text(pages.get(targetId).get("adocFilename")),
                 text(pages.get(targetId).get("filename")));
-        String link = "../".repeat(folders(pageId, "adocFilename").size())
+        String path = "../".repeat(folders(pageId, "adocFilename").size())
                 + joinPath(String.join("/", targetFolders), name + ".adoc");
-        if (!anchor.isEmpty()) {
-            // Spelled by the same rule as the anchor it points at, underscore included.
-            link += "#" + AdocOutput.anchorId(anchor);
-        }
-        element.before(" xref:" + link + "[" + linkText + "] ");
-        element.remove();
+        // Spelled by the same rule as the anchor it points at, underscore included.
+        return anchor.isEmpty() ? path : path + "#" + AdocOutput.anchorId(anchor);
+    }
+
+    /**
+     * An anchor element, built rather than written out, for the reason {@link #img} is built: a
+     * title or a link text carrying a quote would otherwise close the attribute and put whatever
+     * follows it into the exported page as markup.
+     */
+    private static Element hyperlink(String url, String text) {
+        return new Element("a").attr("href", url).text(text);
     }
 
     private void drawio(Element element) {

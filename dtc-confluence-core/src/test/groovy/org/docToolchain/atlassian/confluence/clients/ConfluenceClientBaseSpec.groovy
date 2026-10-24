@@ -132,6 +132,25 @@ class ConfluenceClientBaseSpec extends Specification {
             client().retrieveFullPageById('4711').title == 'Some Page'
     }
 
+    def 'baseUrlFor says where Confluence is served, context path included'() {
+        given: '''what an export builds a link from when it meets a link to a page it did not
+                  export itself. The configured value ranges from a bare host to a full API
+                  endpoint, and what a browser needs is neither.'''
+            ConfigObject config = new ConfigObject()
+            config.confluence = [api: api]
+
+        expect:
+            ConfluenceClient.baseUrlFor(new ConfigService(config)) == baseUrl
+
+        where:
+            api                                            || baseUrl
+            'https://cwiki.apache.org/confluence'          || 'https://cwiki.apache.org/confluence'
+            'https://cwiki.apache.org/confluence/rest/api' || 'https://cwiki.apache.org/confluence'
+            'https://example.atlassian.net'                || 'https://example.atlassian.net/wiki'
+            'http://localhost:8090/confluence'             || 'http://localhost:8090/confluence'
+            'confluence.example/confluence'                || ''
+    }
+
     def 'retrievePageIdByName passes the title and space through to the query'() {
         given:
             body = '{"results":[]}'
