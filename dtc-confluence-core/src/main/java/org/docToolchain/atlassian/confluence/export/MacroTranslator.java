@@ -14,6 +14,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
+import org.docToolchain.atlassian.constants.ConfluenceTags;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Entities;
@@ -42,6 +43,9 @@ class MacroTranslator {
      * page as text, and with nothing reported.</p>
      */
     private static final Pattern EMOTICON_NAME = Pattern.compile(AdocOutput.EMOTICON_NAME);
+
+    /** What an inline comment's ref must look like for this to carry it. */
+    private static final Pattern COMMENT_REF = Pattern.compile(ConfluenceTags.COMMENT_REF);
 
     private static final Map<String, String> ADMONITIONS = Map.of(
             "info", "NOTE",
@@ -142,9 +146,7 @@ class MacroTranslator {
         switch (element.tagName()) {
             case "ac:image" -> image(element);
             case "ac:link" -> link(element);
-            case "ac:inline-comment-marker" ->
-                // A comment marker wraps text without marking it up. Keep the text, drop the tag.
-                    element.unwrap();
+            case "ac:inline-comment-marker" -> inlineCommentMarker(element);
             case "ac:emoticon" -> emoticon(element);
             case "ac:layout", "ac:layout-section", "ac:layout-cell" ->
                 // Multi-column layouts have no counterpart. Keep the children, drop the wrapper,
@@ -157,6 +159,84 @@ class MacroTranslator {
                 // Part of the element that carries them, and handled there.
             }
             default -> report(element.tagName());
+        }
+    }
+
+    /**
+     * Keeps an inline comment's anchor by writing the marker as a span whose roles carry the ref.
+     *
+     * <p>A comment is anchored by this element in the page body; the comment object itself lives
+     * beside the page and no publish touches it. Measured on cwiki over four versions of one page:
+     * rewrite the whole body but keep the element and the comment stays anchored and highlighted,
+     * publish the same text without it and the highlight is gone from the rendered page, put it
+     * back and the highlight returns. So an anchor survives a round trip if, and only if, its ref
+     * does - and no comment API is needed for that.</p>
+     *
+     * <p>Until now the element was unwrapped, which kept the words and dropped the identity: of
+     * the five anchored comments on the Maven space's <em>Maven Ecosystem Cleanup</em> page, not
+     * one ref reached the AsciiDoc, and nothing was reported.</p>
+     *
+     * <p>A span with two roles rather than a placeholder, which is what an admonition or a block
+     * anchor needs: a placeholder is for what pandoc would escape, and this is the one construct
+     * pandoc already carries in both directions. It writes a span's classes as
+     * {@code [.inline-comment-marker .comment-ref-<ref>]#the marked words#}, Asciidoctor renders
+     * that back to the same span, and {@link AdocOutput} has nothing left to spell out.</p>
+     *
+     * <p>Roles rather than an id, although a ref is an identity: where a comment's text spans
+     * inline markup, the stored body already has it split over several marker elements carrying
+     * one ref - three of the eight markers on that page are one comment - and three elements
+     * carrying one id is a duplicate id. Roles may repeat.</p>
+     */
+    private void inlineCommentMarker(Element element) {
+        String ref = element.attr("ac:ref");
+        if (!COMMENT_REF.matcher(ref).matches()) {
+            // No ref, or one that cannot be spelled as a role. The words stay, because they are
+            // the page; the anchor is lost, and is reported rather than dropped in silence. All 38
+            // markers on the 136 pages measured carry a ref, so this says something is unusual.
+            report(element.tagName());
+            element.unwrap();
+            return;
+        }
+        element.tagName("span");
+        element.clearAttributes();
+        element.addClass(ConfluenceTags.INLINE_COMMENT_MARKER_ROLE);
+        element.addClass(ConfluenceTags.COMMENT_REF_ROLE_PREFIX + ref);
+        moveEdgeSpaceOut(element);
+    }
+
+    /**
+     * Moves the space at the edges of a marked phrase out of the span around it.
+     *
+     * <p>Confluence lets a comment's text begin or end with a space - one of the five comments on
+     * that page is anchored to "widely " - and pandoc writes such a span constrained, as
+     * {@code [.inline-comment-marker .comment-ref-...]#widely #}. AsciiDoc does not read that as a
+     * span at all, because a constrained one may not end in space, so the role is printed as text
+     * and the anchor is gone. Measured: one of the page's eight markers was lost to this, the
+     * other seven came back.</p>
+     *
+     * <p>The space belongs to the sentence on either side of it, and a comment anchored to the
+     * word rather than to the word and the gap after it is the same comment on the same words.
+     * A phrase that is nothing but space is left alone: there is no word to move the space off.</p>
+     */
+    private static void moveEdgeSpaceOut(Element element) {
+        if (element.wholeText().isBlank()) {
+            return;
+        }
+        if (element.childNode(0) instanceof TextNode first) {
+            String text = first.getWholeText();
+            String kept = text.stripLeading();
+            if (!kept.equals(text)) {
+                first.text(kept);
+                element.before(new TextNode(text.substring(0, text.length() - kept.length())));
+            }
+        }
+        if (element.childNode(element.childNodeSize() - 1) instanceof TextNode last) {
+            String text = last.getWholeText();
+            String kept = text.stripTrailing();
+            if (!kept.equals(text)) {
+                last.text(kept);
+                element.after(new TextNode(text.substring(kept.length())));
+            }
         }
     }
 

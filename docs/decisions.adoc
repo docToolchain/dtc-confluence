@@ -94,10 +94,10 @@ Measured against ASF Confluence DC 9.2.21:
 
 * Publishing an unchanged source is already idempotent. The content hash suppresses the write, the page version does not move, and inline comments survive untouched.
 * Inline comments live *inside* the page body as `<ac:inline-comment-marker ac:ref="...">text</ac:inline-comment-marker>`.
-* When a page does change, publishing replaces the whole body. The marker is gone, and while the comment object survives, its anchor does not.
+* When a page does change, publishing replaces the whole body. The marker is gone unless the document carries the ref - see the next entry - and where it does not, the comment object survives while its anchor does not.
 
 A better backend does not fix this on its own, because the loss comes from full body replacement, not from the HTML detour.
-Preserving inline comments needs an explicit merge: read the current storage format, extract the markers, and re-apply them to the newly generated body.
+For a document that came out of an export the ref now travels with it and no merge is needed; for one written as AsciiDoc from the start, preserving the comments needs an explicit merge: read the current storage format, extract the markers, and re-apply them to the newly generated body.
 
 The backend makes that merge *tractable* rather than unnecessary, because stable, semantically faithful output is what lets markers be matched reliably.
 
@@ -107,9 +107,44 @@ The core must take a **page tree** - titles, storage-format bodies, ancestors, a
 That separation has since happened: `PageTreeBuilder` returns a `PageTree` of `Page` objects, and `BodyBuilder` produces the storage format.
 What is still missing for a second producer is narrower than it was: a `Page` carries its body as a Jsoup HTML element rather than as a finished body, so the tree is not yet format-neutral.
 
+== An inline comment's anchor travels as a role
+
+A comment in Confluence is anchored by an element in the page body, `<ac:inline-comment-marker ac:ref="...">the marked words</ac:inline-comment-marker>`.
+The comment object itself lives beside the page and no publish touches it, so author, date and thread are never at risk.
+Only the anchor is, and the anchor is the ref.
+
+Measured on cwiki over four versions of one page: rewrite the whole body but keep the element and the comment stays anchored and highlighted; publish the same text without it and the highlight is gone from the rendered page; put it back in a later version and the highlight returns.
+Confluence accepts a marker written by us, carrying a ref it did not issue in that body.
+So preserving a comment across a round trip needs no comment API at all - it needs the ref to survive the export and come back on publish.
+
+It travels as a second role on the marked span, `[.inline-comment-marker .comment-ref-<ref>]#the marked words#`.
+The vocabulary is `ConfluenceTags`; `MacroTranslator` writes it and `InlineCommentTransformer` reads it back.
+
+A role rather than a placeholder of the `%%...%%` kind an admonition uses, because a placeholder is for what pandoc would escape and this is not that: a span's classes are the one construct both halves already carry: pandoc writes them as roles, Asciidoctor renders roles back to the same span.
+A role rather than an id, although a ref is an identity, because one comment may be anchored by several marker elements where its text spans inline markup - three of the eight markers on the page measured are one comment - and several elements carrying one id is a duplicate id.
+Roles may repeat.
+
+A ref must match `[A-Za-z0-9][A-Za-z0-9-]*` for either side to carry it.
+A space in a class name would be two roles and punctuation would be markup, so a ref outside that is refused, the marked words are kept, and the export reports the loss rather than passing it off as a translation.
+All 38 markers on the 136 pages measured carry a ref shaped like a UUID.
+
+The space at the edge of a marked phrase is moved out of the span.
+Confluence lets a comment be anchored to "widely ", and pandoc writes such a span constrained, which AsciiDoc does not read as a span at all - a constrained one may not end in space.
+Measured: one of the page's eight markers was lost to that alone.
+
+Not carried: a marker around block content rather than inline text, which comes back from Asciidoctor as a div and is left as one.
+Nothing in the pages measured has that shape.
+
+=== What this does not solve
+
+The ref survives only where the AsciiDoc came from an export.
+A page written as AsciiDoc from the start and commented on in Confluence still loses its anchors on the next publish, because its source never held a ref.
+That case is what the merge below is for, and it is the only case left.
+
 == Idea: partial updates that preserve inline comments
 
 Not planned for a particular release, recorded so the reasoning is not redone.
+What is left for it is narrower than it was: a document that came out of an export carries its refs, so the merge is only for a page whose AsciiDoc never held one.
 
 The way this project writes a page offers no partial update.
 `ConfluenceClientV1.updatePage` sends the complete body with a whole-body `PUT /rest/api/content/{id}`, so everything that was on the page is replaced by everything the document produced.
