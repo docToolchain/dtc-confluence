@@ -430,7 +430,6 @@ public class ConfluenceConverter {
                     PageNaming.attachmentFolders(pages, pageId));
             Files.writeString(adocFile.toPath(),
                     fileHeader(metaData, adocFilename, folderStructure, adocFolderStructure)
-                            + "== " + text(metaData.get("title")) + "\n\n"
                             + adoc
                             + "\n\n"
                             + childIncludes(pageId, childIds, pages),
@@ -468,7 +467,28 @@ public class ConfluenceConverter {
     }
 
     /**
-     * The attributes the microsite reads, and the paths the document resolves its images by.
+     * The page's title, the attributes the microsite reads, and the paths the document resolves
+     * its images by.
+     *
+     * <p>The title is a level-0 heading, which is what spends the least of AsciiDoc's six levels:
+     * the including page's {@code leveloffset=+1} places it, the page's own headings sit one level
+     * below it, and a tree reaches one page deeper than it did while the title was written as
+     * {@code == Title}. Measured with asciidoctor 2.0.26 on a Root/Child/Grandchild tree whose
+     * deepest body holds three heading levels - {@code h4 h5 h6}, where correct nesting below a
+     * level-1 title needed {@code h5 h6 h7} and {@code <h7>} is no heading at all.</p>
+     *
+     * <p>It is the first line because it has to be: a level-0 heading anywhere but at the head of
+     * a document is refused - "level 0 sections can only be used when doctype is book" - and
+     * asciidoctor exits zero while refusing it.</p>
+     *
+     * <p>{@code :showtitle:} because a microsite renders every page embedded, and an embedded
+     * document leaves its own title out unless that attribute is set. Without it the page loses
+     * the heading it is named by.</p>
+     *
+     * <p>The blank line after the attribute entries ends the header, and it is not cosmetic: the
+     * style block {@code _config.adoc} carries is read inside the header without it, which leaves
+     * the pass block unterminated, the CSS in the page as text and the {@code ifndef::imagesdir}
+     * line as a paragraph of its own.</p>
      *
      * <p>Visible to its test: no line of it may be indented, and that is worth stating.</p>
      */
@@ -476,7 +496,8 @@ public class ConfluenceConverter {
                                      String adocFilename,
                                      List<String> folderStructure,
                                      List<String> adocFolderStructure) {
-        return "\n"
+        return "= " + text(metaData.get("title")) + "\n"
+                + ":showtitle:\n"
                 + ":jbake-menu: "
                 + (adocFolderStructure.isEmpty() ? "-" : adocFolderStructure.get(0)) + "\n"
                 + ":jbake-deep-menu: " + String.join("/", adocFolderStructure) + "\n"
@@ -486,6 +507,7 @@ public class ConfluenceConverter {
                 + ":jbake-root: " + "../".repeat(adocFolderStructure.size()) + "\n"
                 + ":filename: " + adocFilename + ".adoc\n"
                 + ":filepath: " + String.join("/", folderStructure) + "\n"
+                + "\n"
                 + "include::{jbake-root}_config.adoc[]\n"
                 + "ifdef::show-microsite-menu[]\n"
                 + "include::{jbake-root}_menu.adoc[]\n"

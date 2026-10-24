@@ -472,6 +472,17 @@ class ConfluenceConverterSpec extends Specification {
             header.readLines().contains(':jbake-status: published')
             header.readLines().contains(':jbake-order: 3')
             header.readLines().contains(':filepath: Root')
+
+        and: """the title on the first line: a level-0 heading is a document title there and a
+                refused section anywhere else"""
+            header.readLines().first() == '= A Page'
+
+        and: """a blank line between the attributes and the first include, which ends the header -
+                the style block that include carries is read inside the header without it, and
+                then the pass block is unterminated and the CSS reaches the page as text.
+                ChildIncludeLevelSpec renders what this line is for."""
+            def lines = header.readLines()
+            lines[lines.indexOf('include::{jbake-root}_config.adoc[]') - 1] == ''
     }
 
     def 'a link uses the name the page is written under'() {

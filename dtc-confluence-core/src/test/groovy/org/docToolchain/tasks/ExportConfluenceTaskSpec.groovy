@@ -140,8 +140,13 @@ class ExportConfluenceTaskSpec extends Specification {
             taskFor().execute()
             def adoc = exported('Root.adoc').getText('utf-8')
 
-        then: 'the title as a section, not as a document header - the page is included elsewhere'
-            adoc.contains('== Root')
+        then: """the title as the document title, and on the first line: a level-0 heading is
+                 refused anywhere else, and placing it by the including page's leveloffset is one
+                 heading level cheaper than writing it as a section of its own"""
+            adoc.readLines().first() == '= Root'
+
+        and: 'shown even where the page is rendered embedded, which is how a microsite renders it'
+            adoc.readLines().contains(':showtitle:')
 
         and: 'the attributes the microsite reads'
             adoc.readLines().contains(':jbake-status: published')
