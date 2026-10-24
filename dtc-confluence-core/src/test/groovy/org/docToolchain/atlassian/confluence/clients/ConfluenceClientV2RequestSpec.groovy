@@ -180,13 +180,13 @@ class ConfluenceClientV2RequestSpec extends Specification {
             requests[2].body.contains('#h#')
     }
 
-    def 'attachmentHasChanged reads the comment directly, unlike v1'() {
+    def 'attachmentOf reads the comment directly, unlike v1'() {
         given:
-            def remote = [results: [[comment: 'note\r\n#abc123#']]]
+            def remote = [results: [[id: 'att99', version: [number: 3], comment: 'note\r\n#abc123#']]]
 
         expect: 'v1 nests the same field under extensions; v2 does not'
-            !client().attachmentHasChanged(remote, 'abc123')
-            client().attachmentHasChanged(remote, 'def456')
+            client().attachmentOf(remote).comment() == 'note\r\n#abc123#'
+            client().attachmentOf(remote).version() == 3
     }
 
     def 'fetchPageByPageId asks for the storage body format'() {

@@ -164,6 +164,44 @@ class PageTreeWalkerSpec extends Specification {
             tree.attachments['att1'].downloadUrl == '/download/attachments/1/diagram.png'
     }
 
+    def 'the draft the draw.io app keeps beside a diagram is not exported'() {
+        given: '''Measured on two real pages: the app attaches "~<diagram>.tmp" of its own type
+                  beside every diagram. Exported, it would be written to disk, listed in the
+                  document and attached again on the next publish - a file nobody wrote,
+                  travelling in both directions.'''
+            reader.fetchPage('1') >> page('1', 'Root')
+            reader.fetchChildPages('1') >> []
+            reader.fetchAttachments('1') >> [
+                [id: 'att1', title: 'dummy-diagram', version: [number: 1],
+                 extensions: [mediaType: 'application/vnd.jgraph.mxfile',
+                              comment: 'draw.io diagram']],
+                [id: 'att2', title: 'dummy-diagram.png', version: [number: 1],
+                 extensions: [mediaType: 'image/png']],
+                [id: 'att3', title: '~dummy-diagram.tmp', version: [number: 1],
+                 extensions: [mediaType: 'application/x-drawio-draft', comment: 'draw.io Draft']]]
+
+        when:
+            def tree = walker().walk('1')
+
+        then: 'the diagram and its preview are exported, the draft is not'
+            tree.attachments.keySet() == ['att1', 'att2'] as Set
+    }
+
+    def 'a file an author called ~notes.tmp is theirs, and is exported'() {
+        given: 'recognised by the media type the app writes, not by a name anyone can choose'
+            reader.fetchPage('1') >> page('1', 'Root')
+            reader.fetchChildPages('1') >> []
+            reader.fetchAttachments('1') >> [[id: 'att1', title: '~notes.tmp',
+                                              version: [number: 1],
+                                              extensions: [mediaType: 'text/plain']]]
+
+        when:
+            def tree = walker().walk('1')
+
+        then:
+            tree.attachments.keySet() == ['att1'] as Set
+    }
+
     def 'an attachment without a version is version one'() {
         given:
             reader.fetchPage('1') >> page('1', 'Root')

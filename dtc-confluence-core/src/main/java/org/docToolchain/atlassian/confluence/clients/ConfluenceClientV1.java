@@ -8,7 +8,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Locale;
 
 import groovy.json.JsonBuilder;
@@ -27,9 +26,6 @@ import org.docToolchain.configuration.ConfigService;
  * still accepts.
  */
 public class ConfluenceClientV1 extends ConfluenceClient {
-
-    /** The attachment comment carries the content hash between two hash marks. */
-    private static final String HASH_IN_COMMENT = "(?sm).*#([^#]+)#.*";
 
     public ConfluenceClientV1(ConfigService configService) {
         super(configService);
@@ -50,10 +46,20 @@ public class ConfluenceClientV1 extends ConfluenceClient {
         return callApiAndFailIfNot20x(post);
     }
 
+    /**
+     * Asks for the version along with the attachment, because v1 leaves it out otherwise.
+     *
+     * <p>Measured against Confluence Data Center 9.2.21: the answer to this lookup carries
+     * {@code extensions} and {@code metadata} but only lists {@code version} as expandable. The
+     * publisher compares that version against the one an export took the file from, so without
+     * the expand it has nothing to compare and treats every attachment as one it cannot
+     * account for.</p>
+     */
     @Override
     public Object getAttachment(Object pageId, Object fileName) {
         URI uri = uri(API_V1_PATH + "/content/" + pageId + "/child/attachment",
-                List.of(new BasicNameValuePair("filename", String.valueOf(fileName))));
+                List.of(new BasicNameValuePair("filename", String.valueOf(fileName)),
+                        new BasicNameValuePair("expand", "version")));
         return callApiAndReturnOrNull(new HttpGet(uri));
     }
 
@@ -72,12 +78,16 @@ public class ConfluenceClientV1 extends ConfluenceClient {
         return uploadAttachment(uri, inputStream, fileName, note, localHash);
     }
 
+    /** v1 nests the version comment under {@code extensions}. */
     @Override
-    public Object attachmentHasChanged(Object attachment, Object localHash) {
-        List<?> results = listAt(attachment, "results");
-        Map<?, ?> extensions = mapAt(results.isEmpty() ? null : results.get(0), "extensions");
-        String remoteHash = String.valueOf(extensions.get("comment")).replaceAll(HASH_IN_COMMENT, "$1");
-        return !Objects.equals(remoteHash, localHash);
+    public RemoteAttachment attachmentOf(Object response) {
+        Map<?, ?> attachment = firstAttachmentIn(response);
+        if (attachment == null) {
+            return null;
+        }
+        return new RemoteAttachment(String.valueOf(attachment.get("id")),
+                versionNumberOf(attachment),
+                stringAt(mapAt(attachment, "extensions"), "comment"));
     }
 
     @Override
@@ -258,6 +268,11 @@ public class ConfluenceClientV1 extends ConfluenceClient {
     private static Map<?, ?> mapAt(Object container, String key) {
         Object value = container instanceof Map<?, ?> map ? map.get(key) : null;
         return value instanceof Map<?, ?> nested ? nested : Map.of();
+    }
+
+    private static String stringAt(Map<?, ?> container, String key) {
+        Object value = container.get(key);
+        return value == null ? "" : String.valueOf(value);
     }
 
     private static String orEmpty(String value) {

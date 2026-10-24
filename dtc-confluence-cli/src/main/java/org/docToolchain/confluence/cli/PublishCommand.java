@@ -27,6 +27,12 @@ public class PublishCommand implements Callable<Integer> {
                     + "instead of failing on the title that is already taken.")
     private boolean moveExistingPages;
 
+    @Option(names = "--foreign-attachments", paramLabel = "<fail|skip|overwrite>",
+            description = "What to do with an attachment that somebody else wrote since the "
+                    + "export this document came from: fail (the default), skip it and carry on, "
+                    + "or overwrite it.")
+    private String foreignAttachments;
+
     private TaskFactory taskFactory = Asciidoc2ConfluenceTask::From;
 
     /** Visible for testing; see {@link TaskFactory}. */
@@ -44,6 +50,9 @@ public class PublishCommand implements Callable<Integer> {
         }
         if (moveExistingPages) {
             confluenceSection(config).put("moveExistingPages", true);
+        }
+        if (foreignAttachments != null) {
+            confluenceSection(config).put("foreignAttachments", foreignAttachments);
         }
         taskFactory.create(config, options.docDir()).execute();
         return 0;

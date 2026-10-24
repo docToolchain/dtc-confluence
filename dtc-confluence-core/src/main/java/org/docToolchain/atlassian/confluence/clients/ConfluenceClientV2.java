@@ -8,7 +8,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Locale;
 
 import groovy.json.JsonBuilder;
@@ -31,9 +30,6 @@ import org.docToolchain.configuration.ConfigService;
  * v2 equivalent and go through v1 paths.</p>
  */
 public class ConfluenceClientV2 extends ConfluenceClient {
-
-    /** The attachment comment carries the content hash between two hash marks. */
-    private static final String HASH_IN_COMMENT = "(?sm).*#([^#]+)#.*";
 
     private final String spaceKey;
 
@@ -132,14 +128,17 @@ public class ConfluenceClientV2 extends ConfluenceClient {
                 inputStream, fileName, note, localHash);
     }
 
+    /** v2 reports the comment directly, where v1 nests it under extensions. */
     @Override
-    public Object attachmentHasChanged(Object attachment, Object localHash) {
-        // v2 reports the comment directly, where v1 nests it under extensions.
-        List<?> results = listAt(attachment, "results");
-        Object first = results.isEmpty() ? null : results.get(0);
-        Object comment = first instanceof Map<?, ?> map ? map.get("comment") : null;
-        String remoteHash = String.valueOf(comment).replaceAll(HASH_IN_COMMENT, "$1");
-        return !Objects.equals(remoteHash, localHash);
+    public RemoteAttachment attachmentOf(Object response) {
+        Map<?, ?> attachment = firstAttachmentIn(response);
+        if (attachment == null) {
+            return null;
+        }
+        Object comment = attachment.get("comment");
+        return new RemoteAttachment(String.valueOf(attachment.get("id")),
+                versionNumberOf(attachment),
+                comment == null ? "" : String.valueOf(comment));
     }
 
     @Override

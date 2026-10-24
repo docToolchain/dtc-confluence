@@ -30,11 +30,15 @@ import org.docToolchain.atlassian.confluence.clients.ConfluenceApiVersion;
 import org.docToolchain.atlassian.confluence.clients.ConfluenceClient;
 import org.docToolchain.atlassian.confluence.clients.ConfluenceClientV1;
 import org.docToolchain.atlassian.confluence.clients.ConfluenceClientV2;
+import org.docToolchain.atlassian.confluence.clients.RemoteAttachment;
 import org.docToolchain.atlassian.confluence.page.Page;
 import org.docToolchain.atlassian.confluence.page.PageDecorator;
 import org.docToolchain.atlassian.confluence.page.PageTree;
 import org.docToolchain.atlassian.confluence.page.PageTreeBuilder;
+import org.docToolchain.atlassian.confluence.publish.AttachmentName;
+import org.docToolchain.atlassian.confluence.publish.AttachmentProvenance;
 import org.docToolchain.atlassian.confluence.publish.BodyBuilder;
+import org.docToolchain.atlassian.confluence.publish.ForeignAttachments;
 import org.docToolchain.atlassian.confluence.publish.PublishSettings;
 import org.docToolchain.atlassian.confluence.publish.PublishedBody;
 import org.docToolchain.atlassian.confluence.publish.Upload;
@@ -82,6 +86,12 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
      */
     private final boolean moveExistingPages;
 
+    /**
+     * What happens to an attachment that somebody else wrote since the export this document came
+     * from. Refusing is the default: the alternative loses that somebody's work.
+     */
+    private final ForeignAttachments foreignAttachments;
+
     /** What a dry run counts, so the run can end with a sentence rather than a wall of lines. */
     private final Map<Verdict, Integer> verdicts = new EnumMap<>(Verdict.class);
 
@@ -118,6 +128,8 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
         // Raw, because "dryRun = false" is a decision and Groovy truth would read it as absence.
         this.dryRun = configService.isSwitchedOn("confluence.dryRun");
         this.moveExistingPages = configService.isSwitchedOn("confluence.moveExistingPages");
+        this.foreignAttachments =
+                ForeignAttachments.from(configService.getConfigProperty("confluence.foreignAttachments"));
     }
 
     /** What publishing would do to one page. */
@@ -622,8 +634,7 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
      * the page to exist, which is why neither can travel with it.
      */
     private void finish(String pageId, List<Upload> uploads, List<String> keywords) {
-        uploads.forEach(upload ->
-                uploadAttachment(pageId, upload.url(), upload.fileName(), upload.comment()));
+        uploads.forEach(upload -> uploadAttachment(pageId, upload));
         if (keywords != null && !keywords.isEmpty()) {
             addLabels(pageId, keywords);
         }
@@ -744,26 +755,84 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
         }
     }
 
-    private void uploadAttachment(String pageId, String url, String fileName, String note) {
-        byte[] content = read(url);
+    /**
+     * Writes one attachment, under the name the page refers to it by.
+     *
+     * <p>Three questions, in this order: is it there at all, does it already hold these bytes, and
+     * is what it holds this run's to write over. The last one is the one that keeps an edit made
+     * in Confluence - see {@link AttachmentProvenance}.</p>
+     */
+    private void uploadAttachment(String pageId, Upload upload) {
+        String fileName = upload.fileName();
+        byte[] content = read(upload.url());
         // Hashed as text with the platform's charset, as it has always been. The charset is a
         // recorded defect; changing it would make every attachment of every page look changed
         // once, so it waits for a migration rather than riding along with a port.
         String localHash = ContentHash.md5(new String(content, Charset.defaultCharset()));
 
-        Map<?, ?> attachment = asMap(confluenceClient.getAttachment(pageId, fileName));
-        Object results = attachment.get("results");
-        boolean exists = results instanceof List<?> list && !list.isEmpty();
-        if (!exists) {
-            confluenceClient.createAttachment(pageId, stream(content), fileName, note, localHash);
+        RemoteAttachment remote =
+                confluenceClient.attachmentOf(confluenceClient.getAttachment(pageId, fileName));
+        if (remote == null) {
+            confluenceClient.createAttachment(pageId, stream(content), fileName,
+                    upload.comment(), localHash);
             return;
         }
-        if (Boolean.TRUE.equals(confluenceClient.attachmentHasChanged(attachment, localHash))) {
-            String attachmentId = String.valueOf(((Map<?, ?>) ((List<?>) results).get(0)).get("id"));
-            confluenceClient.updateAttachment(pageId, attachmentId, stream(content),
-                    fileName, note, localHash);
-            System.out.println("    updated attachment");
+
+        AttachmentProvenance provenance = new AttachmentProvenance(upload.exportedVersion(),
+                remote.version(), ConfluenceClient.hashIn(remote.comment()));
+        if (provenance.holdsOurContent(localHash)) {
+            return;
         }
+        if (!provenance.isOurs() && !mayOverwrite(pageId, upload, remote)) {
+            return;
+        }
+        confluenceClient.updateAttachment(pageId, remote.id(), stream(content),
+                fileName, upload.comment(), localHash);
+        System.out.println("    updated attachment " + fileName);
+    }
+
+    /**
+     * @return whether to write over an attachment this run cannot account for, which is the
+     *         author's decision and a refusal where they took none
+     */
+    private boolean mayOverwrite(String pageId, Upload upload, RemoteAttachment remote) {
+        String problem = foreignAttachment(pageId, upload, remote);
+        return switch (foreignAttachments) {
+            case OVERWRITE -> {
+                System.out.println(">>> WARN: " + problem + System.lineSeparator()
+                        + "    confluence.foreignAttachments is 'overwrite', so it is written "
+                        + "over anyway.");
+                yield true;
+            }
+            case SKIP -> {
+                System.out.println(">>> WARN: " + problem + System.lineSeparator()
+                        + "    confluence.foreignAttachments is 'skip', so it is left as it is. "
+                        + "The page now refers to an attachment this document did not write.");
+                yield false;
+            }
+            case FAIL -> throw new IllegalStateException(problem);
+        };
+    }
+
+    /**
+     * Says what is in the way, what is known about it, and what can be done about it - the same
+     * three things a title that is taken is reported with.
+     */
+    private String foreignAttachment(String pageId, Upload upload, RemoteAttachment remote) {
+        String held = remote.version() == AttachmentProvenance.UNKNOWN_VERSION
+                ? "a version it does not report"
+                : "version " + remote.version();
+        String ours = upload.exportedVersion() == AttachmentName.NO_VERSION
+                ? "this document's file carries no version, so no export of this instance wrote it"
+                : "this document was exported from version " + upload.exportedVersion();
+        return "the attachment '" + upload.fileName() + "' of page " + pageId + " (" + pageUrl(pageId)
+                + ") was written by somebody else: Confluence holds " + held + ", " + ours
+                + ", and that version's comment ('" + remote.comment()
+                + "') carries no hash of this publisher."
+                + System.lineSeparator()
+                + "    Writing it would discard what they wrote. confluence.foreignAttachments "
+                + "(--foreign-attachments) takes 'skip' to leave it and carry on, or 'overwrite' "
+                + "to write it regardless.";
     }
 
     private static byte[] read(String url) {

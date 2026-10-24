@@ -117,6 +117,22 @@ class CommandExecutionSpec extends Specification {
             RecordingTask.seenConfig.confluence.api == 'https://given.example.org'
     }
 
+    def 'what to do with a foreign attachment reaches the task from the command line'() {
+        when:
+            run(new PublishCommand(), '--foreign-attachments', 'skip')
+
+        then: 'into the configuration, so a build plugin and a configuration file reach it too'
+            RecordingTask.seenConfig.confluence.foreignAttachments == 'skip'
+    }
+
+    def 'without the option the configuration says nothing about it'() {
+        when:
+            run(new PublishCommand())
+
+        then: 'the default lives in one place - the publisher - rather than in every caller'
+            !RecordingTask.seenConfig.confluence.containsKey('foreignAttachments')
+    }
+
     def 'a missing configuration is reported rather than run with nothing'() {
         given:
             docDir.resolve('config.groovy').toFile().delete()

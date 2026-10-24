@@ -87,6 +87,24 @@ Every run - dry or not - now names the pages below the document that an earlier 
 They are not deleted: what to do with them is a decision, and this tool is not the one to take it.
 Both halves go away once a page is identified by its id rather than by its title, which is what xref:docs/decisions.adoc[the publish manifest] is for.
 
+Attachments are published under the name Confluence knows them by.
+An export writes a file as `<version>_<name>`, because a document may refer to an older revision of a diagram; that prefix stays on disk, and the attachment goes back as `diagram.png`.
+The version it names is what answers the question that decides whether to write at all: Confluence still holding exactly the revision the export came from means nobody has written it since.
+Where somebody has - the draw.io app writes its own version comment, which no content hash can recognise - the run says so and writes nothing:
+
+[source,yaml]
+----
+confluence:
+  foreignAttachments: fail   # fail (the default), skip, or overwrite
+----
+
+`--foreign-attachments` says the same on the command line.
+An attachment created in Confluence that no export ever saw, and that no run of this publisher wrote, is left alone under every setting but `overwrite`: unknown means not ours.
+
+The prefix is dropped only where the shorter name stays unique on that page.
+Two revisions of one picture shown side by side - and screenshots an author numbered `01_step.png`, `02_step.png` - keep the names the document refers to, because one attachment cannot be two pictures; the run names the files it did that for.
+A name that Confluence holds with a space, a colon or a path separator in it does not survive the round trip at all: the export replaces those characters with `_`, so `my diagram.png` comes back as a second attachment called `my_diagram.png` rather than as a new revision of the original.
+
 `CONFLUENCE_CREDENTIALS=user:token` is the alternative where the instance wants basic authentication.
 
 Credentials are read from the environment rather than taken as options, which keeps them out of the process arguments - `ps` shows a command line to every user on the machine.

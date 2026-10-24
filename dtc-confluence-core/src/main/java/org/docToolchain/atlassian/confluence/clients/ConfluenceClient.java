@@ -4,6 +4,8 @@ import java.io.InputStream;
 import java.net.URISyntaxException;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.classic.methods.HttpPost;
@@ -28,6 +30,19 @@ public abstract class ConfluenceClient {
 
     private static final String API_V1_IDENTIFIER = "/rest/api";
     private static final String API_V2_IDENTIFIER = "/api/v2";
+
+    /**
+     * The content hash an upload of ours leaves in the version comment, between two hash marks.
+     *
+     * <p>An MD5 in hex, and nothing else. Any hash-delimited text used to count: a comment
+     * reading "Manually revised; see #123#" then carried a "hash" of "123". Never equal to a
+     * local hash, so it did not make an attachment look unchanged - but it did make the revision
+     * look like one this publisher wrote, which let the publisher write over it.</p>
+     */
+    private static final Pattern HASH_IN_COMMENT = Pattern.compile("#([0-9a-f]{32})#");
+
+    /** What a version number of 0 means: the answer carried none. Confluence counts from 1. */
+    private static final int NO_VERSION_REPORTED = 0;
 
     /** The path a REST v1 call hangs under, context included. */
     public static String apiV1PathFor(ConfigService configService) {
@@ -175,11 +190,66 @@ public abstract class ConfluenceClient {
     public abstract Object createAttachment(String pageId, InputStream inputStream, String fileName,
                                             String note, String localHash);
 
-    public abstract Object attachmentHasChanged(Object attachment, Object localHash);
+    /**
+     * @param response what {@link #getAttachment} answered
+     * @return the attachment it found, or {@code null} where it found none
+     */
+    public abstract RemoteAttachment attachmentOf(Object response);
+
+    /**
+     * @return the hash a comment of ours carries, or empty where the comment is not one of ours -
+     *         which is the answer for a comment another writer left, such as the draw.io app's
+     *         "draw.io diagram", and for one that merely has hash marks in it
+     *
+     *     <p>Read with {@code find} rather than with a {@code replaceAll} over the whole string.
+     *     A {@code replaceAll} that matches nothing answers the subject unchanged, so a foreign
+     *     comment came back as the "remote hash" itself: never equal to any local hash, and
+     *     therefore read as a change of ours to overwrite.</p>
+     *
+     *     <p>Not anchored to the end of the comment on purpose: the note in front of the hash is
+     *     configurable, and what Confluence does to whitespace in a version comment is not
+     *     something measured here. The shape of the payload is what tells an upload of ours from
+     *     a sentence that happens to carry a number between hash marks.</p>
+     */
+    public static String hashIn(Object comment) {
+        Matcher matcher = HASH_IN_COMMENT.matcher(comment == null ? "" : String.valueOf(comment));
+        return matcher.find() ? matcher.group(1) : "";
+    }
+
+    /**
+     * @return the first attachment of a lookup's answer, or {@code null} where it found none
+     */
+    protected static Map<?, ?> firstAttachmentIn(Object response) {
+        Object results = response instanceof Map<?, ?> map ? map.get("results") : null;
+        if (results instanceof List<?> found && !found.isEmpty()
+                && found.get(0) instanceof Map<?, ?> first) {
+            return first;
+        }
+        return null;
+    }
+
+    /**
+     * @return the revision the answer reports, or 0 where it reports none - v1 answers an
+     *         attachment lookup without a version unless the request asks for one, and a guess
+     *         would be worse than saying nothing
+     */
+    protected static int versionNumberOf(Map<?, ?> attachment) {
+        Object version = attachment.get("version");
+        Object number = version instanceof Map<?, ?> map ? map.get("number") : null;
+        if (number instanceof Number counted) {
+            return counted.intValue();
+        }
+        try {
+            return number == null ? NO_VERSION_REPORTED : Integer.parseInt(String.valueOf(number));
+        } catch (NumberFormatException notANumber) {
+            return NO_VERSION_REPORTED;
+        }
+    }
 
     /**
      * The hash travels in the upload comment, because Confluence offers nowhere else to put it and
-     * it is what later tells an unchanged attachment from a changed one.
+     * it is what later tells an unchanged attachment from a changed one, and an attachment this
+     * publisher wrote from one somebody else wrote.
      */
     protected Object uploadAttachment(Object uri, InputStream inputStream, String fileName,
                                       Object note, Object localHash) {

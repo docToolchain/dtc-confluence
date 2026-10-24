@@ -74,13 +74,18 @@ class ConfluenceClientV1RequestSpec extends Specification {
             sentJson() == [[name: 'arc42']]
     }
 
-    def 'getAttachment asks for one file by name'() {
+    def 'getAttachment asks for one file by name, and for the version it is at'() {
         when:
             client().getAttachment('4711', 'diagram.png')
 
         then:
             sent().method == 'GET'
-            sent().uri == '/confluence/rest/api/content/4711/child/attachment?filename=diagram.png'
+
+        and: '''measured against Data Center 9.2.21: without the expand the answer carries the
+                comment but no version, and the version is what says whether somebody else has
+                written the attachment since the export this document came from'''
+            sent().uri ==
+                '/confluence/rest/api/content/4711/child/attachment?filename=diagram.png&expand=version'
     }
 
     def 'createAttachment posts to the page attachment collection'() {
@@ -111,13 +116,16 @@ class ConfluenceClientV1RequestSpec extends Specification {
             sent().body.contains('d.png')
     }
 
-    def 'attachmentHasChanged compares the hash carried in the remote comment'() {
+    def 'attachmentOf reads the id, the version and the comment out of the answer'() {
         given:
-            def remote = [results: [[extensions: [comment: 'some note\r\n#abc123#']]]]
+            def remote = [results: [[id: 'att99', version: [number: 4],
+                                     extensions: [comment: 'some note\r\n#a937de4e4d3a556d0b8886d7ecb5e0c5#']]]]
 
         expect:
-            !client().attachmentHasChanged(remote, 'abc123')
-            client().attachmentHasChanged(remote, 'def456')
+            client().attachmentOf(remote).id() == 'att99'
+            client().attachmentOf(remote).version() == 4
+            ConfluenceClient.hashIn(client().attachmentOf(remote).comment()) ==
+                'a937de4e4d3a556d0b8886d7ecb5e0c5'
     }
 
     def 'retrievePageIdByName answers the id, not the search result'() {
