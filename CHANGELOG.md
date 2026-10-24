@@ -32,6 +32,12 @@ publisher verified against a real instance (ASF cwiki, Confluence Data Center 9.
   comment, which no hash comparison can recognise, so every publish used to discard its edit.
   `confluence.foreignAttachments` (`--foreign-attachments`) takes `fail` (the default), `skip` or
   `overwrite`. An attachment no export ever saw and nothing here wrote is left alone.
+- A picture that carries a draw.io diagram is published as that diagram: the macro, the `mxfile`
+  attached under the picture's base name with no extension, and the picture as `<name>.png` for the
+  preview. draw.io keeps its own source inside what it exports, so one `image::x.png[…]` means a
+  picture or an editable diagram and the file decides which. A picture that carries no diagram is
+  left exactly as it was, and there is nothing to configure. An SVG needs the PNG of the same name
+  beside it to serve as the preview; without one it stays a picture and the run says so.
 - The API version is derived from the API URL, so a Data Center URL no longer reaches a v2
   endpoint and a 404.
 
@@ -46,6 +52,17 @@ publisher verified against a real instance (ASF cwiki, Confluence Data Center 9.
   stay as they are.
 - The draft the draw.io app keeps beside every diagram (`~<diagram>.tmp`) is not exported, so a
   round trip no longer carries a file nobody wrote in both directions.
+- A draw.io diagram is exported as one file: the `mxfile` is put inside the preview, the bare one is
+  dropped, and the document refers to a picture that is also the diagram - so publishing that
+  document again writes the macro back instead of flattening it. The source is read from the
+  `mxfile` and never from the preview, which is derived and may be older. A preview older than its
+  diagram is reported, naming the view, and drawn again only where draw.io is on the `PATH` and says
+  it numbers pages from one, which it has done since 27.0.2; the exported file carries the current
+  diagram either way. The file is named `<picture revision>-<diagram revision>_<name>.png`, because
+  it goes back as two attachments and each is guarded by the revision it came from. Measured: export,
+  publish, export again returns a byte-identical file and an identical `mxfile`.
+- A macro pinned to one view of a multi-view diagram exports as a picture of *that* view, where
+  before all the macros on one file exported as the file's first page.
 - A `jira` macro becomes a link rather than its own parameters: one issue becomes a link to it, a
   counted query an inline link to the issues it counted, a listing the query plus a link to them.
   The Jira's address is read off the page Confluence rendered, so nothing has to be configured.
@@ -79,8 +96,11 @@ publisher verified against a real instance (ASF cwiki, Confluence Data Center 9.
   trip: the export sanitises it, so `my diagram.png` is published as `my_diagram.png` - a second
   attachment beside the original rather than a new revision of it. Names without those characters
   survive exactly. `docs/decisions.adoc` says what it would take to fix.
-- Exporting a draw.io macro writes a plain image of its preview, not the macro, so a round trip
-  flattens the diagram.
+- A view pinned with an `aspect` does not come back pinned: it exports as a picture of that view,
+  and republished it is a picture, because the aspect is nowhere in the document to put back. One
+  file per view has no pinned views and does not meet this.
+- On a Confluence without the draw.io app, a picture that carries a diagram becomes a macro nothing
+  renders. The run says what it did, per picture; there is no setting to turn it off.
 - A page is identified by its title, so renaming a heading creates a new page and leaves the old
   one behind. The run reports it; it does not fix it.
 - The public API still exposes Groovy's `ConfigObject`.

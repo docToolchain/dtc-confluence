@@ -104,6 +104,18 @@ An attachment created in Confluence that no export ever saw, and that no run of 
 The prefix is dropped only where the shorter name stays unique on that page.
 Two revisions of one picture shown side by side - and screenshots an author numbered `01_step.png`, `02_step.png` - keep the names the document refers to, because one attachment cannot be two pictures; the run names the files it did that for.
 A name that Confluence holds with a space, a colon or a path separator in it does not survive the round trip at all: the export replaces those characters with `_`, so `my diagram.png` comes back as a second attachment called `my_diagram.png` rather than as a new revision of the original.
+A picture that carries a draw.io diagram is published as that diagram.
+draw.io keeps its own source inside what it exports - a PNG in a text chunk, an SVG in a `content` attribute - so one line of AsciiDoc means two things, and the file decides which:
+
+[source,asciidoc]
+----
+image::architecture-context.png[System Context,700]   // carries its source: an editable diagram
+image::architecture-flat.png[System Context,700]       // exported without it: a picture
+----
+
+The diagram is attached under the picture's base name with no extension, which is how the app binds one, and the picture beside it as `<name>.png`, which is the preview a PDF export shows.
+An SVG carrying a diagram needs the PNG of the same name beside it to be that preview; without one it stays a picture, and the run says so.
+There is nothing to configure, and nothing happens to a picture that carries no diagram.
 
 `CONFLUENCE_CREDENTIALS=user:token` is the alternative where the instance wants basic authentication.
 
@@ -137,7 +149,13 @@ Each page's title is written as `= Title`, the document title, so that the file 
 AsciiDoc has six heading levels, and they still run out on a deep tree: a page five steps below the root carries its title at the last of them, and a page's own headings start below its title, so a tree three pages deep has three levels left for the deepest page's body.
 Past that the headings stop being headings, and nothing reports it.
 The limit and what it cost to push it out by one are written down in xref:docs/decisions.adoc[the design decisions].
+A draw.io diagram comes back as one file: the export puts the `mxfile` inside the preview, so the picture in the repository is also the diagram, and publishing that document again writes the macro back rather than a flat picture.
+The source is read from the `mxfile` and never out of the preview, because a preview is derived and may be older than what it derives from.
+Where it is - the app keeps the default view's preview current and lets a pinned view's go stale - the run says which view, and draws it again only if draw.io happens to be on the `PATH` and says it is 27.0.2 or newer, which is where it began numbering pages from one.
+The exported file carries the current diagram either way, so what can be out of date is the picture inside it and not the source.
+
 Publishing needs a JRE and the jar; exporting needs pandoc as well, because the conversion back to AsciiDoc goes through it.
+draw.io is never needed, in either direction.
 
 The last command, `wipe`, deletes every page in the configured space and refuses to run without `--yes-delete-every-page`.
 

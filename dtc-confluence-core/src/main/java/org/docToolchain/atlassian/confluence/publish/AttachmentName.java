@@ -18,32 +18,48 @@ import java.util.regex.Pattern;
  * publish side which revision this file came from - and that is what decides whether somebody
  * else has written the attachment since.</p>
  *
- * @param fileName        the name the attachment is published under
- * @param exportedVersion the revision the name carried, or {@link #NO_VERSION} for a name that
- *                        carries none - a file an author put in the repository themselves
+ * <p>A merged draw.io diagram carries two revisions, {@code <picture>-<diagram>_<name>.png}: the
+ * file is one file to the repository and two attachments to Confluence - the picture and the
+ * {@code mxfile} inside it - and the two are written independently, so they stand at revisions of
+ * their own. One number for both would refuse the preview nobody has touched and accept one
+ * somebody else has.</p>
+ *
+ * @param fileName               the name the attachment is published under
+ * @param exportedVersion        the revision the name carried for the attachment this file is, or
+ *                               {@link #NO_VERSION} for a name that carries none - a file an
+ *                               author put in the repository themselves
+ * @param exportedDiagramVersion the revision of the diagram the file carries inside it, or
+ *                               {@link #NO_VERSION} where the name says nothing about one. A name
+ *                               with a single revision says nothing about one: the number is the
+ *                               picture's, as it is for every other attachment.
  */
-public record AttachmentName(String fileName, int exportedVersion) {
+public record AttachmentName(String fileName, int exportedVersion, int exportedDiagramVersion) {
 
     /** What a name that no export wrote carries instead of a version. */
     public static final int NO_VERSION = 0;
 
     /**
-     * Digits and an underscore, which is what the export writes. At most nine digits so the
-     * number fits an {@code int}; a longer run of them is a file name rather than a version.
+     * Digits and an underscore, which is what the export writes, with a second number behind a
+     * hyphen where the file is a merged diagram. At most nine digits each so a number fits an
+     * {@code int}; a longer run of them is a file name rather than a version.
      *
      * <p>It cannot be told apart from a file an author named {@code 2024_report.png}, which this
      * publishes as {@code report.png}. The page refers to it under the same name, so the page
      * still shows it; see {@code docs/decisions.adoc}.</p>
      */
-    private static final Pattern EXPORTED = Pattern.compile("^(\\d{1,9})_(.+)$");
+    private static final Pattern EXPORTED =
+            Pattern.compile("^(\\d{1,9})(?:-(\\d{1,9}))?_(.+)$");
 
     /**
      * @param name the last segment of what the document refers to, already URL-decoded
      */
     public static AttachmentName of(String name) {
         Matcher matcher = EXPORTED.matcher(name);
-        return matcher.matches()
-                ? new AttachmentName(matcher.group(2), Integer.parseInt(matcher.group(1)))
-                : new AttachmentName(name, NO_VERSION);
+        if (!matcher.matches()) {
+            return new AttachmentName(name, NO_VERSION, NO_VERSION);
+        }
+        String diagram = matcher.group(2);
+        return new AttachmentName(matcher.group(3), Integer.parseInt(matcher.group(1)),
+                diagram == null ? NO_VERSION : Integer.parseInt(diagram));
     }
 }

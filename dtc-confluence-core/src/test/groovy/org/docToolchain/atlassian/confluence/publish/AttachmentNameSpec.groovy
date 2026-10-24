@@ -26,6 +26,34 @@ class AttachmentNameSpec extends Specification {
             '2_my_report.pdf'       || 'my_report.pdf'      | 2
     }
 
+    def 'a merged diagram carries two revisions: the picture it is and the diagram in it'() {
+        given: '''The export makes one file of two attachments, and the two stand at revisions of
+                  their own - measured on a real page, the app had written the diagram twice and
+                  the preview once. One number for both makes the clobber guard refuse the preview
+                  nobody has touched, and accept one somebody else has written.'''
+
+        expect:
+            AttachmentName.of(written).fileName() == name
+            AttachmentName.of(written).exportedVersion() == picture
+            AttachmentName.of(written).exportedDiagramVersion() == diagram
+
+        where:
+            written             || name            | picture | diagram
+            '1-2_arch.png'      || 'arch.png'      | 1       | 2
+            '2-2_arch.png'      || 'arch.png'      | 2       | 2
+            '12-147_a.png'      || 'a.png'         | 12      | 147
+    }
+
+    def 'a name carrying one revision says nothing about a diagram inside it'() {
+        given: '''The number means what it means for every other attachment: the revision of the
+                  attachment this file is. What revision a diagram inside it came from is then
+                  unknown, and unknown must not pass for ours.'''
+
+        expect:
+            AttachmentName.of('3_diagram.png').exportedDiagramVersion() == AttachmentName.NO_VERSION
+            AttachmentName.of('diagram.png').exportedDiagramVersion() == AttachmentName.NO_VERSION
+    }
+
     def 'a name no export wrote is the name, whole'() {
         expect: 'and it carries no version, which is what says nothing here wrote it'
             AttachmentName.of(written).fileName() == written

@@ -18,6 +18,8 @@ import org.docToolchain.atlassian.confluence.clients.ConfluenceClient;
 import org.docToolchain.atlassian.confluence.clients.RestClient;
 import org.docToolchain.atlassian.confluence.export.AttachmentDownloader;
 import org.docToolchain.atlassian.confluence.export.ConfluenceConverter;
+import org.docToolchain.atlassian.confluence.export.DiagramMerge;
+import org.docToolchain.atlassian.confluence.export.DrawioOnThePath;
 import org.docToolchain.atlassian.confluence.export.ConfluenceReader;
 import org.docToolchain.atlassian.confluence.export.RenderedJiraServers;
 import org.docToolchain.atlassian.confluence.export.ExportedTree;
@@ -122,12 +124,36 @@ public class ExportConfluenceTask extends AbstractConfluenceTask {
             System.out.println("attachments:           "
                     + (tree.getAttachments().size() - failed.size()) + " of "
                     + tree.getAttachments().size());
+            mergeDiagrams(tree, docsDir);
         }
 
         keepNamesApart(tree);
         Set<String> unknownTags = writePages(tree, docsDir);
         writeMenu(tree, docsDir);
         report(tree, unknownTags);
+    }
+
+    /**
+     * Makes one file of the attachments a draw.io diagram is spread over.
+     *
+     * <p>Right after the download and before anything reads the tree, because the merge changes
+     * both: the picture carries the diagram's revision in its name from here on, and the diagram's
+     * own attachment is gone from the map. Only where the attachments were fetched at all - there
+     * is nothing on disk to merge otherwise.</p>
+     *
+     * <p>A renderer is looked for and not required. Where draw.io is on the {@code PATH} a preview
+     * older than its diagram is drawn again; where it is not, the same staleness is reported and
+     * the picture is exported as it is - with the current diagram inside it either way.</p>
+     */
+    private void mergeDiagrams(ExportedTree tree, File docsDir) {
+        DiagramMerge.Merged merged = new DiagramMerge(
+                docsDir.toPath().resolve("images").toAbsolutePath().normalize(),
+                DrawioOnThePath.found().orElse(null)).merge(tree);
+        if (!merged.diagrams().isEmpty()) {
+            System.out.println("draw.io diagrams:      " + merged.diagrams().size()
+                    + ", each one file with its own source: " + merged.diagrams());
+        }
+        merged.problems().forEach(problem -> System.out.println(">>> WARN: " + problem));
     }
 
     /**

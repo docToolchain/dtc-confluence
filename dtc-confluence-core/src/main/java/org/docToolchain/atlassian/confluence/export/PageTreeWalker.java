@@ -155,6 +155,11 @@ public class PageTreeWalker {
         described.put("originalFilename", title);
         described.put("id", text(attachment.get("id")));
         described.put("version", versionOf(attachment));
+        // What this revision is and when it was written. Both come with the listing the walk
+        // already asks for, which is what lets a preview older than its diagram be recognised
+        // without a further request and without rendering anything.
+        described.put("mediaType", mediaTypeOf(attachment));
+        described.put("written", writtenOf(attachment));
         described.put("pageId", pageId);
         described.put("originalId", "");
         described.put("downloadUrl", downloadUrlOf(attachment));
@@ -167,6 +172,26 @@ public class PageTreeWalker {
             return String.valueOf(version.get("number"));
         }
         return "1";
+    }
+
+    /**
+     * @return when the revision Confluence holds was written, as the API spells it
+     *         ({@code 2026-10-23T12:48:20.000Z}), empty where it reports none. Kept as text and
+     *         compared as text: the spellings come from one listing of one server, so they sort
+     *         the way the instants do, and parsing them would only add a way to fail.
+     */
+    private static String writtenOf(Map<?, ?> attachment) {
+        if (attachment.get("version") instanceof Map<?, ?> version) {
+            return text(version.get("when"));
+        }
+        return "";
+    }
+
+    private static String mediaTypeOf(Map<?, ?> attachment) {
+        if (attachment.get("extensions") instanceof Map<?, ?> extensions) {
+            return text(extensions.get("mediaType"));
+        }
+        return "";
     }
 
     private static String downloadUrlOf(Map<?, ?> attachment) {

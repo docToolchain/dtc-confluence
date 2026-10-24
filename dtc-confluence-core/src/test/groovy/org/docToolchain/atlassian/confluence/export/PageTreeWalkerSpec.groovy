@@ -215,4 +215,29 @@ class PageTreeWalkerSpec extends Specification {
             tree.attachments['att1'].version == '1'
             tree.attachments['att1'].downloadUrl == ''
     }
+
+    def 'an attachment records what it is and when its revision was written'() {
+        given: '''Both come with the listing the walk already asks for, which is what lets a
+                  preview older than its diagram be recognised without a further request and
+                  without drawing anything. Measured on a real page, where the diagram and the
+                  default preview carried 12:48:20 and two pinned previews 12:46:35.'''
+            reader.fetchPage('1') >> page('1', 'Root')
+            reader.fetchChildPages('1') >> []
+            reader.fetchAttachments('1') >> [
+                [id: 'att1', title: 'arch-multipage',
+                 version: [number: 2, when: '2026-10-23T12:48:20.000Z'],
+                 extensions: [mediaType: 'application/vnd.jgraph.mxfile']],
+                [id: 'att2', title: 'arch-multipage.png', version: [number: 1]]]
+
+        when:
+            def tree = walker().walk('1')
+
+        then:
+            tree.attachments['att1'].mediaType == 'application/vnd.jgraph.mxfile'
+            tree.attachments['att1'].written == '2026-10-23T12:48:20.000Z'
+
+        and: 'an answer that reports neither says nothing rather than guessing'
+            tree.attachments['att2'].mediaType == ''
+            tree.attachments['att2'].written == ''
+    }
 }

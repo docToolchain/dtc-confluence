@@ -764,7 +764,9 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
      */
     private void uploadAttachment(String pageId, Upload upload) {
         String fileName = upload.fileName();
-        byte[] content = read(upload.url());
+        // Its own bytes where it carries them: the diagram inside a picture is an attachment of
+        // its own and no file on disk, so there is no path to read it from.
+        byte[] content = upload.content() == null ? read(upload.url()) : upload.content();
         // Hashed as text with the platform's charset, as it has always been. The charset is a
         // recorded defect; changing it would make every attachment of every page look changed
         // once, so it waits for a migration rather than riding along with a port.
