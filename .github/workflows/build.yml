@@ -26,6 +26,13 @@ jobs:
     # longer than twenty, which without a limit of its own runs into GitHub's
     # six-hour default and holds up a merge for an afternoon.
     timeout-minutes: 20
+    # pandoc writes the AsciiDoc this project's export produces, so its version is
+    # part of the behaviour under test, not an incidental detail of the machine.
+    # Both are pinned on purpose; bump them together with the fixtures they explain.
+    env:
+      PANDOC_VERSION: '3.12.1'
+      PANDOC_SHA256: 'd0c90410e90204c9ca83b8539fac5c7aed01fd537207e4585849f8abc5df20b8'
+      ASCIIDOCTOR_VERSION: '2.0.26'
     strategy:
       fail-fast: false
       matrix:
@@ -44,16 +51,55 @@ jobs:
       # The export converts through pandoc, and the one test that runs the whole
       # export end to end skips itself without it. A skipped test says nothing,
       # and says it quietly.
-      - name: Install pandoc
+      #
+      # Not from apt, for two measured reasons. The Azure mirror sat in
+      # apt-get for over twenty minutes on three runs of one afternoon and
+      # failed the build on nothing but that. And it offers 3.1.3, while the
+      # fixtures in this repository were written by 3.12.1 - so the assertions
+      # about what pandoc escapes were being checked against a pandoc two and a
+      # half years older than the one that produced them. The release tarball is
+      # a static binary off GitHub's own CDN, pinned and checksummed.
+      - name: Cache pandoc
+        id: pandoc
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.local/pandoc
+          key: pandoc-${{ env.PANDOC_VERSION }}-linux-amd64
+      - name: Download pandoc
+        if: steps.pandoc.outputs.cache-hit != 'true'
         timeout-minutes: 5
-        run: pandoc --version || { sudo apt-get update && sudo apt-get install -y pandoc; }
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --retry-all-errors -o pandoc.tar.gz \
+            "https://github.com/jgm/pandoc/releases/download/$PANDOC_VERSION/pandoc-$PANDOC_VERSION-linux-amd64.tar.gz"
+          echo "$PANDOC_SHA256  pandoc.tar.gz" | sha256sum --check --strict
+          mkdir -p ~/.local/pandoc
+          tar xzf pandoc.tar.gz --strip-components 1 -C ~/.local/pandoc
+          rm pandoc.tar.gz
+      # GITHUB_PATH reaches the steps after this one, never the one that writes it,
+      # which is why the versions are reported in a step of their own below.
+      - name: Put pandoc on the path
+        run: echo "$HOME/.local/pandoc/bin" >> "$GITHUB_PATH"
       # Same reason, for the specifications that assert what asciidoctor makes of the AsciiDoc
       # this project writes: whether a block is read as markup, and whether an include lands a
       # level deeper. Those are the only assertions that could have caught an include attribute
       # spelled in a way the directive does not read.
+      #
+      # From rubygems rather than apt: the runner image already carries Ruby, apt
+      # offers 2.0.20 against the 2.0.26 this is developed against, and a single
+      # gem of half a megabyte does not earn a cache entry.
       - name: Install asciidoctor
         timeout-minutes: 5
-        run: asciidoctor --version || { sudo apt-get update && sudo apt-get install -y asciidoctor; }
+        run: |
+          set -euo pipefail
+          gem install --user-install --no-document asciidoctor -v "$ASCIIDOCTOR_VERSION"
+          echo "$(gem env user_gemhome)/bin" >> "$GITHUB_PATH"
+      # Both versions in the log, so a conversion that fails here and passes at a
+      # desk is one lookup away from an explanation rather than a guess.
+      - name: Report the toolchain
+        run: |
+          pandoc --version | head -1
+          asciidoctor --version | head -1
       - run: ./mvnw -B -ntp verify
 
   sonar:
