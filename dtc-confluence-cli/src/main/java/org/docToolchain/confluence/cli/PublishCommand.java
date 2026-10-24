@@ -33,6 +33,12 @@ public class PublishCommand implements Callable<Integer> {
                     + "or overwrite it.")
     private String foreignAttachments;
 
+    @Option(names = "--resolve-attachment-names", negatable = true,
+            description = "Publish an attachment under the name Confluence holds it under, where "
+                    + "the export had to replace a space, a colon or a path separator in it. On "
+                    + "unless --no-resolve-attachment-names says otherwise.")
+    private Boolean resolveAttachmentNames;
+
     private TaskFactory taskFactory = Asciidoc2ConfluenceTask::From;
 
     /** Visible for testing; see {@link TaskFactory}. */
@@ -53,6 +59,9 @@ public class PublishCommand implements Callable<Integer> {
         }
         if (foreignAttachments != null) {
             confluenceSection(config).put("foreignAttachments", foreignAttachments);
+        }
+        if (resolveAttachmentNames != null) {
+            confluenceSection(config).put("resolveAttachmentNames", resolveAttachmentNames);
         }
         taskFactory.create(config, options.docDir()).execute();
         return 0;

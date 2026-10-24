@@ -3,6 +3,7 @@ package org.docToolchain.atlassian.confluence.clients;
 import java.io.InputStream;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -46,6 +47,16 @@ public abstract class ConfluenceClient {
 
     /** What a version number of 0 means: the answer carried none. Confluence counts from 1. */
     private static final int NO_VERSION_REPORTED = 0;
+
+    /**
+     * How many of a page's attachments to ask for at once.
+     *
+     * <p>More than any documentation page has met, and the most either API serves in one answer.
+     * A page holding more than this is read short, and a name that is then not among them is
+     * published as the document refers to it - which is what every run did before the names were
+     * matched at all.</p>
+     */
+    protected static final int ATTACHMENT_LIMIT = 200;
 
     /** The path a REST v1 call hangs under, context included. */
     public static String apiV1PathFor(ConfigService configService) {
@@ -187,6 +198,20 @@ public abstract class ConfluenceClient {
 
     public abstract Object getAttachment(Object pageId, Object filename);
 
+    /** @return every attachment of the page, as the API answers it */
+    public abstract Object getAttachments(Object pageId);
+
+    /**
+     * The names Confluence knows this page's attachments under, which is what a reference the
+     * export sanitised is matched against. A lookup by name cannot answer it: the name being
+     * matched is the one that is already wrong.
+     *
+     * @return the names, in the order the answer listed them, and none where it listed none
+     */
+    public List<String> attachmentNames(Object pageId) {
+        return namesIn(getAttachments(pageId));
+    }
+
     public abstract Object updateAttachment(String pageId, String attachmentId, InputStream inputStream,
                                             String fileName, String note, String localHash);
 
@@ -229,6 +254,24 @@ public abstract class ConfluenceClient {
             return first;
         }
         return null;
+    }
+
+    /**
+     * @return the names the answer lists, which both APIs call an attachment's title
+     */
+    protected static List<String> namesIn(Object response) {
+        Object results = response instanceof Map<?, ?> map ? map.get("results") : null;
+        if (!(results instanceof List<?> found)) {
+            return List.of();
+        }
+        List<String> names = new ArrayList<>();
+        for (Object entry : found) {
+            Object title = entry instanceof Map<?, ?> attachment ? attachment.get("title") : null;
+            if (title != null) {
+                names.add(String.valueOf(title));
+            }
+        }
+        return names;
     }
 
     /**

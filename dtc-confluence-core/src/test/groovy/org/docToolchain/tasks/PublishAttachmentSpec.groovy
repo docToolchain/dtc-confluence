@@ -55,12 +55,32 @@ ${blocks}
     /** The body the publisher sent, so that what the page refers to can be read back. */
     private String published = ''
 
-    private Asciidoc2ConfluenceTask taskFor(String source, Object foreignAttachments = null) {
-        return taskForAll([source], foreignAttachments)
+    /** The pages the space holds, which a case fills before the task runs. */
+    private Map<String, Object> existingPages = [:]
+
+    /** What a full fetch of the existing page answers, where a case says there is one. */
+    private Map<String, Object> fullPage = [:]
+
+    /**
+     * Says the document's page is already there, at a revision this publisher did not write.
+     *
+     * The attachment names are resolved against the page the document goes onto, so the cases
+     * that exercise that need a page for it to be asked about.
+     */
+    private void pageIsThere(String id = '1000') {
+        existingPages['diagrams'] = [id: id, title: 'Diagrams', parentId: '99']
+        fullPage = [id       : id, title: 'Diagrams', version: [number: 4],
+                    body     : [storage: [value: '<p>x</p><ac:placeholder>hash: #old#</ac:placeholder>']]]
+    }
+
+    private Asciidoc2ConfluenceTask taskFor(String source, Object foreignAttachments = null,
+                                            Map settings = [:]) {
+        return taskForAll([source], foreignAttachments, settings)
     }
 
     private Asciidoc2ConfluenceTask taskForAll(List<String> sources,
-                                               Object foreignAttachments = null) {
+                                               Object foreignAttachments = null,
+                                               Map settings = [:]) {
         sources.eachWithIndex { source, index ->
             Path image = documents.resolve(source)
             Files.createDirectories(image.parent)
@@ -79,16 +99,23 @@ ${blocks}
         if (foreignAttachments != null) {
             config.confluence.foreignAttachments = foreignAttachments
         }
+        settings.each { key, value -> config.confluence[key] = value }
 
         def task = Asciidoc2ConfluenceTask.From(config, documents.toString())
-        client.fetchPagesBySpaceKey(_, _) >> [:]
-        client.fetchPagesByAncestorId(_, _) >> [:]
+        client.fetchPagesBySpaceKey(_, _) >> existingPages
+        client.fetchPagesByAncestorId(_, _) >> existingPages
         client.retrievePageIdByName(_, _) >> null
-        client.retrieveFullPageById(_) >> [:]
+        client.retrieveFullPageById(_) >> { String id -> fullPage }
         client.createPage(_, _, _, _, _) >> { String title, String space, Object body,
                                               String comment, String parent ->
             published = body as String
             return [id: '1000']
+        }
+        client.updatePage(_, _, _, _, _, _, _) >> { String id, String title, String space,
+                                                   Object body, Integer version, String comment,
+                                                   String parent ->
+            published = body as String
+            return [id: id]
         }
         task.confluenceClient = client
         return task
@@ -260,5 +287,66 @@ ${blocks}
 
         then:
             1 * client.updateAttachment('1000', 'att1', _, 'diagram.png', _, localHash())
+    }
+
+    def 'an attachment the export renamed is written back to the one Confluence holds'() {
+        given: '''The export replaces whitespace, a colon and a path separator with "_", so the
+                  document refers to "my_image.png". Attached under that name, Confluence holds
+                  two pictures where it held one, and nothing says so.'''
+            def task = taskFor('images/Root/3_my_image.png')
+            pageIsThere()
+            client.attachmentNames('1000') >> ['my image.png']
+
+        when:
+            task.execute()
+
+        then:
+            1 * client.createAttachment('1000', _, 'my image.png', _, _)
+            0 * client.createAttachment('1000', _, 'my_image.png', _, _)
+
+        and: 'and the page refers to the attachment that was written, or it refers to nothing'
+            published.contains('ri:filename="my image.png"')
+            !published.contains('my_image.png')
+    }
+
+    def 'the revision travels with the resolved name, so the guard still answers'() {
+        given: 'the revision in the file name is the revision of that very attachment'
+            def task = taskFor('images/Root/3_my_image.png')
+            pageIsThere()
+            client.attachmentNames('1000') >> ['my image.png']
+            client.getAttachment('1000', 'my image.png') >> [results: [[id: 'att1']]]
+            client.attachmentOf(_) >> new RemoteAttachment('att1', 3, 'draw.io diagram')
+
+        when:
+            task.execute()
+
+        then:
+            1 * client.updateAttachment('1000', 'att1', _, 'my image.png', _, localHash())
+    }
+
+    def 'switched off, the name goes up as the document has it'() {
+        given: 'what every run did before, for a tree whose names need no correcting'
+            pageIsThere()
+            def task = taskFor('images/Root/3_my_image.png', null,
+                [resolveAttachmentNames: false])
+
+        when:
+            task.execute()
+
+        then:
+            1 * client.createAttachment('1000', _, 'my_image.png', _, _)
+            0 * client.attachmentNames(_)
+    }
+
+    def 'a page that is not there yet is not asked what it holds'() {
+        given: 'it holds nothing, and asking would be a request per page for nothing'
+            def task = taskFor('images/Root/3_my_image.png')
+
+        when:
+            task.execute()
+
+        then:
+            0 * client.attachmentNames(_)
+            1 * client.createAttachment('1000', _, 'my_image.png', _, _)
     }
 }

@@ -73,6 +73,19 @@ public class ConfigService {
     }
 
     /**
+     * Reads a switch that is on where nothing says otherwise.
+     *
+     * <p>Such a setting has three states rather than two - on, off, and never written - and only
+     * a raw lookup can tell the last two apart.</p>
+     *
+     * @return whether the setting at {@code propertyPath} is on, or {@code whereUnset} where
+     *         nothing is configured there
+     */
+    public boolean isSwitchedOn(String propertyPath, boolean whereUnset) {
+        return getRawConfigProperty(propertyPath) == null ? whereUnset : isSwitchedOn(propertyPath);
+    }
+
+    /**
      * {@link ConfigObject#get} answers a missing key with an empty ConfigObject rather than with
      * {@code null}, and that is the only shape meaning "nothing is here".
      */

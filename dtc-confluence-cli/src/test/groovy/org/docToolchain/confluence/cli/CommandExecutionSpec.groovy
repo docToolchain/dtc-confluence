@@ -131,6 +131,23 @@ class CommandExecutionSpec extends Specification {
 
         then: 'the default lives in one place - the publisher - rather than in every caller'
             !RecordingTask.seenConfig.confluence.containsKey('foreignAttachments')
+            !RecordingTask.seenConfig.confluence.containsKey('resolveAttachmentNames')
+    }
+
+    def 'matching attachment names against the page can be switched off'() {
+        when: 'the option is negated, because the behaviour is on without it'
+            run(new PublishCommand(), '--no-resolve-attachment-names')
+
+        then:
+            RecordingTask.seenConfig.confluence.resolveAttachmentNames == false
+    }
+
+    def 'and switched on in so many words'() {
+        when:
+            run(new PublishCommand(), '--resolve-attachment-names')
+
+        then:
+            RecordingTask.seenConfig.confluence.resolveAttachmentNames == true
     }
 
     def 'a missing configuration is reported rather than run with nothing'() {

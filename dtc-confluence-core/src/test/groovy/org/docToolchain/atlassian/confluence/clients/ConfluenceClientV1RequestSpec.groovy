@@ -88,6 +88,16 @@ class ConfluenceClientV1RequestSpec extends Specification {
                 '/confluence/rest/api/content/4711/child/attachment?filename=diagram.png&expand=version'
     }
 
+    def 'the attachments of a page are asked for by the page'() {
+        when: '''a name the export sanitised is matched against what the page holds, which takes
+                 the list rather than a lookup by the name that is already wrong'''
+            client().attachmentNames('4711')
+
+        then:
+            sent().method == 'GET'
+            sent().uri == '/confluence/rest/api/content/4711/child/attachment?limit=200'
+    }
+
     def 'createAttachment posts to the page attachment collection'() {
         when:
             client().createAttachment('4711', new ByteArrayInputStream('png'.bytes), 'd.png', 'note', 'abc123')

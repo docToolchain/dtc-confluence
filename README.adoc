@@ -117,6 +117,21 @@ The diagram is attached under the picture's base name with no extension, which i
 An SVG carrying a diagram needs the PNG of the same name beside it to be that preview; without one it stays a picture, and the run says so.
 There is nothing to configure, and nothing happens to a picture that carries no diagram.
 
+A name Confluence holds with a space, a colon or a path separator in it is not written to disk as it is - the last of those would reach into another directory - so the export replaces those characters with `_` and the document refers to `my_diagram.png`.
+Published under that name it would be a second attachment beside the original rather than a new revision of it.
+The name is therefore matched against what the page holds before the reference is written, and the file goes back under the name Confluence knows:
+
+[source,yaml]
+----
+confluence:
+  resolveAttachmentNames: true   # the default; false publishes the name the document uses
+----
+
+`--resolve-attachment-names` and `--no-resolve-attachment-names` say the same on the command line.
+It is a lookup rather than a calculation, because `my_diagram.png` is a legal attachment name of its own and guessing which `_` was once a space would write over a file nobody named.
+Where a page holds two attachments that the export writes under one name, the run says which two and publishes the name the document uses, since only the author can tell them apart.
+It costs one request per page that already exists and has attachments to publish.
+
 `CONFLUENCE_CREDENTIALS=user:token` is the alternative where the instance wants basic authentication.
 
 Credentials are read from the environment rather than taken as options, which keeps them out of the process arguments - `ps` shows a command line to every user on the machine.

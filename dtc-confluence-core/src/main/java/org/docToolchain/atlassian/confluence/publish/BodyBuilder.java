@@ -35,6 +35,9 @@ public class BodyBuilder {
     private final String pagePrefix;
     private final String pageSuffix;
 
+    /** What the page this body goes onto already holds. Nothing, until a caller says otherwise. */
+    private AttachmentNameLookup attachmentNames = AttachmentNameLookup.NONE;
+
     /**
      * @param baseUrl    the HTML file being published, which its images are relative to
      * @param pagePrefix what is put in front of every page title, for a link to find the page
@@ -46,6 +49,16 @@ public class BodyBuilder {
         this.baseUrl = baseUrl;
         this.pagePrefix = pagePrefix;
         this.pageSuffix = pageSuffix;
+    }
+
+    /**
+     * @param attachmentNames the attachments the target page holds, so that a reference the export
+     *                        sanitised goes back to the attachment it was taken from rather than
+     *                        attaching a second file beside it
+     */
+    public BodyBuilder withAttachmentNames(AttachmentNameLookup attachmentNames) {
+        this.attachmentNames = attachmentNames;
+        return this;
     }
 
     /**
@@ -70,7 +83,8 @@ public class BodyBuilder {
         // A dry run still needs the body - the hash it compares is the hash of what a real run
         // would send - but it must not leave the embedded images on disk.
         boolean writing = !configService.isSwitchedOn("confluence.dryRun");
-        uploads.addAll(new ImageTransformer(baseUrl, imageDirs(), writing).transformImages(body));
+        uploads.addAll(new ImageTransformer(baseUrl, imageDirs(), writing, attachmentNames)
+                .transformImages(body));
         uploads.addAll(transformAttachmentLinks(body));
 
         new MarkTransformer().transformMarks(body);
@@ -113,7 +127,8 @@ public class BodyBuilder {
             if (!source.startsWith(prefix)) {
                 continue;
             }
-            String fileName = SourcePath.decode(source.substring(source.lastIndexOf('/') + 1));
+            String fileName = attachmentNames.resolve(
+                    SourcePath.decode(source.substring(source.lastIndexOf('/') + 1)));
             uploads.add(new Upload(SourcePath.decode(directory + source), fileName,
                     "automatically uploaded non-image attachment by docToolchain"));
             String text = link.html();

@@ -45,6 +45,33 @@ class BodyBuilderSpec extends Specification {
             documents.resolve('manual.html').toString(), '', '')
     }
 
+    /** A builder for a page that already holds these attachments, with links turned on. */
+    private BodyBuilder builderFor(String... held) {
+        def config = new ConfigObject()
+        config.confluence = [api: 'https://confluence.example/rest/api/', credentials: 'x',
+                             enableAttachments: true]
+        return new BodyBuilder(new ConfigService(config),
+            documents.resolve('manual.html').toString(), '', '')
+            .withAttachmentNames(new AttachmentNameLookup({ held as List }))
+    }
+
+    def 'a linked file goes back under the name Confluence holds it under'() {
+        given: '''The link and the view-file macro both name the attachment, and both are written
+                  while the body is built - so the name has to be right before either is emitted,
+                  not corrected in the body afterwards.'''
+            def body = bodyOf('<a href="attachment/my_notes.txt">notes</a>')
+
+        when:
+            def built = builderFor('my notes.txt').build(body, [:], [:])
+
+        then:
+            built.uploads()*.fileName() == ['my notes.txt']
+
+        and: 'the link and the macro parameter say the same thing'
+            built.storageFormat().count('ri:filename="my notes.txt"') == 2
+            !built.storageFormat().contains('my_notes.txt')
+    }
+
     private File imageDirectory() {
         return new File(documents.toFile(), 'confluence/images')
     }

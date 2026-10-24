@@ -120,4 +120,21 @@ class ConfigServiceSpec extends Specification {
             service.getRawConfigProperty('confluence.rateLimit') == 0
             service.getRawConfigProperty('confluence.pagePrefix') == ''
     }
+
+    def 'a switch with a default of on is only off where it says so'() {
+        given: '''A setting arrives from a YAML file, a Groovy file or the command line, and only
+                  the first of those necessarily carries a type.'''
+            def config = new ConfigObject()
+            config.confluence = [spelledOut: 'false', written: false, on: true]
+            def service = new ConfigService(config)
+
+        expect:
+            service.isSwitchedOn('confluence.written', true) == false
+            service.isSwitchedOn('confluence.spelledOut', true) == false
+            service.isSwitchedOn('confluence.on', true) == true
+
+        and: 'an absence is the default, which is the whole point of passing one'
+            service.isSwitchedOn('confluence.absent', true) == true
+            service.isSwitchedOn('confluence.absent', false) == false
+    }
 }
