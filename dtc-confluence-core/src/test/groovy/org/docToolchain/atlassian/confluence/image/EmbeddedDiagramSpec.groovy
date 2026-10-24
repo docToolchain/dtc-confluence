@@ -95,6 +95,27 @@ class EmbeddedDiagramSpec extends Specification {
         return out.toByteArray()
     }
 
+    /** A PNG that stops after its header: no image data, and nowhere to put a chunk in front of. */
+    private static byte[] headerOnly() {
+        def out = new ByteArrayOutputStream()
+        out.write(SIGNATURE)
+        out.write(chunk('IHDR', header(944, 694)))
+        return out.toByteArray()
+    }
+
+    /**
+     * A chunk declaring Integer.MAX_VALUE bytes, which is where adding the overhead to it wrapped
+     * round to a negative number and walked past the end of the array.
+     */
+    private static byte[] overflowing() {
+        def out = new ByteArrayOutputStream()
+        out.write(SIGNATURE)
+        out.write([0x7F, 0xFF, 0xFF, 0xFF] as byte[])
+        out.write('tEXt'.getBytes(StandardCharsets.US_ASCII))
+        out.write(new byte[4])
+        return out.toByteArray()
+    }
+
     private static byte[] svg(String contentAttribute) {
         def escaped = contentAttribute.replace('&', '&amp;').replace('<', '&lt;')
             .replace('>', '&gt;').replace('"', '&quot;')
@@ -201,6 +222,37 @@ class EmbeddedDiagramSpec extends Specification {
         expect:
             EmbeddedDiagram.of(whole[0..<(whole.length - 40)] as byte[]).isEmpty()
             EmbeddedDiagram.of(whole[0..12] as byte[]).isEmpty()
+    }
+
+    def 'a picture with nowhere to put the diagram is refused, not answered without one'() {
+        given: '''A preview truncated after its header passes the signature check and holds
+                  neither IDAT nor IEND, so the chunk is never written. Answered as a picture,
+                  DiagramMerge deletes the mxfile it came from and reports a merge that carries
+                  no source at all - the one loss this whole class exists to prevent.'''
+
+        when:
+            EmbeddedDiagram.embedIn(headerOnly(), DIAGRAM)
+
+        then:
+            def refused = thrown(IllegalArgumentException)
+            refused.message.contains('image data')
+    }
+
+    def 'a chunk longer than the file is refused rather than read past the end of it'() {
+        given: '''A length of 0x7fffffff plus the twelve bytes of overhead is a negative number,
+                  so a bounds check that added them passed. The reader then indexed at a negative
+                  offset and the writer asked for a negative run of bytes: an uncaught exception
+                  either way, which ends the publish or the export rather than the one file.'''
+
+        expect: 'a malformed picture carries no diagram, as a truncated one does'
+            EmbeddedDiagram.of(overflowing()).isEmpty()
+
+        when: 'and writing into one says so, which is a preview that cannot be merged'
+            EmbeddedDiagram.embedIn(overflowing(), DIAGRAM)
+
+        then:
+            def refused = thrown(IllegalArgumentException)
+            refused.message.contains('longer than')
     }
 
     def 'only a PNG can be given a diagram, and asking refuses rather than writes rubbish'() {

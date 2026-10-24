@@ -659,6 +659,12 @@ A name kept this way also drops its version.
 The revision we exported from belongs to the attachment of the *short* name; comparing it against the revision of a differently named attachment would be comparing two different files, and could authorise a write over somebody else's.
 No version means "unknown", which is the answer that leaves it alone.
 
+What a page lays claim to includes the names a conversion is about to invent.
+A picture carrying a draw.io diagram is published under three names - its own, the diagram's and the preview's - and the last two do not exist while the page is being planned.
+Left out of the planning, a page showing `1_arch.svg` beside an ordinary `2_arch.png` passed the check and then scheduled the diagram's preview and the picture both as `arch.png`, so one of the two positions showed the other's file.
+They are predicted instead, by the rule the conversion applies: a diagram keeps the short name, because the app binds to it by name and has nothing else to find it by, and the ordinary picture keeps the name the document refers to.
+A prediction can only be over-careful here - it assumes the short name, and a file that ends up keeping its long one claims names nothing else wants.
+
 === The hash in a comment has to look like one of ours
 
 `hashIn` reads the content hash out of a version comment, and carrying one is what says "this publisher wrote the revision Confluence holds".
@@ -838,8 +844,14 @@ The publish side derives the diagram's name from the file name, and `x.drawio` i
 The source is read from the `mxfile`, never out of the preview.
 A preview is derived, and a derived file may be older than what it derives from - a preview uploaded from a draw.io export carries the state it was rendered at, and reading that would write a stale diagram into the repository as if it were current.
 
-The merged file carries the *diagram's* revision in its name although it is the preview's bytes.
-The revision is the only thing that tells the publish side whether somebody has written an attachment since the export, and the attachment whose loss matters is the diagram - a human's edit - not a preview the app regenerates.
+The merged file's name carries both revisions, `<picture>-<diagram>_<name>.png`.
+The revision is the only thing that tells the publish side whether somebody has written an attachment since the export, and this one file goes back as two attachments that Confluence writes apart: the app writes the diagram on every edit of it and the preview only when it redraws one, so the two stand at revisions of their own.
+One number for both cuts both ways - the publish right after an export refuses the preview nobody has touched, and a preview somebody else has written up to that number passes as ours - so each attachment is guarded by the revision it came from.
+A name carrying a single revision says nothing about a diagram inside it.
+That number is the picture's, as it is for every other attachment, and a diagram whose revision is unknown is not ours to write over.
+
+A preview that nothing can be written into is reported, and both files are kept.
+Measured on a picture truncated after its header: it is a PNG by its signature and holds no image data, so there is nowhere a chunk may go - and a merge that answered the picture unchanged would delete the only editable copy of the diagram while reporting success.
 
 === A preview older than its diagram
 
@@ -882,7 +894,13 @@ A pinned view is drawn as *that* view or not at all.
 The file name carries the sha1 of the aspect and a hash cannot be undone, so the view's own id is read off the page's macro; where the page no longer pins it, nothing is drawn, because the wrong view is worse than an old picture of the right one.
 Measured before that was so: handed the hash, draw.io found no page of that id and drew page one, and both pinned views came back the same picture.
 
-The renderer is found by looking for the executable and not by running it - `drawio --version` answers with a Mach port error on a Mac without a window server session while the export itself works - and nothing requires it.
+The renderer is found by looking for the executable and not by running it: most exports have nothing to redraw, and a probe at discovery would start an Electron application on every one of them.
+What it is, is asked on the first picture that wants redrawing, because one thing has to be established before it draws anything.
+Version 27.0.2 is where `--page-index` began counting from one, which is what this supplies: the 32.6.1 on the machine this was written on answers `--page-index 0` with "pages are numbered from 1 (0-based before v27.0.2)" and draws nothing, and that message is where the threshold comes from - before it, the one-based index drew the page _after_ the one asked for.
+A refresh that overwrote a preview with the following view would be worse than the stale picture of the right view it replaced, so a draw.io that cannot be shown to count from one is not used at all - the same degradation as no draw.io, which is the normal case.
+Whatever it exits with: on a Mac without a window server session the application prints what it was asked for and then fails at exit over a Mach port, and the answer is still the answer.
+Measured on the machine this was written on, `drawio --version` answers `32.6.1` and exits 0, and the two pages of a two-view file come back as two different pictures.
+Nothing requires any of it.
 
 === What a round trip returns, measured
 

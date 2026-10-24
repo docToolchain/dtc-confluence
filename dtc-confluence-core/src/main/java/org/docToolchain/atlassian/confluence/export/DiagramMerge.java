@@ -40,11 +40,11 @@ import org.jsoup.parser.Parser;
  * measured on a real page, where a human edited two pinned views and the app refreshed the
  * default preview and neither pinned one.</p>
  *
- * <p>So the merged file carries the <em>diagram's</em> revision in its name, although it is the
- * preview's bytes. The revision is the only thing that tells the publish side whether somebody
- * has written an attachment since the export, and the attachment whose loss matters is the
- * diagram; a preview the app regenerates is worth less than the guard that protects a human's
- * edit.</p>
+ * <p>The merged file's name carries both revisions, {@code <picture>-<diagram>_<name>.png}: the
+ * revision is the only thing that tells the publish side whether somebody has written an
+ * attachment since the export, and this one file goes back as two attachments that Confluence
+ * writes apart. One number for both would make the publish right after an export refuse the
+ * preview nobody had touched, and let a preview somebody else had written pass as ours.</p>
  *
  * <h2>Staleness</h2>
  *
@@ -58,6 +58,9 @@ public class DiagramMerge {
 
     /** What the draw.io app gives the diagram it attaches. Our own publisher sends octet-stream. */
     private static final String MXFILE_MEDIA_TYPE = "application/vnd.jgraph.mxfile";
+
+    /** What a file Confluence was given no type for is served as, ours among them. */
+    private static final String UNTYPED_MEDIA_TYPE = "application/octet-stream";
 
     /** The forty hex digits the app puts between a diagram's name and {@code .png} for a view. */
     private static final Pattern PINNED = Pattern.compile("-[0-9a-f]{40}\\.png$");
@@ -134,8 +137,11 @@ public class DiagramMerge {
             return;
         }
 
-        Path target = fileOf(tree, diagram).resolveSibling(
-                text(diagram.get("version")) + "_" + fileName(name) + ".png");
+        // Both revisions, because this one file goes back as two attachments: the picture's
+        // first, as every other file's name carries its own, and the diagram's behind it.
+        String revisions = text(preview.get("version")) + "-" + text(diagram.get("version"));
+        Path target = fileOf(tree, diagram)
+                .resolveSibling(revisions + "_" + fileName(name) + ".png");
         try {
             Files.write(target, EmbeddedDiagram.embedIn(picture, source));
         } catch (IOException | IllegalArgumentException notMerged) {
@@ -146,7 +152,7 @@ public class DiagramMerge {
         remove(fileOf(tree, preview), target);
         remove(fileOf(tree, diagram), target);
         // The name the merged file was written under, so that the document refers to that one.
-        preview.put("version", diagram.get("version"));
+        preview.put("version", revisions);
         tree.getAttachments().remove(id);
         diagrams.add(name);
     }
@@ -187,13 +193,19 @@ public class DiagramMerge {
     /**
      * @return whether this is worth reading off the disk to see whether it is a diagram. The media
      *         type is the app's own, so it answers for anything the app attached; a diagram this
-     *         project published went up as {@code application/octet-stream}, and all that is left
-     *         of it is that a diagram's name carries no extension at all.
+     *         project published went up as {@code application/octet-stream}, which is the second
+     *         answer, and a name with no extension at all the third.
+     *
+     *     <p>Why the untyped case is not the name's to cover: the diagram of
+     *     {@code architecture.context.png} is attached as {@code architecture.context}, a name
+     *     with a dot in it. Candidates are cheap - what decides is {@code <mxfile}, read off the
+     *     file itself - and a source skipped here is a source silently left behind.</p>
      */
     private static boolean couldBeADiagram(Map<String, Object> attachment) {
-        String name = text(attachment.get("filename"));
-        return MXFILE_MEDIA_TYPE.equalsIgnoreCase(text(attachment.get("mediaType")))
-                || !name.contains(".");
+        String mediaType = text(attachment.get("mediaType"));
+        return MXFILE_MEDIA_TYPE.equalsIgnoreCase(mediaType)
+                || UNTYPED_MEDIA_TYPE.equalsIgnoreCase(mediaType)
+                || !text(attachment.get("filename")).contains(".");
     }
 
     /**

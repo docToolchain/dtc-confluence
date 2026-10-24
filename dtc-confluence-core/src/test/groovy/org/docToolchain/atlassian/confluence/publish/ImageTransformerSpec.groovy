@@ -439,18 +439,37 @@ class ImageTransformerSpec extends Specification {
             uploads*.fileName() == ['lonely.svg']
     }
 
-    def 'the revision the export took it from travels with both attachments'() {
-        given: '''It is the only thing that says whether somebody has written the diagram in
-                  Confluence since - and for a diagram that somebody is the app itself.'''
+    def 'the diagram and the picture each carry the revision they came from'() {
+        given: '''DiagramMerge writes <picture>-<diagram>_<name>.png because the two are two
+                  attachments and stand at revisions of their own. Handed the diagram's revision,
+                  the preview was refused by the clobber guard on the publish right after the
+                  export - Confluence held the revision it had, not the diagram's - and a preview
+                  somebody else had updated to that number would have passed instead.'''
+            carrying('1-2_architecture.png', DIAGRAM)
+            def body = bodyOf('<img src="images/1-2_architecture.png">')
+
+        when:
+            def uploads = inDirectory().transformImages(body)
+
+        then: 'and neither revision is part of the name the app binds to'
+            uploads*.fileName() == ['architecture', 'architecture.png']
+            uploads*.exportedVersion() == [2, 1]
+    }
+
+    def 'one revision in the name is the picture\'s, and says nothing about the diagram'() {
+        given: '''Which is what a file an author made themselves looks like. The number means what
+                  it means for every other attachment - the revision of the attachment this file
+                  is - and the diagram inside it has none we know. Unknown must not authorise a
+                  write over what the app wrote.'''
             carrying('3_architecture.png', DIAGRAM)
             def body = bodyOf('<img src="images/3_architecture.png">')
 
         when:
             def uploads = inDirectory().transformImages(body)
 
-        then: 'and the version prefix is no part of the diagram name the app binds to'
+        then:
             uploads*.fileName() == ['architecture', 'architecture.png']
-            uploads*.exportedVersion() == [3, 3]
+            uploads*.exportedVersion() == [AttachmentName.NO_VERSION, 3]
     }
 
     def 'two pictures with one diagram name and two diagrams: the second stays a picture'() {
@@ -506,6 +525,32 @@ class ImageTransformerSpec extends Specification {
             def macros = body.select('ac|structured-macro')*.html()
             macros[0].contains('<ac:parameter ac:name="height">700</ac:parameter>')
             macros[1].contains('<ac:parameter ac:name="height">300</ac:parameter>')
+    }
+
+    def 'the names a diagram generates are planned for like any other'() {
+        given: '''The page shows 1_arch.svg, whose preview is attached as arch.png, beside an
+                  ordinary 2_arch.png, which shortens to the same name. Neither name exists while
+                  the collision is being planned, so both passed it and the later upload replaced
+                  the earlier: either the picture or the diagram's static preview was then wrong,
+                  and nothing said so.'''
+            svgCarrying('1_arch.svg', DIAGRAM)
+            plainPng('1_arch.png')
+            plainPng('2_arch.png')
+            def body = bodyOf('<img src="images/1_arch.svg" /><img src="images/2_arch.png" />')
+            def uploads = []
+
+        when:
+            def said = outputOf { uploads = inDirectory().transformImages(body) }
+
+        then: '''the diagram keeps the name the app binds to - it has to - and the picture keeps
+                 the name the document refers to it by'''
+            uploads*.fileName() == ['arch', 'arch.png', '2_arch.png']
+
+        and: 'and each name is attached once'
+            uploads*.fileName().toSet().size() == uploads.size()
+
+        and: 'said rather than merged silently'
+            said.contains("more than one file would be attached as 'arch.png'")
     }
 
     def 'a dry run names the same attachments and writes nothing'() {

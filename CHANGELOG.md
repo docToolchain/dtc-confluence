@@ -52,9 +52,11 @@ publisher verified against a real instance (ASF cwiki, Confluence Data Center 9.
   dropped, and the document refers to a picture that is also the diagram - so publishing that
   document again writes the macro back instead of flattening it. The source is read from the
   `mxfile` and never from the preview, which is derived and may be older. A preview older than its
-  diagram is reported, naming the view, and drawn again only where draw.io is on the `PATH`; the
-  exported file carries the current diagram either way. Measured: export, publish, export again
-  returns a byte-identical file and an identical `mxfile`.
+  diagram is reported, naming the view, and drawn again only where draw.io is on the `PATH` and says
+  it numbers pages from one, which it has done since 27.0.2; the exported file carries the current
+  diagram either way. The file is named `<picture revision>-<diagram revision>_<name>.png`, because
+  it goes back as two attachments and each is guarded by the revision it came from. Measured: export,
+  publish, export again returns a byte-identical file and an identical `mxfile`.
 - A macro pinned to one view of a multi-view diagram exports as a picture of *that* view, where
   before all the macros on one file exported as the file's first page.
 - A `jira` macro becomes a link rather than its own parameters: one issue becomes a link to it, a

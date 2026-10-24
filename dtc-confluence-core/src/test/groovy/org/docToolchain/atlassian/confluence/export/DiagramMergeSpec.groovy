@@ -1,6 +1,9 @@
 package org.docToolchain.atlassian.confluence.export
 
 import org.docToolchain.atlassian.confluence.image.EmbeddedDiagram
+import org.docToolchain.atlassian.confluence.publish.ImageTransformer
+import org.jsoup.Jsoup
+import org.jsoup.parser.Parser
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -74,7 +77,7 @@ class DiagramMergeSpec extends Specification {
 
         then: 'one picture, and it is the one the document already refers to'
             merged.diagrams() == ['arch']
-            EmbeddedDiagram.of(file('1_arch.png').toFile().bytes).get() == DIAGRAM
+            EmbeddedDiagram.of(file('1-1_arch.png').toFile().bytes).get() == DIAGRAM
 
         and: 'the bare diagram is gone from the repository, because it is inside the picture now'
             !file('1_arch').toFile().exists()
@@ -97,8 +100,8 @@ class DiagramMergeSpec extends Specification {
             merge().merge(tree)
 
         then:
-            file('1_arch.png').toFile().exists()
-            !file('1_arch.drawio.png').toFile().exists()
+            file('1-1_arch.png').toFile().exists()
+            !file('1-1_arch.drawio.png').toFile().exists()
     }
 
     def 'the source is read from the diagram, never from the preview'() {
@@ -116,14 +119,15 @@ class DiagramMergeSpec extends Specification {
             merge().merge(tree)
 
         then:
-            EmbeddedDiagram.of(file('1_arch.png').toFile().bytes).get() == DIAGRAM
+            EmbeddedDiagram.of(file('1-1_arch.png').toFile().bytes).get() == DIAGRAM
     }
 
-    def 'the merged picture carries the revision of the diagram, not of the preview'() {
+    def 'the merged picture carries both revisions, its own and the diagram\'s'() {
         given: '''The revision in the file name is the only thing that tells the publish side
-                  whether somebody has written an attachment since the export. The attachment
-                  whose loss matters is the diagram - a human's edit - and not a preview the app
-                  regenerates.'''
+                  whether somebody has written an attachment since the export, and here one file
+                  goes back as two attachments that can stand at two revisions. The picture's
+                  comes first, as it does for every other file; the diagram's is what guards the
+                  attachment whose loss matters, a human's edit.'''
             attachment('mx', 'arch', [version: '2', mediaType: 'application/vnd.jgraph.mxfile',
                                       written: '2026-10-23T12:48:20.000Z'])
             attachment('png', 'arch.png', [version: '1', written: '2026-10-23T12:46:35.000Z'])
@@ -134,11 +138,38 @@ class DiagramMergeSpec extends Specification {
             merge().merge(tree)
 
         then:
-            file('2_arch.png').toFile().exists()
+            file('1-2_arch.png').toFile().exists()
             !file('1_arch.png').toFile().exists()
+            !file('2_arch.png').toFile().exists()
 
         and: 'and the document is told to refer to that name'
-            tree.attachments['png'].version == '2'
+            tree.attachments['png'].version == '1-2'
+    }
+
+    def 'a round trip keeps the two revisions apart, which is what guards each of them'() {
+        given: '''The export and the publish, against one file: the diagram a revision ahead of
+                  its preview, which is what a page looks like where the app drew and a human then
+                  edited. The publisher reads both back out of the one name it is given.'''
+            attachment('mx', 'arch', [version: '2', mediaType: 'application/vnd.jgraph.mxfile',
+                                      written: '2026-10-23T12:48:20.000Z'])
+            attachment('png', 'arch.png', [version: '1', written: '2026-10-23T12:46:35.000Z'])
+            onDisk('2_arch', DIAGRAM.bytes)
+            onDisk('1_arch.png', ONE_PIXEL)
+
+        when:
+            merge().merge(tree)
+            def written = tree.attachments['png'].version + '_arch.png'
+            def body = Jsoup.parse('<div><img src="' + written + '"/></div>', '',
+                Parser.xmlParser()).selectFirst('div')
+            def uploads = new ImageTransformer(file('page.html').toString(), [])
+                .transformImages(body)
+
+        then: 'the diagram is guarded by the diagram\'s revision and the preview by its own'
+            uploads*.fileName() == ['arch', 'arch.png']
+            uploads*.exportedVersion() == [2, 1]
+
+        and: 'and the diagram that goes back is the one the export read out of the mxfile'
+            new String(uploads[0].content(), 'UTF-8') == DIAGRAM
     }
 
     def 'a preview older than its diagram is reported, naming the view'() {
@@ -190,8 +221,8 @@ class DiagramMergeSpec extends Specification {
 
         and: 'what it drew is what the repository holds, with the diagram inside it'
             merged.problems()[0].contains('drawn again from the diagram by')
-            file('2_arch.png').toFile().bytes == EmbeddedDiagram.embedIn(ANOTHER_PIXEL, DIAGRAM)
-            file('2_arch.png').toFile().bytes != EmbeddedDiagram.embedIn(ONE_PIXEL, DIAGRAM)
+            file('1-2_arch.png').toFile().bytes == EmbeddedDiagram.embedIn(ANOTHER_PIXEL, DIAGRAM)
+            file('1-2_arch.png').toFile().bytes != EmbeddedDiagram.embedIn(ONE_PIXEL, DIAGRAM)
     }
 
     def 'without a renderer the picture is exported as it is, with the current diagram in it'() {
@@ -210,7 +241,29 @@ class DiagramMergeSpec extends Specification {
         then:
             merged.problems()[0].contains('exported as it is, with the current diagram inside it')
             merged.diagrams() == ['arch']
-            EmbeddedDiagram.of(file('2_arch.png').toFile().bytes).get() == DIAGRAM
+            EmbeddedDiagram.of(file('1-2_arch.png').toFile().bytes).get() == DIAGRAM
+    }
+
+    def 'a preview the diagram cannot go into keeps the diagram on disk'() {
+        given: '''A picture truncated after its header is still a PNG by its signature, and
+                  nothing can be written into it. Reported as merged, the bare mxfile would be
+                  deleted and the only editable copy of a human's work gone - with the run
+                  saying it had succeeded.'''
+            attachment('mx', 'arch', [mediaType: 'application/vnd.jgraph.mxfile'])
+            attachment('png', 'arch.png')
+            onDisk('1_arch', DIAGRAM.bytes)
+            onDisk('1_arch.png', ONE_PIXEL[0..<16] as byte[])
+
+        when:
+            def merged = merge().merge(tree)
+
+        then:
+            merged.diagrams().isEmpty()
+            merged.problems()[0].contains("the diagram 'arch' could not be put into its preview")
+
+        and: 'both files are still there, and the tree still offers the diagram'
+            file('1_arch').toFile().exists()
+            tree.attachments.keySet() == ['mx', 'png'] as Set
     }
 
     def 'a diagram with no preview attached is reported rather than merged into nothing'() {
@@ -242,6 +295,26 @@ class DiagramMergeSpec extends Specification {
 
         then:
             merged.diagrams() == ['arch']
+    }
+
+    def 'a diagram whose own name carries a dot is still a diagram'() {
+        given: '''Publishing architecture.context.png attaches the source under the picture's base
+                  name, architecture.context - a name with a dot in it - and every upload of ours
+                  goes out as application/octet-stream. Neither signal matched, so the export
+                  skipped the authoritative source and left whatever older one was in the
+                  preview.'''
+            attachment('mx', 'architecture.context', [mediaType: 'application/octet-stream'])
+            attachment('png', 'architecture.context.png')
+            onDisk('1_architecture.context', DIAGRAM.bytes)
+            def older = '<mxfile><diagram id="x">an earlier state</diagram></mxfile>'
+            onDisk('1_architecture.context.png', EmbeddedDiagram.embedIn(ONE_PIXEL, older))
+
+        when:
+            def merged = merge().merge(tree)
+
+        then: 'the mxfile decides, as it does for every other diagram'
+            merged.diagrams() == ['architecture.context']
+            EmbeddedDiagram.of(file('1-1_architecture.context.png').toFile().bytes).get() == DIAGRAM
     }
 
     def 'an attachment that only looks like one is left alone'() {

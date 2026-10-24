@@ -114,21 +114,23 @@ public class ImageTransformer {
      *
      * <p>Decided over the whole body before anything is written, because it is a property of the
      * page rather than of one image, and a name is only safe to shorten once every other name on
-     * the page is known.</p>
+     * the page is known - the names a conversion is about to invent among them, which
+     * {@link #namesClaimedBy} predicts because they do not exist yet.</p>
      *
-     * @return the shortened names that more than one file lays claim to
+     * @return the names that more than one file of this page lays claim to
      */
-    private static Set<String> namesTwoFilesWouldShare(Elements images) {
+    private Set<String> namesTwoFilesWouldShare(Elements images) {
         Map<String, Set<String>> filesByName = new LinkedHashMap<>();
         for (Element image : images) {
             String source = image.attr("src");
             if (source.startsWith("http") || source.startsWith("data:image")) {
                 continue;
             }
-            filesByName
-                    .computeIfAbsent(AttachmentName.of(lastSegmentOf(source)).fileName(),
-                            name -> new LinkedHashSet<>())
-                    .add(SourcePath.decode(source));
+            for (String name : namesClaimedBy(source)) {
+                filesByName
+                        .computeIfAbsent(name, claimed -> new LinkedHashSet<>())
+                        .add(SourcePath.decode(source));
+            }
         }
         Set<String> merging = new LinkedHashSet<>();
         filesByName.forEach((name, files) -> {
@@ -138,6 +140,33 @@ public class ImageTransformer {
             }
         });
         return merging;
+    }
+
+    /**
+     * Every attachment name one file lays claim to: the name it is attached under, and where it
+     * carries a diagram the diagram's own name and its preview's as well.
+     *
+     * <p>Those last two are derived from the file's name and so do not exist while the page is
+     * being planned. Left out of it, the preview of {@code 1_arch.svg} and an ordinary
+     * {@code 2_arch.png} were both scheduled as {@code arch.png} and the second upload replaced
+     * the first - one of the two positions then showed the other's picture.</p>
+     *
+     * <p>Predicted by the rule {@link #asDiagram} applies, at the shortened name, which is what
+     * the file is attached as while nothing clashes. Where its own name does clash it keeps the
+     * long one instead and claims names of its own, so a prediction can only be over-careful
+     * here: another file keeps a name it could have shortened.</p>
+     */
+    private List<String> namesClaimedBy(String source) {
+        String fileName = AttachmentName.of(lastSegmentOf(source)).fileName();
+        String url = SourcePath.decode(documentDirectory() + source);
+        byte[] picture = readOrNull(url);
+        String previewUrl = previewUrlOf(url);
+        if (EmbeddedDiagram.of(picture).isEmpty()
+                || (!previewUrl.equals(url) && readOrNull(previewUrl) == null)) {
+            return List.of(fileName);
+        }
+        String name = withoutExtension(fileName);
+        return List.of(fileName, name, name + ".png");
     }
 
     /**
@@ -161,10 +190,13 @@ public class ImageTransformer {
     private void attach(Element image, String source, String width, String alignment,
                         Set<String> merging, List<Upload> uploads,
                         Map<String, Diagram> diagrams) {
-        String directory = baseUrl.replaceAll("\\\\", "/").replaceAll("/[^/]*$", "/");
+        String directory = documentDirectory();
         String url;
         String fileName;
         int exportedVersion = AttachmentName.NO_VERSION;
+        // The revision of the diagram the picture carries, which is not the picture's own: they
+        // are two attachments and Confluence writes them apart.
+        int diagramVersion = AttachmentName.NO_VERSION;
         // Whether the document named the file. A diagram is attached under the picture's own
         // name, and an embedded image has none of its own: the store names it after the hash of
         // its content, so every edit of the diagram would attach it under a new name, leave the
@@ -187,6 +219,7 @@ public class ImageTransformer {
             } else {
                 fileName = attachment.fileName();
                 exportedVersion = attachment.exportedVersion();
+                diagramVersion = attachment.exportedDiagramVersion();
             }
         } else {
             EmbeddedImage embedded = EmbeddedImage.parse(source);
@@ -200,8 +233,8 @@ public class ImageTransformer {
         }
         url = SourcePath.decode(url);
         System.out.println("    image: " + url);
-        if (namedByTheDocument
-                && asDiagram(image, url, fileName, width, exportedVersion, uploads, diagrams)) {
+        if (namedByTheDocument && asDiagram(image, url, fileName, width, exportedVersion,
+                diagramVersion, uploads, diagrams)) {
             return;
         }
         // Escaped, because the fragment is parsed again: a quote in the name - the data-URI
@@ -221,10 +254,15 @@ public class ImageTransformer {
      * {@code <name>.png}, which is what the page shows before the editor's JavaScript has run and
      * what an export to PDF gets.</p>
      *
+     * <p>Each of the two carries the revision of its own attachment, which is what the clobber
+     * guard compares. Handed one revision for both, a publish right after the export refused the
+     * preview it had not touched - Confluence held the preview's revision, not the diagram's - and
+     * would have passed a preview somebody else had written up to that number.</p>
+     *
      * @return whether this image became a diagram, so that the caller leaves the picture alone
      */
     private boolean asDiagram(Element image, String url, String fileName, String width,
-                              int exportedVersion, List<Upload> uploads,
+                              int exportedVersion, int diagramVersion, List<Upload> uploads,
                               Map<String, Diagram> diagrams) {
         byte[] picture = readOrNull(url);
         Optional<String> found = EmbeddedDiagram.of(picture);
@@ -241,7 +279,7 @@ public class ImageTransformer {
         // An SVG carrying a diagram still needs a PNG to be its preview, because that is the name
         // the app asks for. The PNG beside it, under the same name, is the only candidate that
         // needs neither a renderer nor a guess - and a PNG carrying a diagram is its own preview.
-        String previewUrl = withoutExtension(url) + ".png";
+        String previewUrl = previewUrlOf(url);
         byte[] preview = previewUrl.equals(url) ? picture : readOrNull(previewUrl);
         if (preview == null) {
             System.out.println(">>> WARN: " + fileName + " carries a draw.io diagram, but there is"
@@ -256,7 +294,7 @@ public class ImageTransformer {
         Diagram shape = new Diagram(diagram, EmbeddedDiagram.sizeOfPng(preview).orElse(null));
         diagrams.put(name, shape);
         String height = shape.heightAt(width);
-        uploads.add(new Upload(url, name, DIAGRAM_COMMENT, exportedVersion,
+        uploads.add(new Upload(url, name, DIAGRAM_COMMENT, diagramVersion,
                 diagram.getBytes(StandardCharsets.UTF_8)));
         uploads.add(new Upload(previewUrl, name + ".png", PREVIEW_COMMENT, exportedVersion));
         image.after(DrawioMacro.showing(name, width, height));
@@ -287,6 +325,16 @@ public class ImageTransformer {
         image.after(DrawioMacro.showing(name, width, alreadyThere.heightAt(width)));
         System.out.println("    diagram: " + fileName + " shows '" + name + "' again");
         return true;
+    }
+
+    /** @return where the document's images are, which is where the document itself is */
+    private String documentDirectory() {
+        return baseUrl.replaceAll("\\\\", "/").replaceAll("/[^/]*$", "/");
+    }
+
+    /** @return the picture the app shows before its editor has run, which it asks for by name */
+    private static String previewUrlOf(String url) {
+        return withoutExtension(url) + ".png";
     }
 
     /**

@@ -151,7 +151,7 @@ Past that the headings stop being headings, and nothing reports it.
 The limit and what it cost to push it out by one are written down in xref:docs/decisions.adoc[the design decisions].
 A draw.io diagram comes back as one file: the export puts the `mxfile` inside the preview, so the picture in the repository is also the diagram, and publishing that document again writes the macro back rather than a flat picture.
 The source is read from the `mxfile` and never out of the preview, because a preview is derived and may be older than what it derives from.
-Where it is - the app keeps the default view's preview current and lets a pinned view's go stale - the run says which view, and draws it again only if draw.io happens to be on the `PATH`.
+Where it is - the app keeps the default view's preview current and lets a pinned view's go stale - the run says which view, and draws it again only if draw.io happens to be on the `PATH` and says it is 27.0.2 or newer, which is where it began numbering pages from one.
 The exported file carries the current diagram either way, so what can be out of date is the picture inside it and not the source.
 
 Publishing needs a JRE and the jar; exporting needs pandoc as well, because the conversion back to AsciiDoc goes through it.

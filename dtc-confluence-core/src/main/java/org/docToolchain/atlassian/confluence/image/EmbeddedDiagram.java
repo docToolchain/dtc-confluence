@@ -86,7 +86,10 @@ public final class EmbeddedDiagram {
      * <p>The chunk goes in front of the first {@code IDAT}, because draw.io stops looking for one
      * when the image data starts.</p>
      *
-     * @throws IllegalArgumentException where this is not a PNG, since the caller chose the file
+     * @throws IllegalArgumentException where no diagram can be written into this file at all -
+     *         it is not a PNG, a chunk of it says it is longer than the file, or it holds no
+     *         image data to put the chunk in front of. The caller chose the file, and a picture
+     *         answered without the diagram in it is a picture whose source is about to be deleted.
      */
     public static byte[] embedIn(byte[] png, String diagram) {
         if (!isPng(png)) {
@@ -98,8 +101,9 @@ public final class EmbeddedDiagram {
         boolean written = false;
         for (int at = FIRST_CHUNK; at + CHUNK_OVERHEAD <= png.length; ) {
             int length = intAt(png, at);
-            if (length < 0 || at + CHUNK_OVERHEAD + length > png.length) {
-                break;
+            if (!fits(length, png, at)) {
+                throw new IllegalArgumentException("a chunk of this PNG says it is longer than the"
+                        + " file, so the picture is not one a diagram can be written into");
             }
             String type = typeAt(png, at);
             if (!written && ("IDAT".equals(type) || "IEND".equals(type))) {
@@ -110,6 +114,13 @@ public final class EmbeddedDiagram {
                 out.write(png, at, CHUNK_OVERHEAD + length);
             }
             at += CHUNK_OVERHEAD + length;
+        }
+        if (!written) {
+            // Nowhere to put it: a picture truncated before its image data holds no IDAT and no
+            // IEND. Answered as a picture, it would be a preview without the source in it, and
+            // the caller - having been told the merge worked - deletes the only other copy.
+            throw new IllegalArgumentException("this PNG holds no image data, so there is nothing"
+                    + " to put a diagram in front of");
         }
         return out.toByteArray();
     }
@@ -145,6 +156,18 @@ public final class EmbeddedDiagram {
         return start.startsWith("<mxfile") || start.startsWith("<mxGraphModel");
     }
 
+    /**
+     * @return whether a chunk of this declared length is still inside the file
+     *
+     *     <p>Subtraction rather than addition: a length of {@code 0x7fffffff} plus the overhead is
+     *     a negative number, which passed an addition's bounds check and then indexed at a
+     *     negative offset. The loop has already seen that the overhead itself fits, so the right
+     *     hand side cannot be negative.</p>
+     */
+    private static boolean fits(int length, byte[] png, int at) {
+        return length >= 0 && length <= png.length - at - CHUNK_OVERHEAD;
+    }
+
     private static boolean isPng(byte[] content) {
         if (content.length < PNG_SIGNATURE.length) {
             return false;
@@ -166,7 +189,7 @@ public final class EmbeddedDiagram {
     private static Optional<String> inPng(byte[] png) {
         for (int at = FIRST_CHUNK; at + CHUNK_OVERHEAD <= png.length; ) {
             int length = intAt(png, at);
-            if (length < 0 || at + CHUNK_OVERHEAD + length > png.length) {
+            if (!fits(length, png, at)) {
                 return Optional.empty();
             }
             String type = typeAt(png, at);
