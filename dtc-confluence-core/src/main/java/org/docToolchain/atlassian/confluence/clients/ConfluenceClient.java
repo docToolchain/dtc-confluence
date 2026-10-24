@@ -2,8 +2,10 @@ package org.docToolchain.atlassian.confluence.clients;
 
 import java.io.InputStream;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -16,6 +18,7 @@ import org.apache.hc.client5.http.entity.mime.StringBody;
 import org.apache.hc.core5.http.ClassicHttpRequest;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.HttpEntity;
+import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.hc.core5.net.URIBuilder;
 import org.docToolchain.configuration.ConfigService;
 
@@ -254,13 +257,51 @@ public abstract class ConfluenceClient {
     protected Object uploadAttachment(Object uri, InputStream inputStream, String fileName,
                                       Object note, Object localHash) {
         HttpPost post = new HttpPost(String.valueOf(uri));
-        HttpEntity entity = MultipartEntityBuilder.create()
-                .setMode(HttpMultipartMode.EXTENDED)
+        String boundary = "dtcConfluence" + UUID.randomUUID();
+        post.setEntity(multipart(inputStream, fileName, note, localHash, boundary));
+        // Written here rather than left to the entity, which declares ISO-8859-1 whatever the
+        // builder is told - see multipart below. Confluence believes the declaration.
+        post.setHeader(HttpHeaders.CONTENT_TYPE, "multipart/form-data; boundary=" + boundary);
+        return callApiAndFailIfNot20x(post);
+    }
+
+    /**
+     * The body of an attachment upload.
+     *
+     * <p>Confluence takes the file name it is sent literally, so the name on the wire has to be
+     * the name. What the three multipart modes write for it, measured:</p>
+     *
+     * <pre>
+     *                      my image.png     a name with an umlaut
+     *   EXTENDED           my%20image.png   %C3%9Cbersicht.png
+     *   STRICT             my image.png     one byte per character, so not UTF-8
+     *   LEGACY + UTF-8     my image.png     the name itself
+     * </pre>
+     *
+     * <p>Hence LEGACY with an explicit UTF-8 charset. That alone is not enough: the entity then
+     * still declares {@code multipart/form-data; charset=ISO-8859-1}, and neither
+     * {@code setContentType} nor anything else on the builder changes it, so Confluence read the
+     * correct UTF-8 bytes as Latin-1 and stored a name beginning with an A-tilde. The caller
+     * therefore fixes the boundary and writes the request's content type itself, without a
+     * charset - which is what a browser sends, and what Confluence reads as UTF-8.</p>
+     *
+     * <p>Measured on Data Center 9.2.21. Before this, an attachment went up as
+     * {@code %C3%9Cbersicht.png} while the page body referred to the name with the umlaut, so the
+     * page pointed at an attachment that does not exist and the picture did not render. It was
+     * invisible for as long as every name reaching here had been through the export's
+     * sanitisation, which replaces exactly the characters that were being encoded.</p>
+     *
+     * <p>The comment part keeps its own content type: it carries a fixed note and a hex hash.</p>
+     */
+    static HttpEntity multipart(InputStream inputStream, String fileName, Object note,
+                                Object localHash, String boundary) {
+        return MultipartEntityBuilder.create()
+                .setMode(HttpMultipartMode.LEGACY)
+                .setCharset(StandardCharsets.UTF_8)
+                .setBoundary(boundary)
                 .addPart("file", new InputStreamBody(inputStream, fileName))
                 .addPart("comment", new StringBody(note + "\r\n#" + localHash + "#", ContentType.TEXT_PLAIN))
                 .build();
-        post.setEntity(entity);
-        return callApiAndFailIfNot20x(post);
     }
 
     protected Object callApiAndFailIfNot20x(ClassicHttpRequest httpRequest) {

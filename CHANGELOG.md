@@ -23,6 +23,10 @@ publisher verified against a real instance (ASF cwiki, Confluence Data Center 9.
   draw.io diagram pointing at nothing. The prefix is dropped only where the shorter name stays
   unique on the page: `1_diagram.png` beside `2_diagram.png`, or screenshots numbered
   `01_step.png` and `02_step.png`, keep their names, and the run says which files and why.
+- An attachment is uploaded under the name it has. The upload used to percent-encode it, so a
+  picture named `Übersicht.png` became an attachment called `%C3%9Cbersicht.png` while the page
+  body still referred to the name with the umlaut - the page pointed at an attachment that does
+  not exist and the picture did not render. Measured on Data Center 9.2.21.
 - An attachment somebody else wrote since the export this document came from is not overwritten.
   The signal is the revision, not the hash in the version comment: the draw.io app writes its own
   comment, which no hash comparison can recognise, so every publish used to discard its edit.
