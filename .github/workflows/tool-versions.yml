@@ -1,0 +1,104 @@
+name: tool versions
+
+# pandoc and asciidoctor are pinned in build.yml because their output is the
+# behaviour this project asserts - see docs/decisions.adoc. Pinning buys
+# reproducibility and costs notice: nothing tells us when upstream moves.
+# Dependabot cannot close that gap. It has no ecosystem for a version held in a
+# workflow's environment, `github-actions` rewrites `uses:` references and
+# nothing else, and no bot could recompute the checksum that sits beside the
+# pandoc version anyway. So this job says when they have drifted and leaves the
+# decision where it belongs, with a person reading the specifications.
+
+on:
+  schedule:
+    # Monday morning. Nothing here is urgent, and a weekday beats a weekend for
+    # something a person has to act on.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  drift:
+    name: Compare against upstream
+    # A fork opening issues in its own copy helps nobody.
+    if: github.repository == 'docToolchain/dtc-confluence'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Report drift
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TITLE: External tool versions have moved upstream
+        run: |
+          set -euo pipefail
+
+          # Read out of build.yml rather than restate it here: two places to
+          # bump is one place to forget.
+          pin() { sed -n "s/.*$1: '\([^']*\)'.*/\1/p" .github/workflows/build.yml; }
+          pinned_pandoc=$(pin PANDOC_VERSION)
+          pinned_asciidoctor=$(pin ASCIIDOCTOR_VERSION)
+          if [ -z "$pinned_pandoc" ] || [ -z "$pinned_asciidoctor" ]; then
+            echo "could not read the pinned versions out of build.yml"
+            exit 1
+          fi
+
+          latest_pandoc=$(gh api repos/jgm/pandoc/releases/latest --jq .tag_name)
+          latest_asciidoctor=$(curl -fsSL --retry 3 --retry-all-errors \
+            https://rubygems.org/api/v1/gems/asciidoctor.json | jq -r .version)
+
+          echo "pandoc       pinned $pinned_pandoc  latest $latest_pandoc"
+          echo "asciidoctor  pinned $pinned_asciidoctor  latest $latest_asciidoctor"
+
+          # In a directory of its own: a job's workspace is a checkout, not a
+          # scratch pad.
+          work=$(mktemp -d)
+          drift="$work/drift.md"
+          body="$work/body.md"
+          : > "$drift"
+          if [ "$pinned_pandoc" != "$latest_pandoc" ]; then
+            printf -- "* pandoc \`%s\` -> \`%s\` https://github.com/jgm/pandoc/releases/tag/%s\n" \
+              "$pinned_pandoc" "$latest_pandoc" "$latest_pandoc" >> "$drift"
+          fi
+          if [ "$pinned_asciidoctor" != "$latest_asciidoctor" ]; then
+            printf -- "* asciidoctor \`%s\` -> \`%s\` https://rubygems.org/gems/asciidoctor/versions/%s\n" \
+              "$pinned_asciidoctor" "$latest_asciidoctor" "$latest_asciidoctor" >> "$drift"
+          fi
+          if [ ! -s "$drift" ]; then
+            echo "nothing has moved"
+            exit 0
+          fi
+
+          # One open issue is enough. Commenting every Monday on an issue nobody
+          # has got to yet turns a reminder into noise, and the issue already
+          # says to check both tools.
+          open=$(gh issue list --state open --search "\"$TITLE\" in:title" \
+            --json number --jq '.[0].number // empty')
+          # Anything that is not an issue number is treated as none found. An
+          # unexpected answer must not be the reason a drift goes unreported.
+          case "$open" in
+            ''|*[!0-9]*) open='' ;;
+          esac
+          if [ -n "$open" ]; then
+            echo "already reported in #$open"
+            exit 0
+          fi
+
+          {
+            echo "The versions pinned in \`.github/workflows/build.yml\` no longer match the latest upstream releases."
+            echo
+            cat "$drift"
+            echo
+            echo "These are pinned on purpose. pandoc writes the AsciiDoc the export produces, and asciidoctor is the oracle two specifications judge that AsciiDoc with, so a bump changes what the specifications assert. The reasoning is in \`docs/decisions.adoc\`."
+            echo
+            echo "Bumping is one commit: the version in \`build.yml\`, the \`PANDOC_SHA256\` beside it (\`sha256sum\` of the new \`pandoc-<version>-linux-amd64.tar.gz\`), and whatever the specifications now say differently."
+            echo
+            echo "Opened by \`.github/workflows/tool-versions.yml\`."
+          } > "$body"
+
+          gh issue create --title "$TITLE" --body-file "$body"

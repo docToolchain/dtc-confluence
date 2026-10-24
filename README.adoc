@@ -155,6 +155,40 @@ See xref:docs/decisions.adoc[Design decisions].
 Builds with JDK 25, targets Java 17.
 Maven comes from the bundled wrapper, so no local Maven installation is required.
 
+== External tools
+
+Two programs are called as processes rather than used as libraries, and both are pinned to an exact version in CI.
+
+pandoc:: Needed to export.
+`ConfluenceConverter` runs it over each page's prepared XHTML, so pandoc is what actually writes the AsciiDoc this project produces.
+Publishing does not need it.
+asciidoctor:: Needed only to run the whole test suite.
+Nothing under `src/main` calls it.
+Two specifications use it as an oracle, to answer whether the AsciiDoc this project emits reads the way it is meant to - whether a block is read as markup, and whether an include lands a level deeper.
+Without it, those two skip themselves.
+
+=== Why they are pinned
+
+Because their output is the behaviour under test, not an incidental property of the machine that happens to run it.
+
+pandoc writes the output, so its version decides what the assertions about escaping are compared against.
+asciidoctor judges the output, and an oracle whose version drifts is an oracle whose verdict drifts.
+A build that passes at one desk and fails at another, for no reason in the code, is worse than a build that simply fails.
+
+CI installed both from apt until recently, which gave pandoc 3.1.3 (June 2023) and asciidoctor 2.0.20 (May 2023) against the 3.12.1 (October 2026) and 2.0.26 used in development.
+The assertions about what pandoc escapes were therefore being checked against a pandoc three years older than the one that wrote their fixtures.
+Both now come from a pinned release, pandoc verified against a checksum.
+
+`.github/workflows/tool-versions.yml` reports once a week when either has moved upstream.
+The bump itself stays a decision a person makes, because it changes what the specifications assert.
+
+=== Asciidoctor is not a dependency of this project
+
+docToolchain embeds Asciidoctor as a library, through asciidoctorj and JRuby, because it renders AsciiDoc.
+This project does not render AsciiDoc; it produces it.
+There is no Asciidoctor on the class path and no `asciidoctorj` in any `pom.xml`, and the version that verifies the output is chosen here rather than inherited from whatever consumes it.
+A renderer that a consumer happens to ship must not decide whether these specifications pass.
+
 == Linting
 
 The build does not lint workflows, YAML, XML or shell scripts; CI does, through super-linter.

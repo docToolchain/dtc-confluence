@@ -728,3 +728,52 @@ Against cwiki, space `GERDASCHEMANNTEST`:
 What this does *not* yet do, measured on the same page: the export turns a draw.io macro into a plain image of its preview, so the republished page carries a static image rather than the macro.
 The exported diagram source is written to disk and referred to by nothing, so a publish never sends it back.
 Keeping the macro is `MacroTranslator`'s to do, and the name it would need is now the name it will find.
+
+== The external tools are pinned, because their output is the behaviour under test
+
+pandoc and asciidoctor are called as processes, and CI used to install whatever apt offered.
+Both are now pinned to an exact version in `build.yml`, pandoc fetched as its release tarball and verified against a checksum, asciidoctor installed from rubygems.
+
+The two have different roles, and the pinning has a different reason for each.
+
+pandoc *writes* the AsciiDoc the export produces.
+`ConfluenceConverter.toAsciidoc` hands it the prepared XHTML and takes back the document, so its version is not an implementation detail of the build: it decides what the specifications about escaping, braces and code-block languages are comparing against.
+
+asciidoctor *judges* that output.
+It appears nowhere under `src/main`; two specifications shell out to it to ask whether what this project emits reads the way it is meant to.
+An oracle whose version drifts is an oracle whose verdict drifts, which is the one thing an oracle may not do.
+
+=== apt was answering a different question
+
+Measured in the last green run before the change: apt installed pandoc 3.1.3, released 2023-06-07, and asciidoctor 2.0.20, released 2023-05-18.
+Development happens against pandoc 3.12.1, released 2026-10-08, and asciidoctor 2.0.26.
+So for as long as this project has had those specifications, CI was checking assertions about pandoc's escaping against a pandoc three years and four months older than the one whose output the fixtures record.
+It passed, which is the uncomfortable part: a difference that does not fail is a difference nobody finds.
+
+The Azure apt mirror was also the direct cause of three failed runs in one afternoon, sitting in `apt-get` for more than twenty minutes each.
+That is what prompted the change; the version gap is what justified its shape.
+
+=== Asciidoctor is not a dependency of this project, and not docToolchain's
+
+docToolchain embeds Asciidoctor as a library, through asciidoctorj and JRuby, because rendering AsciiDoc is its job.
+This project does not render AsciiDoc; it produces it, and it consumes Confluence storage format.
+There is no Asciidoctor on the class path and no `asciidoctorj` in any `pom.xml`.
+
+That independence is deliberate and runs the same way as everything else in this extraction: this project is pulled from docToolchain and never depends back on it.
+A renderer version chosen by a consumer - docToolchain, or a customer's own build - must not decide whether these specifications pass.
+The CLI used to verify the output is a test tool, picked here, and the one place it is named is `build.yml`.
+
+=== Nothing can bump them automatically, and that is the right outcome
+
+Dependabot has no ecosystem that covers either case.
+There is none for a version held in a workflow's environment and none for a GitHub release tarball; the `github-actions` ecosystem rewrites `uses:` references and nothing else, so even `pandoc/actions/setup` would have its own SHA bumped and its `version:` input left alone.
+asciidoctor could be reached through the `bundler` ecosystem, but only by adding a `Gemfile` and a committed lock to a Java repository, and the specifications call the bare `asciidoctor` name, so binstubs would have to be on the `PATH` as well.
+
+The checksum settles it in any case.
+No bot can recompute `PANDOC_SHA256`, and pandoc publishes no checksum file of its own - its release carries eleven assets and none of them is one - so a bot that bumped only the version would turn the build red at `sha256sum --check`.
+That is the correct failure, fail-closed rather than quietly wrong, but it means no bot lands such a change unattended.
+
+This is not a gap to close.
+A pandoc bump is a change to what the specifications assert, so it is precisely the change a person should read with the fixtures in hand.
+`tool-versions.yml` therefore reports drift once a week and opens an issue naming both versions and what a bump has to touch, and stops there.
+It reads the pinned versions out of `build.yml` rather than restating them, because two places to bump is one place to forget.
