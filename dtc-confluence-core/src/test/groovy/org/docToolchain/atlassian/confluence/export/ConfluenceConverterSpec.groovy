@@ -902,4 +902,57 @@ class ConfluenceConverterSpec extends Specification {
         and: 'and the marked words are still there'
             html.contains('marked')
     }
+
+    def 'a drawio macro refers to the picture that carries its diagram'() {
+        given: '''By then DiagramMerge has put the mxfile inside that picture, so the document
+                  refers to one file and publishing it again writes the macro back.'''
+            def attachments = ['9': [filename: 'arch.png', originalFilename: 'arch.png',
+                                     version: '2', pageId: '1']]
+            def storage = '<ac:structured-macro ac:name="drawio">' +
+                '<ac:parameter ac:name="diagramName">arch</ac:parameter>' +
+                '<ac:parameter ac:name="diagramWidth">941</ac:parameter></ac:structured-macro>'
+
+        when:
+            def html = converter.fixBody('1', storage, NO_USERS, PAGES, attachments, SPACE).html()
+
+        then:
+            html.contains('<img src="A_Page/2_arch.png" width="941" />')
+    }
+
+    def 'a macro pinned to one view refers to that view, not to the first page of the file'() {
+        given: '''Measured on a real page: one diagram, three macros, two of them pinned with an
+                  aspect, and the app gives each pinned one a preview of its own named
+                  <diagram>-<sha1 of the aspect>.png. Without that, two of the three spots in the
+                  exported document showed a view the page does not show there.'''
+            def pinned = 'arch-62167aa2f85e4935ba9c7c2eba7bb76551487513.png'
+            def attachments = ['9': [filename: 'arch.png', originalFilename: 'arch.png',
+                                     version: '2', pageId: '1'],
+                               '10': [filename: pinned, originalFilename: pinned,
+                                      version: '1', pageId: '1']]
+            def storage = '<ac:structured-macro ac:name="drawio">' +
+                '<ac:parameter ac:name="diagramName">arch</ac:parameter>' +
+                '<ac:parameter ac:name="aspect">view-core</ac:parameter></ac:structured-macro>'
+
+        when:
+            def html = converter.fixBody('1', storage, NO_USERS, PAGES, attachments, SPACE).html()
+
+        then:
+            html.contains('src="A_Page/1_' + pinned + '"')
+    }
+
+    def 'a pinned view with no preview of its own falls back to the diagram\'s'() {
+        given: '''The app draws such a spot from the mxfile and leaves no static picture at all,
+                  so the first view is a better answer than none.'''
+            def attachments = ['9': [filename: 'arch.png', originalFilename: 'arch.png',
+                                     version: '2', pageId: '1']]
+            def storage = '<ac:structured-macro ac:name="drawio">' +
+                '<ac:parameter ac:name="diagramName">arch</ac:parameter>' +
+                '<ac:parameter ac:name="aspect">view-core</ac:parameter></ac:structured-macro>'
+
+        when:
+            def html = converter.fixBody('1', storage, NO_USERS, PAGES, attachments, SPACE).html()
+
+        then:
+            html.contains('src="A_Page/2_arch.png"')
+    }
 }

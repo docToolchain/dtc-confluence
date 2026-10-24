@@ -1,5 +1,6 @@
 package org.docToolchain.atlassian.confluence.publish
 
+import org.docToolchain.atlassian.confluence.image.EmbeddedDiagram
 import org.jsoup.Jsoup
 import org.jsoup.parser.Parser
 import spock.lang.Specification
@@ -21,6 +22,10 @@ class ImageTransformerSpec extends Specification {
     /** A one-pixel PNG, as a document embeds one. */
     private static final String DATA_URI = 'data:image/png;base64,' +
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+
+    /** A diagram, as short as one can be and still be one. */
+    private static final String DIAGRAM =
+        '<mxfile host="drawio-plugin"><diagram id="view-context" name="Context">x</diagram></mxfile>'
 
     private static org.jsoup.nodes.Element bodyOf(String html) {
         def dom = Jsoup.parse("<div>${html}</div>", '', Parser.xmlParser())
@@ -318,5 +323,217 @@ class ImageTransformerSpec extends Specification {
     def 'a document without images asks for no uploads'() {
         expect:
             transformer().transformImages(bodyOf('<p>text</p>')).isEmpty()
+    }
+
+    /** A diagram as a draw.io export carries it, written into a picture of the given name. */
+    private String carrying(String name, String diagram) {
+        directory.resolve('images').toFile().mkdirs()
+        def file = directory.resolve('images').resolve(name).toFile()
+        file.bytes = EmbeddedDiagram.embedIn(onePixel(), diagram)
+        return file.path
+    }
+
+    private String plainPng(String name) {
+        directory.resolve('images').toFile().mkdirs()
+        def file = directory.resolve('images').resolve(name).toFile()
+        file.bytes = onePixel()
+        return file.path
+    }
+
+    /** An SVG carrying a diagram the way the draw.io command line writes one. */
+    private String svgCarrying(String name, String diagram) {
+        directory.resolve('images').toFile().mkdirs()
+        def escaped = diagram.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            .replace('"', '&quot;')
+        def file = directory.resolve('images').resolve(name).toFile()
+        file.text = '<svg xmlns="http://www.w3.org/2000/svg" content="' + escaped + '"><g/></svg>'
+        return file.path
+    }
+
+    private static byte[] onePixel() {
+        return DATA_URI.substring(DATA_URI.indexOf(',') + 1).decodeBase64()
+    }
+
+    private ImageTransformer inDirectory(boolean writing = true) {
+        return new ImageTransformer(directory.resolve('manual.html').toString(), ['images/.'],
+            writing)
+    }
+
+    def 'a picture carrying a draw.io diagram becomes the editable diagram'() {
+        given: '''The file decides, not the document. One image:: line means a picture where the
+                  file is a picture and an editable diagram where the file carries one - which is
+                  what a draw.io export does by default.'''
+            carrying('architecture.png', DIAGRAM)
+            def body = bodyOf('<img src="images/architecture.png" width="700">')
+
+        when:
+            def uploads = inDirectory().transformImages(body)
+
+        then: 'the macro, not an image'
+            body.html().contains('ac:name="drawio"')
+            body.html().contains('<ac:parameter ac:name="diagramName">architecture</ac:parameter>')
+            body.select('ac|image').isEmpty()
+
+        and: 'the width the document asked of the picture is the width of the diagram'
+            body.html().contains('<ac:parameter ac:name="diagramWidth">700</ac:parameter>')
+
+        and: '''and it is as tall as that makes it: the diagram's own size is nowhere in the
+                 file, so the preview's shape is the only honest number. One pixel square at 700
+                 is 700 tall.'''
+            body.html().contains('<ac:parameter ac:name="height">700</ac:parameter>')
+
+        and: '''two attachments: the diagram under the picture's base name with no extension at
+                 all, which is what the app binds to, and the picture as its preview'''
+            uploads*.fileName() == ['architecture', 'architecture.png']
+
+        and: 'the diagram travels as its own bytes, because it is no file on disk'
+            new String(uploads[0].content(), 'UTF-8') == DIAGRAM
+            uploads[1].content() == null
+    }
+
+    def 'a picture carrying no diagram is left exactly as it was'() {
+        given: 'that is the whole rule, and what lets one line mean both things'
+            plainPng('flat.png')
+            def body = bodyOf('<img src="images/flat.png" width="700">')
+
+        when:
+            def uploads = inDirectory().transformImages(body)
+
+        then:
+            !body.html().contains('drawio')
+            body.html().contains('<ri:attachment ri:filename="flat.png" />')
+            uploads*.fileName() == ['flat.png']
+    }
+
+    def 'an SVG carrying a diagram takes the PNG beside it as the preview'() {
+        given: '''The app asks for <diagramName>.png by name, so a diagram needs a PNG whatever
+                  the picture in the document was. The one beside it under the same name is the
+                  only candidate that needs neither a renderer nor a guess.'''
+            svgCarrying('core.svg', DIAGRAM)
+            plainPng('core.png')
+            def body = bodyOf('<img src="images/core.svg" width="700">')
+
+        when:
+            def uploads = inDirectory().transformImages(body)
+
+        then:
+            body.html().contains('<ac:parameter ac:name="diagramName">core</ac:parameter>')
+
+        and: 'the PNG is attached as the preview, and the SVG is attached at all'
+            uploads*.fileName() == ['core', 'core.png']
+            uploads[1].url().endsWith('core.png')
+    }
+
+    def 'an SVG with no PNG beside it stays a picture, because the preview cannot be invented'() {
+        given: '''Without <name>.png the viewer still draws the diagram, but there is no static
+                  picture - so an export to PDF has a hole. Rendering one would need draw.io on
+                  the machine, which publishing is not allowed to need.'''
+            svgCarrying('lonely.svg', DIAGRAM)
+            def body = bodyOf('<img src="images/lonely.svg">')
+
+        when:
+            def uploads = inDirectory().transformImages(body)
+
+        then:
+            !body.html().contains('drawio')
+            uploads*.fileName() == ['lonely.svg']
+    }
+
+    def 'the revision the export took it from travels with both attachments'() {
+        given: '''It is the only thing that says whether somebody has written the diagram in
+                  Confluence since - and for a diagram that somebody is the app itself.'''
+            carrying('3_architecture.png', DIAGRAM)
+            def body = bodyOf('<img src="images/3_architecture.png">')
+
+        when:
+            def uploads = inDirectory().transformImages(body)
+
+        then: 'and the version prefix is no part of the diagram name the app binds to'
+            uploads*.fileName() == ['architecture', 'architecture.png']
+            uploads*.exportedVersion() == [3, 3]
+    }
+
+    def 'two pictures with one diagram name and two diagrams: the second stays a picture'() {
+        given: '''Confluence holds one attachment of a name, so whichever upload went last would
+                  decide what both macros show. One of them has to stay what it looks like, and
+                  the run has to say which two files are in each other's way.'''
+            carrying('same.png', DIAGRAM)
+            svgCarrying('same.svg', '<mxfile><diagram id="other">something else</diagram></mxfile>')
+            plainPng('same-preview.png')
+            // Self-closed, because bodyOf parses as XML, where <img src="x"> stays open
+            // and the next one would be read as its child rather than as its sibling.
+            def body = bodyOf('<img src="images/same.png" /><img src="images/same.svg" />')
+
+        when:
+            def uploads = inDirectory().transformImages(body)
+
+        then: 'the first is the diagram'
+            uploads*.fileName() == ['same', 'same.png', 'same.svg']
+
+        and: 'and the second is a picture of itself, which is visible rather than silent'
+            body.select('ri|attachment')*.attr('ri:filename') == ['same.svg']
+    }
+
+    def 'the same diagram shown twice is one attachment and two macros'() {
+        given: '''Which is the arrangement Confluence itself writes where one diagram appears in
+                  several places on a page: one diagram, one preview, a macro at each spot.'''
+            carrying('twice.png', DIAGRAM)
+            def body = bodyOf('<img src="images/twice.png" /><img src="images/twice.png" />')
+
+        when:
+            def uploads = inDirectory().transformImages(body)
+
+        then:
+            body.select('ac|structured-macro').size() == 2
+            uploads*.fileName() == ['twice', 'twice.png']
+
+        and: 'and the second is the same size as the first, not a macro without one'
+            body.select('ac|structured-macro')
+                .every { it.html().contains('ac:name="height"') }
+    }
+
+    def 'the second macro on one diagram is sized at its own width'() {
+        given: '''The document may ask for the same diagram at two sizes. Carrying the first
+                  macro's height to the second would squash the picture at the second width.'''
+            carrying('twice.png', DIAGRAM)
+            def body = bodyOf('<img src="images/twice.png" width="700" />' +
+                '<img src="images/twice.png" width="300" />')
+
+        when:
+            inDirectory().transformImages(body)
+
+        then: 'one pixel square, so each height is its own width'
+            def macros = body.select('ac|structured-macro')*.html()
+            macros[0].contains('<ac:parameter ac:name="height">700</ac:parameter>')
+            macros[1].contains('<ac:parameter ac:name="height">300</ac:parameter>')
+    }
+
+    def 'a dry run names the same attachments and writes nothing'() {
+        given: '''The hash a dry run compares is the hash of the body a real run would send, so
+                  the body has to be the same one - macro and all.'''
+            carrying('architecture.png', DIAGRAM)
+            def body = bodyOf('<img src="images/architecture.png">')
+
+        when:
+            def uploads = inDirectory(false).transformImages(body)
+
+        then:
+            body.html().contains('ac:name="drawio"')
+            uploads*.fileName() == ['architecture', 'architecture.png']
+    }
+
+    def 'an image the document carries inline is not turned into a diagram'() {
+        given: '''A data URI has no name of its own: the store names the file after the hash of
+                  its content, so every edit of the diagram would attach it under a new name, leave
+                  the one before it behind, and move the macro to a diagram nobody finds twice.'''
+            def diagram = EmbeddedDiagram.embedIn(onePixel(), DIAGRAM)
+            def body = bodyOf("<img src=\"data:image/png;base64,${diagram.encodeBase64()}\" alt=\"d\">")
+
+        when:
+            def uploads = inDirectory().transformImages(body)
+
+        then:
+            !body.html().contains('drawio')
+            uploads.size() == 1
     }
 }

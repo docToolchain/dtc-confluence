@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import org.docToolchain.atlassian.constants.ConfluenceTags;
+import org.docToolchain.util.ContentHash;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Entities;
@@ -520,10 +521,14 @@ class MacroTranslator {
         // The macro is rendered by the Confluence plugin when a page is shown; the storage format
         // carries only its parameters. The PNG that Confluence keeps beside it is the attachment
         // named "<diagramName>.png", and that is what the document refers to.
+        //
+        // The picture carries the diagram by then: DiagramMerge has put the mxfile inside it, so
+        // publishing this document again writes the macro back rather than a flat picture.
         String diagramName = element.select("ac|parameter[ac:name=diagramName]").text();
         String diagramWidth = element.select("ac|parameter[ac:name=diagramWidth]").text();
+        String aspect = directParameter(element, "aspect");
         if (!diagramName.isEmpty()) {
-            String png = diagramName + ".png";
+            String png = previewOf(diagramName, aspect);
             Map<String, Object> attachment = attachmentNamed(png);
             if (attachment != null) {
                 String version = firstOf(text(attachment.get("version")), "1");
@@ -534,6 +539,26 @@ class MacroTranslator {
             }
         }
         element.remove();
+    }
+
+    /**
+     * Which picture this macro shows.
+     *
+     * <p>A macro pinned to one view of a multi-view file has a preview of its own, which the app
+     * names {@code <diagram>-<sha1 of the aspect>.png} - measured. Without this, three macros on
+     * one file all became the same picture of the file's first page, so two of the three spots in
+     * the exported document showed a view that is not the one the page shows.</p>
+     *
+     * <p>Falls back to the diagram's own preview where the pinned one was never uploaded: the app
+     * draws such a spot from the {@code mxfile} and leaves no static picture at all, and the first
+     * view is a better answer than none.</p>
+     */
+    private String previewOf(String diagramName, String aspect) {
+        if (aspect.isEmpty()) {
+            return diagramName + ".png";
+        }
+        String pinned = diagramName + "-" + ContentHash.sha1(aspect) + ".png";
+        return attachmentNamed(pinned) == null ? diagramName + ".png" : pinned;
     }
 
     private void captionedItem(Element element) {

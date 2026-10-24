@@ -725,10 +725,6 @@ Against cwiki, space `GERDASCHEMANNTEST`:
 * a revision pushed over it with the comment `Manually revised, see #123#` is refused as well - exit 1, attachment untouched - where any hash-delimited text counting as ours had made that revision look like one of ours;
 * a page showing `1_shot.png` beside `2_shot.png` attaches both under those names, 70 and 78 bytes with their own hashes, and names the pair in a warning; shortened, one attachment would have held both pictures.
 
-What this does *not* yet do, measured on the same page: the export turns a draw.io macro into a plain image of its preview, so the republished page carries a static image rather than the macro.
-The exported diagram source is written to disk and referred to by nothing, so a publish never sends it back.
-Keeping the macro is `MacroTranslator`'s to do, and the name it would need is now the name it will find.
-
 == The external tools are pinned, because their output is the behaviour under test
 
 pandoc and asciidoctor are called as processes, and CI used to install whatever apt offered.
@@ -777,3 +773,126 @@ This is not a gap to close.
 A pandoc bump is a change to what the specifications assert, so it is precisely the change a person should read with the fixtures in hand.
 `tool-versions.yml` therefore reports drift once a week and opens an issue naming both versions and what a bump has to touch, and stops there.
 It reads the pinned versions out of `build.yml` rather than restating them, because two places to bump is one place to forget.
+
+== The file decides whether a picture is a diagram
+
+A draw.io export can keep its own source inside the picture it renders: a PNG in a `tEXt` or `zTXt` chunk, an SVG in a `content` attribute, and in both cases a whole `<mxfile>`.
+So a picture either carries a diagram or it does not, and that is the only signal this needs.
+
+An `image::x.png[...]` whose file carries one becomes the draw.io macro, with the diagram attached under the picture's base name and no extension - which is how the app binds one - and the picture attached as `<name>.png`, which is its preview.
+An `image::` whose file carries none is left exactly as it was.
+One line of AsciiDoc, two meanings, and the document says nothing about which: the author decides by exporting the picture with its source or without it.
+
+=== No setting, and what that costs
+
+There is no switch for this, because a switch would have to be answered in every project for a question the file already answers.
+
+What it costs is worth saying plainly: on a Confluence without the draw.io app installed, a picture that carries a diagram becomes a macro nothing renders.
+The run says what it did, per picture, and a dry run says it before anything is written - but there is no configuration to turn it off, and the way out is to export the picture without its source.
+If an instance without the app ever turns up, the honest fix is to ask the instance whether the app is there, not to add an option.
+
+=== The diagram's name is the picture's name
+
+Derived from the file name the document refers to, after the `<version>_` prefix an export writes is stripped off: `images/Root/3_architecture.png` is the diagram `architecture`.
+That is what makes the round trip close - the export names the file after the diagram, so the publish side reads the same name back out of it.
+
+Two consequences, both deliberate:
+
+* A picture the document carries inline as a `data:` URI is never read as a diagram.
+Such a picture has no name of its own: the store names the file after the hash of its content, so every edit of the diagram would attach it under a new name, leave the one before it behind, and move the macro to a diagram nobody can find twice.
+* Two pictures of one page whose base names agree - `x.png` and `x.svg`, both carrying a diagram - want one attachment.
+Where they carry the *same* diagram, that is one attachment and two macros on it, which is what Confluence itself writes where one diagram appears in several places.
+Where they carry different ones, whichever upload went last would decide what both macros show: the second stays a picture and the run names both files.
+
+=== An SVG still needs a PNG
+
+The app asks for `<diagramName>.png` by name, so a diagram needs a PNG whatever the document showed.
+The one beside it under the same name is the only candidate that needs neither a renderer nor a guess, and where there is none the picture stays a picture.
+Without a preview the viewer still draws the diagram in a browser, but an export to PDF has a hole - and rendering one would make publishing need draw.io, which it must not.
+
+=== The macro carries two parameters
+
+Measured by publishing the shortest macro that could work and reading back what the server resolved it to: a macro carrying only `diagramName` came back with `links: auto`, `tbstyle: top`, `border: true`, `lbox: true` and `maxScale: 1` - the same values the app writes out itself - and a `macroId` of the server's own.
+Those parameters say nothing a reader of the page would notice, and a publisher writing them would be inventing numbers it does not know.
+
+`diagramWidth` and `height` are written, because they are what reaches the page: the rendered container is `width:Wpx;height:Hpx`, and a macro without them leaves the literal `+width:${diagramWidth}px+` and `+height:${diagramHeight}px+` in the page, counted against none on either page the app wrote.
+The width is the one the document asked of the picture, so the same `image::` line puts the diagram where it put the picture; the height is the preview's own shape at that width, the diagram's size being nowhere in the file the document names.
+
+No `ac:macro-id`: Confluence assigns one on save, and a fresh one per run would change the body and rewrite the page on every publish.
+Measured, a second publish of the same document says `page hasn't changed!` and moves no attachment version.
+
+== A diagram comes back as one file, and the diagram is the master
+
+On a page a diagram is two or three attachments: the `mxfile` under a name with no extension, a preview `<name>.png`, and for each view pinned with an `aspect` a further `<name>-<sha1 of the aspect>.png`.
+Downloaded as they are, the document refers to the preview and nothing refers to the `mxfile` - so publishing that document sent a picture back and the diagram was lost.
+
+`DiagramMerge` puts the `mxfile` inside the preview, deletes the bare one, and leaves one file that is both.
+The extraction and the embedding are one class, `EmbeddedDiagram`, used by both directions.
+That is the point of it: were they two, the export could write something the publisher does not recognise, and each half would pass its own tests while the round trip broke between them.
+
+The merged file keeps the preview's name rather than the `<base>.drawio.png` docToolchain's Groovy original wrote.
+The publish side derives the diagram's name from the file name, and `x.drawio` is not `x`: renamed, a republish would attach a second diagram beside the one it came from and orphan the first.
+
+=== What the export reads, and what it names the file
+
+The source is read from the `mxfile`, never out of the preview.
+A preview is derived, and a derived file may be older than what it derives from - a preview uploaded from a draw.io export carries the state it was rendered at, and reading that would write a stale diagram into the repository as if it were current.
+
+The merged file carries the *diagram's* revision in its name although it is the preview's bytes.
+The revision is the only thing that tells the publish side whether somebody has written an attachment since the export, and the attachment whose loss matters is the diagram - a human's edit - not a preview the app regenerates.
+
+=== A preview older than its diagram
+
+Measured on a real page, after a human edited two pinned views in the Confluence editor:
+
+[cols="3,1,2,2"]
+|===
+|attachment |version |written |state
+
+|`arch-multipage` (the diagram)
+|2
+|12:48:20
+|the master, current
+
+|`arch-multipage.png` (default view)
+|2
+|12:48:20
+|maintained by the app
+
+|`arch-multipage-3f7fef…png` (pinned)
+|1
+|12:46:35
+|*stale*
+
+|`arch-multipage-62167a…png` (pinned)
+|1
+|12:46:36
+|*stale*
+|===
+
+In a browser all three are right, because the viewer draws from the `mxfile`.
+It shows wherever no JavaScript runs: Confluence's export view carries no macro at all, only those images, so a PDF of a pinned view shows the last upload.
+
+Detected by a comparison that costs nothing - the attachment listing already carries when each revision was written, so a preview older than its diagram is stale.
+No render, no further request, no heuristic.
+It is always reported, naming the view as the page names it; and drawn again only where draw.io happens to be on the `PATH`.
+Either way the exported file carries the current diagram, so what is old is the picture and not the source - and the message says so.
+
+A pinned view is drawn as *that* view or not at all.
+The file name carries the sha1 of the aspect and a hash cannot be undone, so the view's own id is read off the page's macro; where the page no longer pins it, nothing is drawn, because the wrong view is worse than an old picture of the right one.
+Measured before that was so: handed the hash, draw.io found no page of that id and drew page one, and both pinned views came back the same picture.
+
+The renderer is found by looking for the executable and not by running it - `drawio --version` answers with a Mach port error on a Mac without a window server session while the export itself works - and nothing requires it.
+
+=== What a round trip returns, measured
+
+Page `451974399`, a diagram the app drew, exported and published back into the same space and exported again:
+
+* the export writes one file, a 23 KB PNG carrying the exact `mxfile` Confluence holds, which the real draw.io command line reads back out;
+* the republished macro carries `diagramName`, `diagramWidth` 181 and `height` 141 - the same three values the app's own macro carried - and resolves with `editable: true`;
+* the second export's file is byte for byte the first export's, and its `mxfile` is identical.
+
+Where it is not equivalent: a *pinned* view does not come back pinned.
+Its macro exports as an `image::` of its own preview, so the right view is in the right place, but republished it is a picture - the aspect is nowhere in the document to put back.
+One file per view has no pinned views and does not meet this; see the showcase.
+The draft the app keeps beside a diagram is not carried back either, which is deliberate.
