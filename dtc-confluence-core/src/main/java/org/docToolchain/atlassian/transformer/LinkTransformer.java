@@ -2,7 +2,9 @@ package org.docToolchain.atlassian.transformer;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 import org.docToolchain.atlassian.constants.ConfluenceTags;
 import org.jsoup.nodes.Element;
@@ -21,7 +23,9 @@ class LinkTransformer {
                         String confluencePagePrefix,
                         String confluencePageSuffix,
                         String jiraRestApiUrl,
-                        String jiraServerId) {
+                        String jiraServerId,
+                        DocumentLinks documentLinks,
+                        String from) {
         String jiraBaseUrl = jiraBaseUrlFrom(jiraRestApiUrl);
         for (Element link : body.select("a[href]")) {
             String href = link.attr("href");
@@ -29,8 +33,51 @@ class LinkTransformer {
                 rewriteInternalLink(link, anchors, pageAnchors, confluencePagePrefix, confluencePageSuffix);
             } else if (jiraBaseUrl != null && href.startsWith(jiraBaseUrl + "/browse/")) {
                 rewriteJiraLink(link, jiraServerId);
+            } else if (namesAnotherDocument(href)) {
+                rewriteDocumentLink(link, href, documentLinks, from);
             }
         }
+    }
+
+    /**
+     * Whether a link is one document of this project pointing at another.
+     *
+     * <p>Which is what an {@code xref:other.adoc[]} has become by now: AsciiDoctor rewrites the
+     * extension, so it arrives here as {@code other.html}. Judged by that extension and nothing
+     * else, deliberately - a relative link to a PDF or an image is a link to a file and is left to
+     * the attachment handling, and a link with a scheme points out of the project entirely.</p>
+     */
+    private static boolean namesAnotherDocument(String href) {
+        if (href.isEmpty() || href.contains("://") || href.startsWith("mailto:")) {
+            return false;
+        }
+        int hash = href.indexOf('#');
+        String file = (hash < 0 ? href : href.substring(0, hash)).toLowerCase(Locale.ROOT);
+        return file.endsWith(".html") || file.endsWith(".htm");
+    }
+
+    /**
+     * Points a link at the Confluence page the other document became.
+     *
+     * <p>Left exactly as it was where this run publishes no such document, and said so rather than
+     * passed over: the link would otherwise reach Confluence as a relative link to a file that was
+     * never put there, which is what it looks like today. A reader finds that out by clicking it;
+     * the run can say it at once.</p>
+     */
+    private static void rewriteDocumentLink(Element a, String href, DocumentLinks documentLinks,
+                                            String from) {
+        Optional<DocumentLinks.Target> target = documentLinks.targetOf(from, href);
+        if (target.isEmpty()) {
+            System.out.println(">>> WARN: " + from + " links to '" + href + "', which this run"
+                    + " does not publish. The link is left as it is and will not resolve in"
+                    + " Confluence. Add that document to confluence.input, or point the link"
+                    + " somewhere this run writes.");
+            return;
+        }
+        if (a.text().isEmpty()) {
+            return;
+        }
+        linkTo(a, target.get().pageTitle(), target.get().anchor());
     }
 
     /**
@@ -67,12 +114,22 @@ class LinkTransformer {
         if (pageTitle == null || a.text().isEmpty()) {
             return;
         }
+        linkTo(a, confluencePagePrefix + pageTitle + confluencePageSuffix,
+                anchors.containsKey(anchor) ? anchor : "");
+    }
+
+    /**
+     * @param pageTitle the title as Confluence holds it, decorated already - a cross-document link
+     *                  carries the prefix and suffix of the document it points at, which need not
+     *                  be the ones of the document it sits in
+     * @param anchor    the anchor to open at, empty for the page itself
+     */
+    private static void linkTo(Element a, String pageTitle, String anchor) {
         // Confluence insists on link texts living inside CDATA, so the markup inside the link is
         // flattened to plain text. Styling within a link text is lost; there is no way around it.
         a.html(a.text());
-        a.wrap("<ac:link" + (anchors.containsKey(anchor) ? " ac:anchor=\"" + anchor + "\"" : "") + "></ac:link>")
-                .before("<ri:page ri:content-title=\""
-                        + confluencePagePrefix + pageTitle + confluencePageSuffix + "\"/>")
+        a.wrap("<ac:link" + (anchor.isEmpty() ? "" : " ac:anchor=\"" + anchor + "\"") + "></ac:link>")
+                .before("<ri:page ri:content-title=\"" + pageTitle + "\"/>")
                 // Jsoup wraps into the deepest element of the fragment, so the link text ends up
                 // inside the placeholder, which HtmlTransformer later turns into a CDATA section.
                 .wrap("<ac:plain-text-link-body>"

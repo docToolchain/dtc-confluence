@@ -9,6 +9,7 @@ import org.docToolchain.atlassian.transformer.AdmonitionTransformer;
 import org.docToolchain.atlassian.transformer.CalloutStyle;
 import org.docToolchain.atlassian.transformer.CollapsibleTransformer;
 import org.docToolchain.atlassian.transformer.DescriptionListTransformer;
+import org.docToolchain.atlassian.transformer.DocumentLinks;
 import org.docToolchain.atlassian.transformer.HtmlTransformer;
 import org.docToolchain.atlassian.transformer.InlineCommentTransformer;
 import org.docToolchain.atlassian.transformer.MarkTransformer;
@@ -43,6 +44,9 @@ public class BodyBuilder {
      * @param pagePrefix what is put in front of every page title, for a link to find the page
      * @param pageSuffix and what is put behind it
      */
+    /** What the other documents of this run publish; empty where there are none. */
+    private DocumentLinks documentLinks = DocumentLinks.NONE;
+
     public BodyBuilder(ConfigService configService, String baseUrl,
                        String pagePrefix, String pageSuffix) {
         this.configService = configService;
@@ -56,6 +60,16 @@ public class BodyBuilder {
      *                        sanitised goes back to the attachment it was taken from rather than
      *                        attaching a second file beside it
      */
+    /**
+     * @param documentLinks what the other documents of this run publish. A link from this document
+     *                      to another is a link to a file name until something knows what that
+     *                      file became, and only the run as a whole does.
+     */
+    public BodyBuilder withDocumentLinks(DocumentLinks documentLinks) {
+        this.documentLinks = documentLinks;
+        return this;
+    }
+
     public BodyBuilder withAttachmentNames(AttachmentNameLookup attachmentNames) {
         this.attachmentNames = attachmentNames;
         return this;
@@ -156,7 +170,8 @@ public class BodyBuilder {
                 .html(body.html());
 
         HtmlTransformer transformer = new HtmlTransformer()
-                .withCallouts(CalloutStyle.from(configService.getConfigProperty("confluence.callouts")));
+                .withCallouts(CalloutStyle.from(configService.getConfigProperty("confluence.callouts")))
+                .withDocumentLinks(documentLinks, baseUrl);
         Object jiraApi = configService.getConfigProperty("jira.api");
         if (jiraApi != null) {
             transformer.withJiraIntegration(String.valueOf(jiraApi));

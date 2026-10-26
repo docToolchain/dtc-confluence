@@ -22,6 +22,8 @@ public class HtmlTransformer {
     private CodeBlockTransformer codeBlockTransformer = new CodeBlockTransformer();
     private String jiraServerId;
     private String jiraBaseUrl;
+    private DocumentLinks documentLinks = DocumentLinks.NONE;
+    private String from = "";
 
     /**
      * @param calloutStyle what to do with callout markers, from {@code confluence.callouts}
@@ -33,6 +35,17 @@ public class HtmlTransformer {
 
     public HtmlTransformer withJiraIntegration(String jiraBaseUrl) {
         this.jiraBaseUrl = jiraBaseUrl;
+        return this;
+    }
+
+    /**
+     * @param documentLinks what the other documents of this run publish, so that a link from this
+     *                      one to another can find the page rather than a file name
+     * @param from          the file being published, which its links are relative to
+     */
+    public HtmlTransformer withDocumentLinks(DocumentLinks documentLinks, String from) {
+        this.documentLinks = documentLinks;
+        this.from = from;
         return this;
     }
 
@@ -48,7 +61,8 @@ public class HtmlTransformer {
                                               String confluencePageSuffix) {
         codeBlockTransformer.transformCodeBlock(body);
         linkTransformer.transformLinks(body, anchors, pageAnchors,
-                confluencePagePrefix, confluencePageSuffix, jiraBaseUrl, jiraServerId);
+                confluencePagePrefix, confluencePageSuffix, jiraBaseUrl, jiraServerId,
+                documentLinks, from);
         return sanitizeBody(body);
     }
 

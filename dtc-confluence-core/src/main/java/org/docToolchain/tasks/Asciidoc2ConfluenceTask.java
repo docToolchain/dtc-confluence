@@ -25,6 +25,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import groovy.util.ConfigObject;
+import org.docToolchain.atlassian.transformer.DocumentLinks;
 import org.docToolchain.atlassian.confluence.ConfluenceService;
 import org.docToolchain.atlassian.confluence.clients.ConfluenceApiVersion;
 import org.docToolchain.atlassian.confluence.clients.ConfluenceClient;
@@ -71,6 +72,9 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
 
     private ConfluenceClient confluenceClient;
     private String baseUrl;
+
+    /** What every document of this run publishes, so a link between two of them resolves. */
+    private DocumentLinks documentLinks = DocumentLinks.NONE;
     /** The pages of a space, as they were listed for the first input that needed them. */
     private final Map<String, Map<?, ?>> allPagesBySpace = new LinkedHashMap<>();
 
@@ -191,7 +195,9 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
         if (dryRun) {
             System.out.println("dry run: reading what is there, writing nothing");
         }
-        for (Map<?, ?> input : inputs()) {
+        List<Map<?, ?>> inputs = inputs();
+        documentLinks = indexOf(inputs);
+        for (Map<?, ?> input : inputs) {
             Object file = input.get("file");
             if (file == null) {
                 continue;
@@ -286,6 +292,68 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
         verdicts.merge(verdict, 1, Integer::sum);
         System.out.println("  " + verdict + title + (detail.isEmpty() ? "" : "   (" + detail + ")"));
         return id;
+    }
+
+    /**
+     * Works out what every document of this run will be called, before the first one is written.
+     *
+     * <p>A link from one document to another arrives as {@code <a href="other.html">}, and the page
+     * it means is one this very run creates - but each document is converted before the next has
+     * been looked at, so at that moment nothing knows the title. Hence a pass of its own.</p>
+     *
+     * <p>It costs parsing each document twice. The parse cannot be shared: building the tree takes
+     * the page bodies out of the document and rewrites what is left, so the second pass needs an
+     * untouched one. For a handful of documents that is nothing against a run that talks to a
+     * server for every page.</p>
+     *
+     * <p>A document that cannot be read is skipped without a word. Publishing it is about to fail
+     * on the same file and say so properly, and a warning from here would only arrive first and
+     * explain less.</p>
+     */
+    private DocumentLinks indexOf(List<Map<?, ?>> inputs) {
+        if (inputs.size() < 2) {
+            // Nothing to point at but itself, and a link inside one document is an anchor, which
+            // is handled where it always was.
+            return DocumentLinks.NONE;
+        }
+        DocumentLinks.Builder index = DocumentLinks.of();
+        for (Map<?, ?> input : inputs) {
+            Object file = input.get("file");
+            if (file == null) {
+                continue;
+            }
+            try {
+                PublishSettings settings = PublishSettings.of(input, confluenceSection());
+                String canonical =
+                        confluenceService.checkAndBuildCanonicalFileName(String.valueOf(file));
+                PageTree tree = new PageTreeBuilder(settings.footnoteLabel()).build(
+                        confluenceService.parseFile(new File(canonical)), null,
+                        settings.subpagesForSections());
+                if (tree.getPages().isEmpty()) {
+                    continue;
+                }
+                // Decorated with this input's own prefix and suffix, not the linking document's:
+                // two inputs may be configured differently, and a page is found by the title it
+                // was published under.
+                index.add(canonical, decorate(tree.getPages().get(0).getTitle(), settings),
+                        decorate(tree.getAnchors(), settings),
+                        decorate(tree.getPageAnchors(), settings));
+            } catch (RuntimeException unreadable) {
+                continue;
+            }
+        }
+        return index.build();
+    }
+
+    private static String decorate(String title, PublishSettings settings) {
+        return settings.pagePrefix() + title + settings.pageSuffix();
+    }
+
+    private static Map<String, String> decorate(Map<String, String> titles,
+                                                PublishSettings settings) {
+        Map<String, String> decorated = new LinkedHashMap<>();
+        titles.forEach((anchor, title) -> decorated.put(anchor, decorate(title, settings)));
+        return decorated;
     }
 
     private void publish(Map<?, ?> input, String file) {
@@ -579,6 +647,7 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
 
         PublishedBody built = new BodyBuilder(configService, baseUrl,
                 confluencePagePrefix, confluencePageSuffix)
+                .withDocumentLinks(documentLinks)
                 .withAttachmentNames(attachmentsOf(existing))
                 .build(localPage.getBody(), anchors, pageAnchors);
         String localHash = ContentHash.md5(built.storageFormat());
