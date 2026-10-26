@@ -171,6 +171,13 @@ class ConfluenceClientBaseSpec extends Specification {
             'https://example.atlassian.net'                || 'https://example.atlassian.net/wiki'
             'http://localhost:8090/confluence'             || 'http://localhost:8090/confluence'
             'confluence.example/confluence'                || ''
+            // A Data Center served at the root, which is what a page URL of
+            // https://wiki.example/pages/... says. Naming the endpoint is what gets the context
+            // out of the way; naming the host alone would assume Cloud's /wiki.
+            'https://wiki.example/rest/api'                || 'https://wiki.example'
+            'https://wiki.example/rest/api/'               || 'https://wiki.example'
+            'https://wiki.example'                         || 'https://wiki.example/wiki'
+            'https://wiki.example/'                        || 'https://wiki.example/wiki'
     }
 
     def 'retrievePageIdByName passes the title and space through to the query'() {
