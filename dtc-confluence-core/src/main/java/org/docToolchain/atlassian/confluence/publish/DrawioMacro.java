@@ -50,6 +50,49 @@ final class DrawioMacro {
         // attached. Every parameter carries text, never nothing: jsoup's HTML parser does not
         // close an empty self-closing ac:parameter, so one would swallow the parameters behind
         // it - and Confluence answers a parameter inside a parameter with a 500.
+        return withParameters(diagramName, width, height, "");
+    }
+
+    /**
+     * The same macro, pinned to one view of a diagram that holds several.
+     *
+     * <p>{@code aspect} is the {@code id} of the page to open on. Measured on Confluence Data
+     * Center 9.2.21 it sets the view the spot <em>arrives</em> at and does not lock it - no
+     * parameter does. The one setting that would, {@code simpleViewer=true}, renders the macro as
+     * a bare {@code <img>} at a preview that has to exist, which gives up the editing this is
+     * for. What survives is what matters for reading: every spot opens on its own view, two spots
+     * on one page hold apart, and a reload puts a reader who paged away back on the pinned
+     * view.</p>
+     *
+     * <p>No {@code tbstyle} either, because it buys nothing. All five values the app was offered
+     * - {@code top}, {@code hidden}, {@code inline}, {@code hover}, {@code float} - come back
+     * live and {@code editable}, and read off the page they are indistinguishable but for
+     * {@code inline}: a diagram sits there as a plain picture, and the toolbar with the page
+     * arrows <em>and the pencil</em> appears when the pointer goes over it. {@code hidden} does
+     * not hide it; it only hides it until it is wanted, which is what the others do too.</p>
+     *
+     * <p>{@code inline} is the one that differs, and it is the one to avoid: there the toolbar
+     * stays away and no way into the editor could be found. That is the trade this macro must
+     * never make - these diagrams are published rather than drawn as pictures precisely so that
+     * people who cannot touch the repository can edit them.</p>
+     *
+     * <p>{@code links=none} is written although the app would fill in {@code auto}, and it is the
+     * one deliberate exception to this class's rule of not writing what the app decides for
+     * itself. A generated diagram draws its own cross-view navigation into the picture - a box
+     * reading "&#8592; System Context" is a real link - and with {@code auto} one click turns a
+     * spot pinned to one view into another, and leaves it there. That is the difference between a
+     * reader wandering and a page showing the wrong thing.</p>
+     *
+     * @param aspect the id of the page of the diagram this spot shows
+     */
+    static String pinnedTo(String diagramName, String width, String height, String aspect) {
+        return withParameters(diagramName, width, height,
+                "<ac:parameter ac:name=\"aspect\">" + Entities.escape(aspect) + "</ac:parameter>"
+                        + "<ac:parameter ac:name=\"links\">none</ac:parameter>");
+    }
+
+    private static String withParameters(String diagramName, String width, String height,
+                                         String extra) {
         return "<ac:structured-macro ac:name=\"drawio\" ac:schema-version=\"1\">"
                 + "<ac:parameter ac:name=\"diagramName\">" + Entities.escape(diagramName)
                 + "</ac:parameter>"
@@ -58,6 +101,7 @@ final class DrawioMacro {
                 + (height.isEmpty() ? ""
                         : "<ac:parameter ac:name=\"height\">" + Entities.escape(height)
                                 + "</ac:parameter>")
+                + extra
                 + "</ac:structured-macro>";
     }
 }

@@ -79,4 +79,46 @@ class DrawioMacroSpec extends Specification {
         then:
             macro.contains('>a&quot;b</ac:parameter>')
     }
+
+    def 'a macro pinned to a view names the view and shuts off the links'() {
+        given: '''One diagram file holding several views, one spot per view. The aspect is the id
+                  of the page to open on; links=none is written although the app would fill in
+                  auto, because a generated diagram draws its own cross-view navigation into the
+                  picture and one click on it would turn this spot into another view.'''
+
+        when:
+            def macro = DrawioMacro.pinnedTo('architecture', '700', '500', 'view-core')
+
+        then:
+            macro.contains('<ac:parameter ac:name="diagramName">architecture</ac:parameter>')
+            macro.contains('<ac:parameter ac:name="aspect">view-core</ac:parameter>')
+            macro.contains('<ac:parameter ac:name="links">none</ac:parameter>')
+
+        and: '''and no tbstyle, because it buys nothing. Read off the page, all five values the
+                app takes look the same but for inline: the diagram sits there as a plain picture
+                and the toolbar - page arrows and pencil - comes up under the pointer. inline is
+                the exception and the one to avoid: there it stays away and the editor cannot be
+                reached, and a diagram nobody can edit is a picture with extra steps.'''
+            !macro.contains('tbstyle')
+            !macro.contains('simpleViewer')
+            !macro.contains('lbox')
+    }
+
+    def 'a pinned macro writes no empty parameter either'() {
+        given: 'the same 500, and the aspect parameter is one more chance at it'
+
+        expect:
+            !DrawioMacro.pinnedTo('x', '500', height, 'view-core').contains('/>')
+            !DrawioMacro.pinnedTo('x', '500', height, 'view-core').contains('></ac:parameter>')
+
+        where:
+            height << ['370', '']
+    }
+
+    def 'a quote in the view does not cut the macro short'() {
+        given: 'the aspect comes from a file name too'
+
+        expect:
+            DrawioMacro.pinnedTo('x', '500', '370', 'a"b').contains('>a&quot;b</ac:parameter>')
+    }
 }
