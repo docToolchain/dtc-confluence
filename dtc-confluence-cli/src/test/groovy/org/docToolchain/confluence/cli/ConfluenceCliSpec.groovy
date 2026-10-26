@@ -8,9 +8,19 @@ import spock.lang.Specification
  */
 class ConfluenceCliSpec extends Specification {
 
+    /**
+     * Runs the command line and returns what it wrote, as plain text.
+     *
+     * Colour is turned off explicitly. picocli decides for itself whether the output supports
+     * ANSI, and on Windows it decides yes - Windows Terminal announces itself - so the usage line
+     * arrives wrapped in escape sequences and no assertion about its text matches. Nothing here
+     * writes to a terminal anyway: this is a StringWriter, and what these specifications are
+     * about is what the command says, not how it is painted.
+     */
     private static String run(String... args) {
         def out = new StringWriter()
         def cmd = new CommandLine(new ConfluenceCli())
+        cmd.setColorScheme(CommandLine.Help.defaultColorScheme(CommandLine.Help.Ansi.OFF))
         cmd.setOut(new PrintWriter(out))
         cmd.setErr(new PrintWriter(out))
         cmd.execute(args)
