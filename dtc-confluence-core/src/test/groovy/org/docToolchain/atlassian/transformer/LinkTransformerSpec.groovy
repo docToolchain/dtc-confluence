@@ -143,18 +143,94 @@ class LinkTransformerSpec extends Specification {
     def 'without a configured Jira API nothing is rewritten as a Jira macro'() {
         given:
             def body = bodyOf('<a href="https://jira.example.com/browse/ABC-1">ABC-1</a>')
+            def said = new ByteArrayOutputStream()
+            def wasOut = System.out
+            System.out = new PrintStream(said, true, 'UTF-8')
 
         when:
-            new LinkTransformer().transformLinks(body, [:], [:], '', '', null, null, DocumentLinks.NONE, '')
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', null, null, DocumentLinks.NONE, 'manual.html')
+            System.out = wasOut
 
         then:
             body.html() == '<a href="https://jira.example.com/browse/ABC-1">ABC-1</a>'
+
+        and: 'and the missing configuration is reported, because here it cost something'
+            said.toString('UTF-8').contains('WARN')
+            said.toString('UTF-8').contains('browse/ABC-1')
+    }
+
+    def 'a document with no Jira link is not told about Jira at all'() {
+        given: '''Most documents have nothing to do with Jira, and the warning used to appear once
+                  per page of every one of them.'''
+            def body = bodyOf('<p>Plain text and <a href="https://elsewhere.example/">a link</a>.</p>')
+            def said = new ByteArrayOutputStream()
+            def wasOut = System.out
+            System.out = new PrintStream(said, true, 'UTF-8')
+
+        when:
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', null, null, DocumentLinks.NONE, 'manual.html')
+            System.out = wasOut
+
+        then:
+            said.toString('UTF-8').isEmpty()
+    }
+
+    def 'several Jira links are reported once, not once each'() {
+        given:
+            def body = bodyOf('<a href="https://jira.example.com/browse/ABC-1">one</a>' +
+                '<a href="https://jira.example.com/browse/ABC-2">two</a>' +
+                '<a href="https://jira.example.com/jira/browse/XY_Z-317">three</a>')
+            def said = new ByteArrayOutputStream()
+            def wasOut = System.out
+            System.out = new PrintStream(said, true, 'UTF-8')
+
+        when:
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', null, null, DocumentLinks.NONE, 'manual.html')
+            System.out = wasOut
+
+        then: 'the point is the missing configuration, which repeating says nothing more about'
+            said.toString('UTF-8').count('WARN') == 1
+    }
+
+    def 'a link that merely looks a little like Jira is not reported'() {
+        given: 'a false alarm is worse than silence here: it sends the reader after a setting they do not need'
+            def body = bodyOf('<a href="https://example.com/browse/catalogue">browse</a>' +
+                '<a href="https://example.com/browse/abc-1">lowercase</a>' +
+                '<a href="/browse/ABC-1">relative</a>')
+            def said = new ByteArrayOutputStream()
+            def wasOut = System.out
+            System.out = new PrintStream(said, true, 'UTF-8')
+
+        when:
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', null, null, DocumentLinks.NONE, 'manual.html')
+            System.out = wasOut
+
+        then:
+            said.toString('UTF-8').isEmpty()
+    }
+
+    def 'a Jira API URL that is not a URI is still reported'() {
+        given: 'that is a broken configuration rather than an absent one, whatever the document holds'
+            def body = bodyOf('<p>Nothing to do with Jira.</p>')
+            def said = new ByteArrayOutputStream()
+            def wasOut = System.out
+            System.out = new PrintStream(said, true, 'UTF-8')
+
+        when:
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', 'not a uri at all', null,
+                DocumentLinks.NONE, 'manual.html')
+            System.out = wasOut
+
+        then:
+            said.toString('UTF-8').contains('WARN')
+            said.toString('UTF-8').contains('not a valid URI')
     }
 
     private static DocumentLinks twoDocuments() {
         return DocumentLinks.of()
             .add('architecture.html', 'PRE-Architecture-SUF',
-                ['decisions': 'PRE-Architecture-SUF'], ['blocks': 'PRE-Building Blocks-SUF'])
+                ['decisions': 'PRE-Architecture-SUF', '_end_to_end': 'PRE-Architecture-SUF'],
+                ['blocks': 'PRE-Building Blocks-SUF'])
             .build()
     }
 
@@ -276,7 +352,27 @@ class LinkTransformerSpec extends Specification {
 
         then:
             said.toString('UTF-8').contains("Did you mean '#decisions'?")
-            said.toString('UTF-8').contains("xref:other.adoc#decisions[]")
+            said.toString('UTF-8').contains("anchor ends in '.adoc'")
+    }
+
+    def 'a generated heading id written with hyphens is pointed at the real one'() {
+        given: '''AsciiDoctor joins a generated id with '_'; the reference was written with '-'.
+                  This is what the warning is for - the document shows nothing of it.'''
+            def body = bodyOf('<a href="architecture.html#_end-to-end">End to end</a>')
+            def said = new ByteArrayOutputStream()
+            def wasOut = System.out
+            System.out = new PrintStream(said, true, 'UTF-8')
+
+        when:
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', JIRA_API, null,
+                twoDocuments(), 'manual.html')
+            System.out = wasOut
+
+        then:
+            said.toString('UTF-8').contains("Did you mean '#_end_to_end'?")
+
+        and: 'and nothing about extensions, which would only mislead here'
+            !said.toString('UTF-8').contains('extension')
     }
 
     def 'a relative link to something that is not a document is not touched or reported'() {

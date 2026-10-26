@@ -4,10 +4,12 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Which Confluence page each of this run's documents became, so that a link from one to another
@@ -87,23 +89,69 @@ public final class DocumentLinks {
         if (ownPage != null) {
             return Resolution.at(new Target(ownPage, ""));
         }
-        return Resolution.missing(wholeDocument, fragment, anchorAlmostNamed(fragment, document));
+        return Resolution.missing(wholeDocument, fragment, anchorAlmostNamed(fragment, document),
+                misplacedExtensionOn(fragment));
     }
 
     /**
-     * @return the anchor the link was reaching for, where it named one that exists but for a file
-     *         extension left on it, or empty where nothing so simple is wrong
+     * @return the anchor the link was reaching for, where it all but named one, or empty where
+     *         nothing close enough exists to be worth saying
      */
     private static String anchorAlmostNamed(String fragment, Document document) {
-        String lowercase = fragment.toLowerCase(Locale.ROOT);
-        for (String extension : MISPLACED_EXTENSIONS) {
-            if (!lowercase.endsWith(extension)) {
+        String withoutExtension = withoutAMisplacedExtension(fragment);
+        if (!withoutExtension.isEmpty() && document.carries(withoutExtension)) {
+            return withoutExtension;
+        }
+        String joinedDifferently = onlySeparatorsApart(fragment, document);
+        if (!joinedDifferently.isEmpty()) {
+            return joinedDifferently;
+        }
+        return withoutExtension.isEmpty() ? "" : onlySeparatorsApart(withoutExtension, document);
+    }
+
+    /**
+     * @return the one anchor that differs from the name given only in how its words are joined, or
+     *         empty where there is none - or more than one, which is no suggestion at all
+     */
+    private static String onlySeparatorsApart(String fragment, Document document) {
+        String wanted = joined(fragment);
+        String found = "";
+        for (String anchor : document.everyAnchor()) {
+            if (!joined(anchor).equals(wanted)) {
                 continue;
             }
-            String withoutIt = fragment.substring(0, fragment.length() - extension.length());
-            if (document.anchors.containsKey(withoutIt)
-                    || document.pageAnchors.containsKey(withoutIt)) {
-                return withoutIt;
+            if (!found.isEmpty()) {
+                return "";
+            }
+            found = anchor;
+        }
+        return found;
+    }
+
+    /**
+     * @return the name with the two ways of joining words made one, so that they compare equal.
+     *         AsciiDoctor generates a heading's id with {@code _} between the words unless
+     *         {@code :idseparator:} says otherwise, so a hand-written cross-reference tends to
+     *         hyphenate what the document underscored: {@code #_end-to-end} for {@code
+     *         _end_to_end}. Nothing in the document shows the difference.
+     */
+    private static String joined(String anchor) {
+        return anchor.toLowerCase(Locale.ROOT).replace('-', '_');
+    }
+
+    /** @return the name with a file extension taken off it, or empty if it carries none */
+    private static String withoutAMisplacedExtension(String fragment) {
+        String extension = misplacedExtensionOn(fragment);
+        return extension.isEmpty() ? ""
+                : fragment.substring(0, fragment.length() - extension.length());
+    }
+
+    /** @return the file extension the anchor ends in, which belongs to the file, or empty */
+    private static String misplacedExtensionOn(String fragment) {
+        String lowercase = fragment.toLowerCase(Locale.ROOT);
+        for (String extension : MISPLACED_EXTENSIONS) {
+            if (lowercase.endsWith(extension) && !lowercase.equals(extension)) {
+                return extension;
             }
         }
         return "";
@@ -148,19 +196,23 @@ public final class DocumentLinks {
      *                      unless that is what went wrong
      * @param nearestAnchor an anchor the document does carry and the link all but named, empty
      *                      where there is no such near miss
+     * @param misplacedExtension a file extension the anchor itself ends in, which belongs in
+     *                      front of the {@code #} and never behind it, empty for none
      */
-    public record Resolution(Optional<Target> target, String missingAnchor, String nearestAnchor) {
+    public record Resolution(Optional<Target> target, String missingAnchor, String nearestAnchor,
+                             String misplacedExtension) {
 
         private static Resolution nowhere() {
-            return new Resolution(Optional.empty(), "", "");
+            return new Resolution(Optional.empty(), "", "", "");
         }
 
         private static Resolution at(Target target) {
-            return new Resolution(Optional.of(target), "", "");
+            return new Resolution(Optional.of(target), "", "", "");
         }
 
-        private static Resolution missing(Target page, String anchor, String nearest) {
-            return new Resolution(Optional.of(page), anchor, nearest);
+        private static Resolution missing(Target page, String anchor, String nearest,
+                                          String misplacedExtension) {
+            return new Resolution(Optional.of(page), anchor, nearest, misplacedExtension);
         }
 
         /** @return whether the document the link names is one this run publishes */
@@ -176,6 +228,18 @@ public final class DocumentLinks {
 
     private record Document(String rootTitle, Map<String, String> anchors,
                             Map<String, String> pageAnchors) {
+
+        /** @return whether the document holds this anchor, as a spot on a page or as a page */
+        boolean carries(String anchor) {
+            return anchors.containsKey(anchor) || pageAnchors.containsKey(anchor);
+        }
+
+        /** @return every name a link could legitimately ask for */
+        Set<String> everyAnchor() {
+            Set<String> all = new LinkedHashSet<>(anchors.keySet());
+            all.addAll(pageAnchors.keySet());
+            return all;
+        }
     }
 
     /** Collects one document at a time, as the run walks its inputs. */

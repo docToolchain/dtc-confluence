@@ -15,7 +15,8 @@ class DocumentLinksSpec extends Specification {
             .add('/docs/build/html5/manual.html', 'The Manual',
                 ['install': 'The Manual'], [:])
             .add('/docs/build/html5/architecture.html', 'Architecture',
-                ['decisions': 'Architecture'], ['building-blocks': 'Building Blocks'])
+                ['decisions': 'Architecture', '_end_to_end': 'Architecture'],
+                ['building-blocks': 'Building Blocks'])
             .build()
     }
 
@@ -97,6 +98,55 @@ class DocumentLinksSpec extends Specification {
     def 'a heading that became a page of its own is suggested the same way'() {
         expect:
             resolve('architecture.html#building-blocks.html').nearestAnchor() == 'building-blocks'
+    }
+
+    def 'a hyphen where AsciiDoctor generated an underscore is suggested'() {
+        given: '''AsciiDoctor joins the words of a generated heading id with '_' unless
+                  :idseparator: says otherwise, and a hand-written reference tends to hyphenate
+                  what the document underscored. Nothing in the document shows the difference.'''
+
+        when:
+            def resolution = resolve('architecture.html#_end-to-end')
+
+        then:
+            resolution.anchorIsMissing()
+            resolution.nearestAnchor() == '_end_to_end'
+
+        and: 'and nothing is said about extensions, because there is none to say it about'
+            resolution.misplacedExtension().isEmpty()
+    }
+
+    def 'the other direction is suggested just as well'() {
+        expect: 'an underscore where the document hyphenated'
+            resolve('architecture.html#building_blocks').nearestAnchor() == 'building-blocks'
+    }
+
+    def 'both mistakes at once still find the anchor'() {
+        expect:
+            resolve('architecture.html#_end-to-end.adoc').nearestAnchor() == '_end_to_end'
+    }
+
+    def 'an extension on the anchor is reported even with nothing to suggest'() {
+        given: 'it is wrong on its own, whether or not the right anchor can be guessed'
+
+        when:
+            def resolution = resolve('architecture.html#nothing-like-it.adoc')
+
+        then:
+            resolution.misplacedExtension() == '.adoc'
+            resolution.nearestAnchor().isEmpty()
+    }
+
+    def 'an ambiguous near miss is no suggestion at all'() {
+        given: 'two anchors a step apart leave nothing to recommend'
+            def links = DocumentLinks.of()
+                .add('/docs/build/html5/architecture.html', 'Architecture',
+                    ['a_b': 'Architecture', 'a-b': 'Architecture'], [:])
+                .build()
+
+        expect:
+            links.resolve('/docs/build/html5/manual.html', 'architecture.html#a-b-').nearestAnchor()
+                .isEmpty()
     }
 
     def 'an anchor that merely ends in a dotted word is not second-guessed'() {

@@ -4,6 +4,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import org.docToolchain.atlassian.constants.ConfluenceTags;
 import org.jsoup.nodes.Element;
@@ -16,6 +17,18 @@ class LinkTransformer {
 
     private static final Map<String, Integer> DEFAULT_PORTS = Map.of("http", 80, "https", 443);
 
+    /**
+     * What a Jira issue link looks like from the outside, so that one can be spotted without
+     * knowing which Jira it belongs to.
+     *
+     * <p>Needed because a configured Jira is recognised by its own address, which leaves the
+     * unconfigured case unable to recognise anything at all - and warning about that on every
+     * page of every document, Jira or no Jira, is noise. A link ending in {@code /browse/ABC-1}
+     * is specific enough to be worth a word and rare enough not to cry wolf.</p>
+     */
+    private static final Pattern JIRA_ISSUE_LINK =
+            Pattern.compile("^https?://.*/browse/[A-Z][A-Z0-9_]*-[0-9]+(?:[?#].*)?$");
+
     void transformLinks(Element body,
                         Map<String, String> anchors,
                         Map<String, String> pageAnchors,
@@ -26,6 +39,7 @@ class LinkTransformer {
                         DocumentLinks documentLinks,
                         String from) {
         String jiraBaseUrl = jiraBaseUrlFrom(jiraRestApiUrl);
+        String unconfiguredJiraLink = "";
         for (Element link : body.select("a[href]")) {
             String href = link.attr("href");
             if (href.startsWith("#")) {
@@ -34,7 +48,17 @@ class LinkTransformer {
                 rewriteJiraLink(link, jiraServerId);
             } else if (namesAnotherDocument(href)) {
                 rewriteDocumentLink(link, href, documentLinks, from);
+            } else if (jiraBaseUrl == null && JIRA_ISSUE_LINK.matcher(href).matches()) {
+                unconfiguredJiraLink = href;
             }
+        }
+        if (!unconfiguredJiraLink.isEmpty()) {
+            // Once, naming one of them: the point is that the configuration is missing, and
+            // repeating it per link or per page of a document says nothing more.
+            System.out.println(">>> WARN: " + from + " links to a Jira issue ('"
+                    + unconfiguredJiraLink + "') and no Jira API URL is configured, so the link"
+                    + " stays an ordinary link instead of becoming a Jira macro. Set jira.api to"
+                    + " have it rendered as an issue.");
         }
     }
 
@@ -82,7 +106,8 @@ class LinkTransformer {
             System.out.println(">>> WARN: " + from + " links to '" + href + "'. That document is"
                     + " published, but carries no anchor '" + resolution.missingAnchor() + "', so"
                     + " the link points at the page itself instead of the spot it named."
-                    + didYouMean(resolution.nearestAnchor()));
+                    + didYouMean(resolution.nearestAnchor())
+                    + extensionBelongsToTheFile(resolution));
         }
         if (a.text().isEmpty()) {
             return;
@@ -93,14 +118,25 @@ class LinkTransformer {
 
     /**
      * @return the near miss spelled out, where there is one. It is worth saying because the
-     *         mistake behind it is invisible in the document: {@code xref:other#the-part.adoc[]}
-     *         puts the extension on the anchor rather than on the file, and AsciiDoctor passes
-     *         that through without a word.
+     *         mistakes behind it are invisible in the document: an extension behind the {@code #}
+     *         rather than in front of it, or a hyphen where AsciiDoctor generated an underscore.
+     *         Either way AsciiDoctor passes the reference through without a word.
      */
     private static String didYouMean(String nearestAnchor) {
-        return nearestAnchor.isEmpty() ? ""
-                : " Did you mean '#" + nearestAnchor + "'? The file extension belongs in front of"
-                        + " the '#', as in 'xref:other.adoc#" + nearestAnchor + "[]'.";
+        return nearestAnchor.isEmpty() ? "" : " Did you mean '#" + nearestAnchor + "'?";
+    }
+
+    /**
+     * @return a word about the extension on the anchor, where it carries one. Said even without a
+     *         near miss to offer, because it is wrong on its own: {@code xref:other#part.adoc[]}
+     *         puts the extension where the anchor belongs.
+     */
+    private static String extensionBelongsToTheFile(DocumentLinks.Resolution resolution) {
+        if (resolution.misplacedExtension().isEmpty()) {
+            return "";
+        }
+        return " Note that the anchor ends in '" + resolution.misplacedExtension() + "': a file"
+                + " extension belongs in front of the '#', as in 'xref:other.adoc#anchor[]'.";
     }
 
     /**
@@ -110,8 +146,8 @@ class LinkTransformer {
      */
     private static String jiraBaseUrlFrom(String jiraRestApiUrl) {
         if (jiraRestApiUrl == null || jiraRestApiUrl.isEmpty()) {
-            System.out.println(">>> WARN: No Jira API URL found in config, "
-                    + "the Jira extension may not work as expected.");
+            // Said nothing about here: most documents have nothing to do with Jira, and the one
+            // that does is told so by the caller, which can see whether any link looks like it.
             return null;
         }
         try {
