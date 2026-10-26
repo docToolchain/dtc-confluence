@@ -19,7 +19,7 @@ class ConfluenceCliSpec extends Specification {
      */
     private static String run(String... args) {
         def out = new StringWriter()
-        def cmd = new CommandLine(new ConfluenceCli())
+        def cmd = ConfluenceCli.commandLine()
         cmd.setColorScheme(CommandLine.Help.defaultColorScheme(CommandLine.Help.Ansi.OFF))
         cmd.setOut(new PrintWriter(out))
         cmd.setErr(new PrintWriter(out))

@@ -182,4 +182,75 @@ class CommandExecutionSpec extends Specification {
             RecordingTask.seenConfig.confluence.spaceKey == 'SPACE'
             RecordingTask.seenConfig.confluence.pageSuffix == ' (copy)'
     }
+
+    /** Runs a command through the command line this program really uses, and captures its output. */
+    private String runReporting(Object command, Throwable failure) {
+        command.useTaskFactory({ ConfigObject config, String dir ->
+            throw failure
+        } as TaskFactory)
+        def said = new StringWriter()
+        def cmd = new CommandLine(command)
+            .setExecutionExceptionHandler(new CommandFailureHandler())
+        cmd.setOut(new PrintWriter(said))
+        cmd.setErr(new PrintWriter(said))
+        lastExit = cmd.execute(['-d', docDir.toString(), '-c', 'config.groovy'] as String[])
+        return said.toString()
+    }
+
+    private int lastExit
+
+    def 'a failure is reported in words, not as a stack trace'() {
+        given: '''A message that names the address it tried and says the credentials are not what
+                  went wrong is worth nothing buried under fifteen frames of this program's own
+                  internals: the reader takes from it that something crashed.'''
+
+        when:
+            def said = runReporting(new VerifyCommand(), new IllegalStateException(
+                "Confluence did not answer as an API at 'https://wiki.example/wiki/rest/api'"))
+
+        then:
+            said.contains("Confluence did not answer as an API at 'https://wiki.example/wiki/rest/api'")
+
+        and:
+            !said.contains('java.lang.IllegalStateException')
+            !said.contains('\tat ')
+
+        and: 'reporting it in words is not the same as forgiving it'
+            lastExit == 1
+    }
+
+    def 'the cause is printed too, because it often carries the evidence'() {
+        given: 'the client says it was not an API, and the layer below says what came back instead'
+
+        when:
+            def said = runReporting(new VerifyCommand(), new IllegalStateException(
+                'did not answer as an API',
+                new IllegalArgumentException('answered 200 (text/html) with a body that is not JSON')))
+
+        then:
+            said.contains('did not answer as an API')
+            said.contains('caused by: answered 200 (text/html) with a body that is not JSON')
+            !said.contains('\tat ')
+    }
+
+    def 'a wrapper that only repeats its cause is not printed twice'() {
+        when:
+            def said = runReporting(new VerifyCommand(), new RuntimeException(
+                'java.io.IOException: refused', new IOException('refused')))
+
+        then:
+            said.count('refused') == 1
+    }
+
+    def 'a failure with nothing to say keeps its stack trace'() {
+        given: '''Printing only the type would leave the reader with less than Java gave them. A
+                  failure without a message is a defect to report, not a situation to correct.'''
+
+        when:
+            def said = runReporting(new VerifyCommand(), new NullPointerException())
+
+        then:
+            said.contains('java.lang.NullPointerException')
+            said.contains('\tat ')
+    }
 }
