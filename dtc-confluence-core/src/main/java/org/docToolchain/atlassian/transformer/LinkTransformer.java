@@ -4,7 +4,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 
 import org.docToolchain.atlassian.constants.ConfluenceTags;
 import org.jsoup.nodes.Element;
@@ -63,21 +62,45 @@ class LinkTransformer {
      * passed over: the link would otherwise reach Confluence as a relative link to a file that was
      * never put there, which is what it looks like today. A reader finds that out by clicking it;
      * the run can say it at once.</p>
+     *
+     * <p>A link into a document that <em>is</em> published, at an anchor that document does not
+     * carry, is a different matter and gets different words. It lands on the page, which is not
+     * the spot the link named but is the document the reader was after - and it is a link that
+     * works, which a relative one to an {@code .html} file never is here.</p>
      */
     private static void rewriteDocumentLink(Element a, String href, DocumentLinks documentLinks,
                                             String from) {
-        Optional<DocumentLinks.Target> target = documentLinks.targetOf(from, href);
-        if (target.isEmpty()) {
+        DocumentLinks.Resolution resolution = documentLinks.resolve(from, href);
+        if (!resolution.namesAPublishedDocument()) {
             System.out.println(">>> WARN: " + from + " links to '" + href + "', which this run"
                     + " does not publish. The link is left as it is and will not resolve in"
                     + " Confluence. Add that document to confluence.input, or point the link"
                     + " somewhere this run writes.");
             return;
         }
+        if (resolution.anchorIsMissing()) {
+            System.out.println(">>> WARN: " + from + " links to '" + href + "'. That document is"
+                    + " published, but carries no anchor '" + resolution.missingAnchor() + "', so"
+                    + " the link points at the page itself instead of the spot it named."
+                    + didYouMean(resolution.nearestAnchor()));
+        }
         if (a.text().isEmpty()) {
             return;
         }
-        linkTo(a, target.get().pageTitle(), target.get().anchor());
+        DocumentLinks.Target target = resolution.target().orElseThrow();
+        linkTo(a, target.pageTitle(), target.anchor());
+    }
+
+    /**
+     * @return the near miss spelled out, where there is one. It is worth saying because the
+     *         mistake behind it is invisible in the document: {@code xref:other#the-part.adoc[]}
+     *         puts the extension on the anchor rather than on the file, and AsciiDoctor passes
+     *         that through without a word.
+     */
+    private static String didYouMean(String nearestAnchor) {
+        return nearestAnchor.isEmpty() ? ""
+                : " Did you mean '#" + nearestAnchor + "'? The file extension belongs in front of"
+                        + " the '#', as in 'xref:other.adoc#" + nearestAnchor + "[]'.";
     }
 
     /**

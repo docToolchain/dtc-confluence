@@ -230,6 +230,53 @@ class LinkTransformerSpec extends Specification {
         and:
             said.toString('UTF-8').contains('WARN')
             said.toString('UTF-8').contains('glossary.html')
+
+        and: 'about the document, which is what is missing here'
+            said.toString('UTF-8').contains('does not publish')
+    }
+
+    def 'a link at an anchor the other document does not have lands on its page'() {
+        given: '''The document is published, only the spot within it is not there. A link to the
+                  page is not what was asked for, but it works, and a relative .html link does
+                  not.'''
+            def body = bodyOf('<a href="architecture.html#nowhere">Nowhere</a>')
+            def said = new ByteArrayOutputStream()
+            def wasOut = System.out
+            System.out = new PrintStream(said, true, 'UTF-8')
+
+        when:
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', JIRA_API, null,
+                twoDocuments(), 'manual.html')
+            System.out = wasOut
+
+        then:
+            body.html() == '<ac:link>' +
+                '<ri:page ri:content-title="PRE-Architecture-SUF" />' +
+                '<ac:plain-text-link-body><cdata-placeholder>Nowhere</cdata-placeholder></ac:plain-text-link-body>' +
+                '</ac:link>'
+
+        and: 'and the anchor is named, not the document - the document is there'
+            said.toString('UTF-8').contains('WARN')
+            said.toString('UTF-8').contains("carries no anchor 'nowhere'")
+            !said.toString('UTF-8').contains('does not publish')
+    }
+
+    def 'an extension left behind the hash is pointed out'() {
+        given: '''xref:architecture#decisions.adoc[] puts the extension on the anchor rather than
+                  on the file. Nothing in the document shows it; only the dead link does.'''
+            def body = bodyOf('<a href="architecture.html#decisions.adoc">Decisions</a>')
+            def said = new ByteArrayOutputStream()
+            def wasOut = System.out
+            System.out = new PrintStream(said, true, 'UTF-8')
+
+        when:
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', JIRA_API, null,
+                twoDocuments(), 'manual.html')
+            System.out = wasOut
+
+        then:
+            said.toString('UTF-8').contains("Did you mean '#decisions'?")
+            said.toString('UTF-8').contains("xref:other.adoc#decisions[]")
     }
 
     def 'a relative link to something that is not a document is not touched or reported'() {
