@@ -937,3 +937,111 @@ Where it is not equivalent: a *pinned* view does not come back pinned.
 Its macro exports as an `image::` of its own preview, so the right view is in the right place, but republished it is a picture - the aspect is nowhere in the document to put back.
 One file per view has no pinned views and does not meet this; see the showcase.
 The draft the app keeps beside a diagram is not carried back either, which is deliberate.
+
+== Several views of one diagram: the arrangement, and what it costs
+
+A model with several views can be drawn into one `.drawio` file, one page per view, and published to Confluence as one attachment with a macro per view, each pinned to its page with `aspect`.
+The alternative - one file per view - was measured first and is simpler, and this is still the arrangement to prefer where the views are genuinely separate drawings.
+What decides for the shared file is editing: a reader who opens any spot edits *the* model, and their change is in every view at once.
+With one file per view they edit one picture of it.
+
+The document says none of this.
+It carries ordinary `image::` lines, renders in Asciidoctor and on GitHub Pages as the flat pictures they are, and the whole arrangement is recovered from the file names at publish time.
+
+=== The pictures carry nothing, and that is the hard requirement
+
+draw.io can embed a model into a picture it exports, and it embeds the *whole* model, never a pointer into it.
+So three views exported that way are three attachments each holding all three, and a reader editing one changes nothing in the other two - which is exactly what the shared file exists to prevent.
+The document looks identical either way, which is what makes it dangerous.
+
+The publisher's rule stays "the file decides": a picture that carries a diagram is published as the diagram it carries, because changing that silently would move every existing page onto a different attachment.
+It is no longer silent, though - a picture that carries a model *and* names a view with the shared file beside it is reported, naming the sibling and saying to export without the embedded model.
+The generating side guards the same mistake from its end by failing its build when an exported picture still holds a model.
+
+=== How a file name is read, and why a plain hyphen is safe
+
+The convention is `<diagram>-<view>.<extension>`, as a generator writes it: `architecture-core.svg` beside `architecture.drawio`.
+
+A hyphen is ordinary in file names, so the name alone decides nothing.
+It only offers readings - every hyphen is a possible split, longest diagram name first - and a reading is taken only where the file it names is *there* and holds a page the tail points at.
+`build-pipeline.svg` with no `build.drawio` beside it is a picture, silently, which is the ordinary case.
+`architecture-building-blocks.svg` could be the `blocks` view of `architecture-building` or the `building-blocks` view of `architecture`, and the directory settles it.
+That also survives a diagram whose own name carries a hyphen, which a fixed split rule would not.
+
+The page is read out of the file rather than derived: the aspect is the `<diagram>` id that equals the tail, or the single id ending in `-<tail>`.
+A generator may write its pages as `view-core` and export them as `architecture-core.svg`, and nothing here has to know that prefix.
+Where two ids share a tail nothing is resolved and the picture stays a picture - pinning a spot to the wrong view reads as a page that is simply wrong, which is worse than one that is missing.
+
+The diagram is looked for beside the *picture*, not beside the document.
+It belongs to the pictures: a project with several documents over one picture directory gets one diagram per picture set, and a document that moves does not drag the model behind it.
+
+=== No view can be locked, and that is survivable
+
+Measured on Confluence Data Center 9.2.21.
+`aspect` sets the view a spot *arrives* at and does not hold it there.
+`links=none` is written all the same, and it is the one deliberate exception to not writing what the app fills in for itself: a generated diagram draws its own cross-view navigation into the picture - a box reading "&#8592; System Context" is a real link - and with the app's default one click turns a pinned spot into another view and leaves it there.
+
+No `tbstyle` value helps.
+All five the app takes come back live and editable, and by eye they are alike but for `inline`: a diagram sits on the page as a plain picture and the toolbar - the page arrows *and the pencil* - appears under the pointer.
+`inline` is the one to avoid, because there the toolbar stays away and the editor cannot be reached.
+`simpleViewer=true` does lock a view, and renders the macro as a bare `<img>` at a preview that has to exist - which gives up the editing the whole arrangement is for.
+
+So the toolbar that lets a reader page away is the toolbar that opens the editor, and the wandering cannot be removed without removing the editing.
+What rescues it: every spot opens on its own view, two spots on one page hold apart, and a reload puts a reader who paged away back on the pinned view.
+Paging away is transient, nobody is served the wrong view on arrival, and the page repairs itself on every visit.
+
+=== What a preview is for, and who makes it
+
+The app never *creates* a preview, it only maintains one.
+Measured: with the diagram attached and no preview ever uploaded, a page opened in a browser so that the app's JavaScript ran gained nothing in three minutes - one attachment, both derived names 404, the page still at version 1.
+A preview comes into being when somebody saves in the editor.
+
+So a published page nobody has edited has no static picture at all, and `<diagram>.png` is not a fallback for a pinned spot either: the export view - which is what a PDF is made of - carries one `<img>` per spot, and with only the default preview attached every one of them had an empty `src`.
+Attaching the one per-aspect preview filled exactly the spots pinned to that aspect.
+A pinned spot's static picture is `<diagram>-<sha1 of the aspect>.png` and nothing else.
+
+Uploading them is therefore a straight either/or and not a later nicety: either the page's PDF shows the diagrams, or it is blank where they are.
+It is a configuration, defaulting to on so that the multi-view path does not silently differ from the single-view one, which has always uploaded its preview.
+Not built yet; what exists today uploads the diagram and nothing else.
+
+=== A view's shape belongs to the spot, not to the diagram
+
+The single-view path carries the picture's shape with the diagram, which is right while one diagram means one picture.
+Here it is wrong: three views of one model measured 944x694, 844x974 and 844x794, and a height taken from the diagram they share squashed two of them by a third.
+Found by publishing it and reading the macros back, not by reasoning about the code.
+
+=== An inline comment cannot be anchored inside a diagram
+
+Confluence offers it - the live diagram is selectable SVG text, so highlighting a label opens the comment editor - and then refuses to save, saying the selection may contain a macro.
+Verified afterwards over REST: no inline comment on the page.
+`simpleViewer=true` is no better; there is no selectable text there at all.
+
+These pages are meant to carry review comments, so this is a constraint on the workflow and not a detail: comments go on the prose around a diagram, never into it.
+
+== A link from one document to another is resolved before anything is published
+
+An `xref:other.adoc[]` reaches the publisher as `<a href="other.html">`, and on a Confluence page that is a link to a file nobody ever put there.
+The page it means does exist - the same run publishes it - but no single document knows that: each one is converted before the next has been looked at.
+
+So the titles are collected first, in a pass of its own over every configured input, and handed to the link rewriting.
+It costs parsing each document twice, and the parse cannot be shared: building the page tree takes the bodies out of the document and rewrites what is left, so the second pass needs an untouched one.
+Against a run that talks to a server for every page that is nothing.
+
+A title carries the prefix and suffix of _its own_ input, not of the document doing the linking.
+Two inputs may be configured differently, and a page is found by the title it was actually published under.
+
+=== Three outcomes, because they call for different words
+
+A link into another document of the run can fail in two quite different ways, and saying "this run does not publish that" for both of them misleads:
+
+Resolved:: the document is published and carries the anchor, so the link becomes an `ac:link` on that page, anchor and all.
+No such document:: there is nowhere to point, so the link is left exactly as it was and the run says so.
+A reader would otherwise find out by clicking it.
+No such anchor:: the document is published, only the spot within it is not there.
+The link lands on the page: not what it asked for, but the document the reader was after, and a link that works - which a relative `.html` link in Confluence never is.
+
+The last case is almost always a mis-spelled cross-reference.
+`xref:other#the-part.adoc[]` puts the extension behind the `#`, where Asciidoctor passes it through as part of the anchor and the rendered HTML reads `other.html#the-part.adoc`.
+Nothing in the document shows it.
+So where the anchor would exist with a trailing `.adoc`, `.html` or `.htm` taken off it, the warning names it: "Did you mean `#the-part`?".
+Only those three endings, because an anchor may legitimately carry a dot and guessing past the last one would invent anchors that were never there.
