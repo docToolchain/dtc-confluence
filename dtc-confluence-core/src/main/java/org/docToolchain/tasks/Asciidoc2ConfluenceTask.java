@@ -441,6 +441,14 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
     }
 
     /** Visible to its test: what a configured folder turns into is worth stating on its own. */
+    /**
+     * @return the path as the configuration spells paths, with forward slashes. Java opens such a
+     *         path on every platform, so nothing is lost by not spelling it the local way.
+     */
+    private static String slashed(Path path) {
+        return path.toString().replace('\\', '/');
+    }
+
     List<Map<?, ?>> inputsFromFolder() {
         Object folder = configService.getConfigProperty("confluence.inputHtmlFolder");
         if (folder == null) {
@@ -453,8 +461,13 @@ public class Asciidoc2ConfluenceTask extends DocToolchainTask {
             // Relative to the folder that was walked, and composed as a path: a folder named
             // without a trailing slash would otherwise run into the file name, and two pages of
             // the same name in different subfolders would become one.
+            //
+            // Written with forward slashes whatever this machine separates paths with. The value
+            // goes into the configuration beside the src attributes of the document's own
+            // images, which are slashed, and the two are joined; a configuration written on one
+            // machine is also read on another.
             files.filter(Files::isRegularFile).forEach(file -> found.add(Map.of("file",
-                    Path.of(String.valueOf(folder)).resolve(root.relativize(file)).toString())));
+                    slashed(Path.of(String.valueOf(folder)).resolve(root.relativize(file))))));
         } catch (IOException e) {
             throw new UncheckedIOException("Cannot read " + folder, e);
         }
