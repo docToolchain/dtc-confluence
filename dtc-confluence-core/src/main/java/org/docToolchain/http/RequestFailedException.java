@@ -76,8 +76,11 @@ public class RequestFailedException extends RuntimeException {
      *
      * <p>One line because a message spread over the twenty lines of an HTML error page is harder
      * to read than one that is cut off, and because the lines around it are single lines too.</p>
+     *
+     * <p>Shared with {@link NonJsonResponseException}, which reads a body the server sent with a
+     * 2xx and has the same two reasons to bound and flatten it.</p>
      */
-    private static String serverSaid(String body) {
+    static String serverSaid(String body) {
         if (body == null || body.isBlank()) {
             return NONE;
         }

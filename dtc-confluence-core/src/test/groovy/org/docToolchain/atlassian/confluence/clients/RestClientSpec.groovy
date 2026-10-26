@@ -3,6 +3,7 @@ package org.docToolchain.atlassian.confluence.clients
 import com.sun.net.httpserver.HttpServer
 import org.apache.hc.client5.http.classic.methods.HttpGet
 import org.docToolchain.configuration.ConfigService
+import org.docToolchain.http.NonJsonResponseException
 import org.docToolchain.http.RequestFailedException
 import spock.lang.Shared
 import spock.lang.Specification
@@ -239,6 +240,50 @@ class RestClientSpec extends Specification {
             429  || 'too many requests'
             500  || 'boom'
             503  || 'service unavailable'
+    }
+
+    def 'a 2xx carrying a web page is reported as not being JSON'() {
+        given: """What an SSO proxy answers a REST call it intercepts: a 200 holding an HTML
+                  document. Parsed as JSON that raised the parser's own exception, which names
+                  neither the status nor the type the server declared."""
+            contentType = 'text/html;charset=UTF-8'
+            body = '<html><head><title>Log in</title></head><body>Please log in</body></html>'
+
+        when:
+            new RestClient(configService([credentials: 'x'])).doRequestAndFailIfNot20x(new HttpGet('/rest/api/user/current'))
+
+        then:
+            def e = thrown(NonJsonResponseException)
+            e.message.contains('200')
+            e.message.contains('text/html')
+
+        and: 'with what the page said, on one line, as a rejection carries its body'
+            e.message.contains('Please log in')
+    }
+
+    def 'a 2xx carrying an empty body is reported as not being JSON'() {
+        given: 'the parser answers an empty text with an exception of its own, which says less'
+            body = ''
+
+        when:
+            new RestClient(configService([credentials: 'x'])).doRequestAndFailIfNot20x(new HttpGet('/rest/api/user/current'))
+
+        then:
+            def e = thrown(NonJsonResponseException)
+            e.message.contains('empty body')
+    }
+
+    def 'a 2xx holding JSON is parsed whatever the server declares it to be'() {
+        given: """What the content type says is not what decides this: an instance declaring its
+                  JSON text/html worked before and has to keep working."""
+            contentType = 'text/html'
+
+        when:
+            def result = new RestClient(configService([credentials: 'x']))
+                .doRequestAndFailIfNot20x(new HttpGet('/rest/api/content/42'))
+
+        then:
+            result.id == '42'
     }
 
     def 'doRequestAndFailIfNot20x reports the status rather than a closed stream'() {
