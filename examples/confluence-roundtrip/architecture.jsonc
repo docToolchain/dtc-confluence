@@ -1,0 +1,183 @@
+{
+  "$schema": "https://raw.githubusercontent.com/docToolchain/Bausteinsicht/main/schema/bausteinsicht.schema.json",
+
+  // The building block view of dtc-confluence, as the showcase for publishing
+  // draw.io diagrams to Confluence.
+
+  "specification": {
+    "elements": {
+      "actor": {
+        "notation": "Actor",
+        "description": "A person or role that interacts with the system"
+      },
+      "system": {
+        "notation": "Software System",
+        "description": "A top-level software system",
+        "container": true
+      },
+      "external_system": {
+        "notation": "External System",
+        "description": "A system outside this project"
+      },
+      "container": {
+        "notation": "Container",
+        "description": "A deployable or embeddable unit",
+        "container": true
+      },
+      "component": {
+        "notation": "Component",
+        "description": "A package inside a container",
+        "container": true
+      },
+      "filestore": {
+        "notation": "File Store",
+        "description": "Files on disk"
+      }
+    },
+    "relationships": {
+      "uses": { "notation": "uses" },
+      "planned": { "notation": "planned", "dashed": true }
+    }
+  },
+
+  "model": {
+    "author": {
+      "kind": "actor",
+      "title": "Author",
+      "description": "Writes AsciiDoc and runs the publisher"
+    },
+
+    "dtc-confluence": {
+      "kind": "system",
+      "title": "dtc-confluence",
+      "description": "Publishes AsciiDoc to Confluence and exports Confluence pages back to AsciiDoc",
+      "children": {
+        "cli": {
+          "kind": "container",
+          "title": "cli",
+          "technology": "Java, picocli",
+          "description": "publish, export, verify, wipe, init - runs without a build tool"
+        },
+        "maven-plugin": {
+          "kind": "container",
+          "title": "maven-plugin",
+          "technology": "Java, Maven",
+          "description": "Maven integration (planned)"
+        },
+        "core": {
+          "kind": "container",
+          "title": "core",
+          "technology": "Java 17",
+          "description": "The library, bound to no build tool",
+          "children": {
+            "tasks": {
+              "kind": "component",
+              "title": "tasks",
+              "technology": "Java",
+              "description": "The drivers"
+            },
+            "publish": {
+              "kind": "component",
+              "title": "publish",
+              "technology": "Java",
+              "description": "Storage format body"
+            },
+            "transformer": {
+              "kind": "component",
+              "title": "transformer",
+              "technology": "Java, jsoup",
+              "description": "HTML to macros"
+            },
+            "export": {
+              "kind": "component",
+              "title": "export",
+              "technology": "Java, jsoup",
+              "description": "Macros back to AsciiDoc"
+            },
+            "clients": {
+              "kind": "component",
+              "title": "clients",
+              "technology": "Java, HttpClient 5",
+              "description": "REST v1 and v2"
+            },
+            "configuration": {
+              "kind": "component",
+              "title": "configuration",
+              "technology": "Java, SnakeYAML",
+              "description": "YAML and credentials"
+            }
+          }
+        },
+        "html2adoc": {
+          "kind": "container",
+          "title": "html2adoc",
+          "technology": "Java",
+          "description": "Converts HTML to AsciiDoc without pandoc"
+        }
+      }
+    },
+
+    "confluence": {
+      "kind": "external_system",
+      "title": "Confluence Data Center",
+      "technology": "REST API v1",
+      "description": "The wiki that is published to and exported from"
+    },
+    "jira": {
+      "kind": "external_system",
+      "title": "Jira",
+      "description": "Issue tracker a jira macro links to"
+    },
+    "asciidoctor": {
+      "kind": "external_system",
+      "title": "AsciiDoctor",
+      "description": "Renders AsciiDoc to the HTML that is published"
+    },
+    "pandoc": {
+      "kind": "external_system",
+      "title": "pandoc",
+      "description": "The alternative HTML to AsciiDoc converter"
+    },
+  },
+
+  "relationships": [
+    { "from": "author", "to": "dtc-confluence.cli", "label": "runs", "kind": "uses" },
+    { "from": "dtc-confluence.cli", "to": "dtc-confluence.core", "label": "calls", "kind": "uses" },
+    { "from": "dtc-confluence.maven-plugin", "to": "dtc-confluence.core", "label": "calls", "kind": "planned" },
+    { "from": "dtc-confluence.core", "to": "confluence", "label": "publishes and reads", "kind": "uses" },
+    { "from": "dtc-confluence.core", "to": "jira", "label": "links to", "kind": "uses" },
+    { "from": "dtc-confluence.core", "to": "asciidoctor", "label": "renders with", "kind": "uses" },
+    { "from": "dtc-confluence.core.export", "to": "dtc-confluence.html2adoc", "label": "converts with", "kind": "uses" },
+    { "from": "dtc-confluence.core.export", "to": "pandoc", "label": "or converts with", "kind": "uses" },
+    { "from": "dtc-confluence.core.tasks", "to": "dtc-confluence.core.publish", "label": "builds a body with", "kind": "uses" },
+    { "from": "dtc-confluence.core.tasks", "to": "dtc-confluence.core.export", "label": "exports with", "kind": "uses" },
+    { "from": "dtc-confluence.core.tasks", "to": "dtc-confluence.core.clients", "label": "sends through", "kind": "uses" },
+    { "from": "dtc-confluence.core.tasks", "to": "dtc-confluence.core.configuration", "label": "is told what to do by", "kind": "uses" },
+    { "from": "dtc-confluence.core.publish", "to": "dtc-confluence.core.transformer", "label": "rewrites with", "kind": "uses" },
+    { "from": "dtc-confluence.core.export", "to": "dtc-confluence.core.clients", "label": "reads through", "kind": "uses" },
+    { "from": "dtc-confluence.core.clients", "to": "confluence", "label": "REST", "kind": "uses" }
+  ],
+
+  "views": {
+    "context": {
+      "title": "System Context",
+      "include": ["author", "dtc-confluence", "confluence", "jira", "asciidoctor", "pandoc"],
+      "description": "dtc-confluence, who uses it and what it talks to",
+      "layout": "layered"
+    },
+    "building-blocks": {
+      "title": "Building Blocks",
+      "scope": "dtc-confluence",
+      "include": ["dtc-confluence.*", "confluence"],
+      "description": "The modules of dtc-confluence",
+      "layout": "layered"
+    },
+    "core": {
+      "title": "Core Packages",
+      "scope": "dtc-confluence.core",
+      "include": ["dtc-confluence.core.*"],
+      "description": "The packages inside dtc-confluence-core",
+      "layout": "layered"
+    }
+  }
+}

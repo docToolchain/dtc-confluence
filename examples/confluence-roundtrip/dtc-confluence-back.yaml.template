@@ -1,0 +1,13 @@
+# Rendered from the environment by run.sh into .dtc-confluence-back.yaml
+# (git-ignored). The "and back" leg: export the published page to prove the
+# picture on it is still the editable draw.io diagram, byte for byte.
+#
+# CONFLUENCE_ROOT_PAGE_ID is the id of the page the publish leg created; read it
+# from the publish output (or the page URL) and export it back.
+confluence:
+  api: ${CONFLUENCE_API}
+  spaceKey: ${CONFLUENCE_SPACE}
+  export:
+    destDir: back
+    rootPageId: '${CONFLUENCE_ROOT_PAGE_ID}'
+    downloadAttachments: true
