@@ -101,6 +101,14 @@ public class RequestFailedException extends RuntimeException {
                     "please check your credentials in config file or passed parameters";
             case HttpStatus.SC_TOO_MANY_REQUESTS ->
                     "please check if you need to decrease the rate limit in your config file";
+            // Confluence answers 404 for what is not there and for what this account may not see
+            // alike - "No space with key : X" reads like a typo either way - so the hint names
+            // both, and the one trap that looks like neither: the key is case sensitive.
+            case HttpStatus.SC_NOT_FOUND ->
+                    "please check the space key, page titles and ancestor ids in your config - "
+                            + "Confluence answers 404 both for something that is not there and "
+                            + "for something this account may not see, and a space key is "
+                            + "case sensitive";
             default ->
                     "please check your config. If you are sure that everything is correct, "
                             + "please open an issue at " + ISSUE_TRACKER;

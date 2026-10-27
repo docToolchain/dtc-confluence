@@ -30,7 +30,7 @@ class RequestFailedExceptionSpec extends Specification {
             HttpStatus.SC_BAD_REQUEST        || 'please check your config file or passed parameters'
             HttpStatus.SC_UNAUTHORIZED       || 'please check your credentials'
             HttpStatus.SC_TOO_MANY_REQUESTS  || 'decrease the rate limit'
-            HttpStatus.SC_NOT_FOUND          || 'please open an issue at'
+            HttpStatus.SC_NOT_FOUND          || 'please check the space key, page titles and ancestor ids'
             HttpStatus.SC_INTERNAL_SERVER_ERROR || 'please open an issue at'
     }
 
