@@ -1,0 +1,303 @@
+= Troubleshooting a Confluence connection
+:toc: left
+:icons: font
+
+A publish that fails fails at one of three layers, and they call for different answers:
+the endpoint, the credentials, or the content it was pointed at.
+This page settles each of them with a single command.
+
+Everything here is plain `curl`, `openssl` or `keytool`.
+Nothing on this page needs this project built or installed, so it also serves a machine that has a terminal, a token and a problem.
+Every snippet was measured against a Confluence Data Center 9.2 instance; where the measurement is surprising, it is written down with the command.
+
+== Before the first command
+
+[source,bash]
+----
+export CONFLUENCE_API=https://confluence.example.com  #<1>
+read -rs CONFLUENCE_BEARER_TOKEN                      #<2>
+export CONFLUENCE_BEARER_TOKEN
+AUTH="Authorization: Bearer $CONFLUENCE_BEARER_TOKEN"  #<3>
+----
+<1> Where Confluence is served, *including its context path* and *without* `/rest/api`: `https://host/confluence` on a typical Data Center, `https://host/wiki` on Cloud, `https://host` only where it really sits at the root.
+The commands below append `/rest/api` themselves, and `confluence.api` in the configuration takes this same value - see <<What confluence.api may say>>.
+<2> Typed, not written: a token in a command line lands in the shell history.
+<3> Only so that the lines below stay short.
+
+These are the two variables the tool itself reads, so one export serves both the commands on this page and `dtc-confluence verify` beside them - which is the point of diagnosing with the same values the run uses.
+Where the instance wants basic authentication instead, the tool reads `CONFLUENCE_CREDENTIALS` as a plain `user:token`, and `curl` takes that same value with `-u "$CONFLUENCE_CREDENTIALS"` in place of `-H "$AUTH"`.
+
+A header given with `-H "$AUTH"` is visible in `ps` while the request runs, which matters on a shared machine.
+Where that is a concern, let `curl` read both the header and the URL from its standard input instead:
+
+[source,bash]
+----
+printf 'header = "Authorization: Bearer %s"\nurl = "%s"\n' "$CONFLUENCE_BEARER_TOKEN" "$CONFLUENCE_API/rest/api/user/current" |
+  curl -s -K -
+----
+
+The examples pipe JSON through `jq`.
+Without it, `python3 -m json.tool` formats the same output.
+
+== Layer one: does an API answer there?
+
+[source,bash]
+----
+curl -s -o /dev/null -w '%{http_code} %{content_type}\n' -H "$AUTH" "$CONFLUENCE_API/rest/api/user/current"
+----
+
+`200 application/json`:: a REST endpoint answered, and the next layer is worth looking at.
+`200 text/html…`:: something in front of Confluence answered in its place - an SSO proxy serving its login page, typically.
+The credentials are not implicated, because the request never reached a REST endpoint.
+`404`:: `confluence.api` names the wrong context path.
+Try it with and without `/confluence` appended.
+
+=== What confluence.api may say
+
+`confluence.api` is deliberately forgiving: it takes anything from a host to a full API endpoint and derives the context path from it.
+Measured against a Data Center served under `/confluence`:
+
+[cols="2,1,2"]
+|===
+|Configured |Works |Derived endpoint
+
+|`https://host/confluence`
+|yes
+|`https://host/confluence/rest/api`
+
+|`https://host/confluence/rest/api`
+|yes
+|the same - `/rest/api` is recognised and not doubled
+
+|`https://host/confluence/rest/api/`
+|yes
+|the same - a trailing slash is harmless
+
+|`https://host`
+|*no*
+|`https://host/wiki/rest/api`
+|===
+
+[WARNING]
+====
+A URL with no path at all is given Cloud's context path, `/wiki`.
+On a Data Center served at the root that is wrong, and the answer is a 404 carrying Confluence's own HTML error page rather than anything about the API.
+Name the context path explicitly, even where it feels redundant.
+====
+
+So the variable on this page holds the same string as `confluence.api`, minus `/rest/api` - which is why `$CONFLUENCE_API/rest/api/...` below is the address the tool itself calls.
+A configuration that carries the full endpoint is fine for the tool and would double the path in a `curl` line, so keep the two apart in your head: the configuration tolerates both, `curl` needs the base.
+
+=== Which Confluence is this?
+
+Which version it is comes from the manifest, readable without administrator rights:
+
+[source,bash]
+----
+curl -s -H "$AUTH" "$CONFLUENCE_API/rest/applinks/1.0/manifest" | grep -oE '<version>[^<]+</version>'
+----
+
+That also settles the API version question: REST v2 exists on Cloud only, and Server and Data Center answer its paths with 404.
+This project derives that from the host name, which is what the line `confluence.useV1Api is not set; assuming Server or Data Center, using API v1 from the API URL.` reports.
+It is a statement, not a warning; setting `useV1Api` in the configuration silences it.
+
+NOTE: `/rest/api/settings/systemInfo` sounds like the right endpoint for the version and does not exist - it answers 404.
+
+== Layer two: are the credentials accepted?
+
+[source,bash]
+----
+curl -s -H "$AUTH" "$CONFLUENCE_API/rest/api/user/current" | jq '{type, username, displayName}'
+----
+
+[WARNING]
+====
+A token Confluence does not accept is *not* answered with 401.
+Measured: a bogus bearer token gets `200` and `{"type":"anonymous","displayName":"Anonymous"}`, and so does a request with no `Authorization` header at all.
+So "the call came back" proves nothing.
+The only signal that means anything is `type` reading `known` together with a user name.
+====
+
+That is what `dtc-confluence verify` checks, and why it fails on an anonymous answer rather than on the status code.
+An anonymous session is also the quiet cause of a 404 one layer down: a space that requires a login is not there as far as an anonymous reader is concerned.
+
+== Layer three: the space
+
+Two endpoints know about a space, and their messages differ enough to tell apart in a log:
+
+[source,bash]
+----
+curl -s -H "$AUTH" "$CONFLUENCE_API/rest/api/space/SPACEKEY" | jq '{key, name, type, status}' #<1>
+curl -s -H "$AUTH" "$CONFLUENCE_API/rest/api/content?limit=1&spaceKey=SPACEKEY" | jq '.size'  #<2>
+----
+<1> Answers 404 `No space found with key : SPACEKEY`.
+<2> The call publishing makes, and it answers 404 `No space with key : SPACEKEY`.
+
+What those answers mean, measured against a real instance:
+
+[cols="1,1,3"]
+|===
+|Key sent |Answer |Reading
+
+|`MAVEN`
+|200
+|The key is right and visible to this account.
+
+|`maven`
+|404
+|*A space key is case sensitive.*
+Keys are not always uppercase either - the same instance carries `GMOxDOC21es`.
+
+|`MAVENX`
+|404
+|No such key, or none this account may see.
+
+|_empty_
+|200
+|An unset key does *not* fail - Confluence answers with the whole instance.
+So a 404 proves the key did arrive.
+
+|`MAVEN ` (trailing blank)
+|200
+|Confluence does not mind; a stray blank in the configuration is not the cause.
+|===
+
+Two conclusions worth keeping:
+
+* `"data":{"authorized":false}` in that 404 says nothing about the token.
+Confluence answers 404 for what is not there and for what this account may not see alike, and sets the same flag for both.
+Layer two is where a token is settled.
+* The key publishing actually sends is in its own output, one line above the failure: `Publish ./build/html5/x.html to SPACEKEY at https://…`.
+Compare that letter for letter with the listing below, rather than with the configuration file.
+
+So: which spaces does this account see?
+
+[source,bash]
+----
+curl -s -H "$AUTH" "$CONFLUENCE_API/rest/api/space?limit=200&type=global" |
+  jq -r '.results[] | "\(.key)\t\(.name)"'
+curl -s -H "$AUTH" "$CONFLUENCE_API/rest/api/space?limit=200&type=personal" |
+  jq -r '.results[] | "\(.key)\t\(.name)"' #<1>
+----
+<1> A personal space is addressed with the tilde: `~jane`, not `jane`.
+
+A key that is in the listing in a different spelling is a spelling problem.
+A key that is missing although a browser opens it is a permission problem: the account behind the token may not view that space.
+Both are outside this tool, and neither is fixed by changing the configuration.
+
+== Layer three: the page and its ancestor
+
+[source,bash]
+----
+curl -s -H "$AUTH" --get "$CONFLUENCE_API/rest/api/content" \
+  --data-urlencode "spaceKey=SPACEKEY" \
+  --data-urlencode "title=A Page Title" \
+  --data-urlencode "expand=version,ancestors" | jq '.size, .results[0].id' #<1>
+
+curl -s -H "$AUTH" "$CONFLUENCE_API/rest/api/content/123456?expand=space,version,ancestors" |
+  jq '{title, space: .space.key, version: .version.number, ancestors: [.ancestors[].title]}' #<2>
+----
+<1> `--data-urlencode`, because a title has blanks in it.
+`0` means there is no page of that title in that space - a title is unique per space, so that is a definitive answer.
+<2> For a configured `ancestorId`: this says whether the id exists, which space it is in, and what hangs above it.
+An ancestor in the wrong space is a 404 that reads like a missing page.
+
+A 404 names what was missing, and the two messages are easy to tell apart:
+
+* `No space with key : X` - the space, see above.
+* `No content found with id: ContentId{id=999999999}` - the page or the ancestor id.
+
+== What a page actually holds
+
+The run's own output is not evidence of what reached the instance.
+Read it back:
+
+[source,bash]
+----
+curl -s -H "$AUTH" "$CONFLUENCE_API/rest/api/content/123456?expand=body.storage" |
+  jq -r '.body.storage.value' #<1>
+
+curl -s -H "$AUTH" "$CONFLUENCE_API/rest/api/content/123456/child/attachment" |
+  jq -r '.results[] | "\(.title)\t\(.extensions.fileSize)"' #<2>
+
+curl -s -H "$AUTH" "$CONFLUENCE_API/rest/api/content/123456/child/comment?location=inline" |
+  jq -r '.results[] | "\(.extensions.inlineProperties.markerRef)\t\(.extensions.inlineProperties.originalSelection)"' #<3>
+----
+<1> The storage format as the instance keeps it.
+This is where a macro parameter that did not survive, or a link that stayed an ordinary `<a href>`, becomes visible.
+<2> Attachment titles as stored.
+Compare them with the `ri:filename` values in the body above: a picture that does not render is usually a name that matches in the log and not on the wire.
+<3> Inline comments hang on markers in the body.
+A marker still listed here with text that is gone from the body is a comment about to lose its anchor.
+
+== TLS and a company certificate authority
+
+A publish that dies in the handshake is rarely about Confluence.
+Three commands separate the chain from the truststore from the tool:
+
+[source,bash]
+----
+openssl s_client -connect confluence.example.com:443 \
+  -servername confluence.example.com </dev/null 2>/dev/null |
+  openssl x509 -noout -subject -issuer #<1>
+
+curl -sS --cacert /etc/ssl/company-ca.pem -o /dev/null "$CONFLUENCE_API/rest/api/user/current" #<2>
+
+keytool -list -keystore /etc/ssl/company.p12 -storetype PKCS12 #<3>
+----
+<1> Who issued the certificate the instance presents.
+An issuer nobody has heard of is the whole problem.
+<2> If this succeeds where the tool fails, the chain is fine and the JVM's truststore is what needs the authority.
+<3> What the truststore holds.
+The entry that matters is a `trustedCertEntry` for the issuing authority.
+A store carrying only a `PrivateKeyEntry` of your own is not empty to the JVM - it trusts that one certificate and nothing else, public authorities included, which fails every other connection the run makes.
+
+The JVM is told about another truststore through the launcher, which hands `DTC_CONFLUENCE_JAVA_OPTS` to it unchanged:
+
+[source,bash]
+----
+export DTC_CONFLUENCE_JAVA_OPTS="-Djavax.net.ssl.trustStore=/etc/ssl/company.p12 \#<1>
+  -Djavax.net.ssl.trustStorePassword=secret \#<2>
+  -Djavax.net.debug=ssl:trustmanager" #<3>
+dtc-confluence verify
+----
+<1> Replaces the JDK's own truststore rather than adding to it, so this store has to carry every authority the run needs.
+<2> Only for a password-protected store; it guards the store's integrity, not its secrecy.
+<3> While diagnosing: the JVM then prints which store it loaded, as `trustStore is: /etc/ssl/company.p12`.
+Leave it out afterwards - it is loud.
+
+[WARNING]
+====
+A truststore path that does not exist is not an error.
+Measured: with `-Djavax.net.ssl.trustStore=/nope/none.p12` the JVM reports `trustStore is: …/lib/security/cacerts` and carries on with its default.
+The certificate stays untrusted and nothing says why, which is exactly what a typo in the path looks like.
+The debug line above is the only thing that shows it.
+====
+
+== A proxy in between
+
+[source,yaml]
+----
+confluence:
+  proxy:
+    schema: http
+    host: proxy.example.com
+    port: 8080
+----
+
+`curl` reaches the same proxy with `-x http://proxy.example.com:8080`, which is the quickest way to find out whether the proxy or the tool is the problem.
+Note that the JVM ignores the `https_proxy` environment variable that `curl` honours, so a run can succeed on the command line and fail from the tool for that reason alone.
+
+== Rate limits
+
+A `429` is answered with the hint to lower `confluence.rateLimit`, which is a number of requests per second.
+A large space published for the first time is the case that hits it.
+
+== Reading the tool's own output
+
+`confluence.useV1Api is not set; assuming …`:: Informational, printed whenever the setting is absent.
+`Using Confluence API V1`:: Which client was chosen.
+v1 for Server and Data Center, v2 for Cloud.
+`Publish <file> to <SPACEKEY> at <api>`:: Printed before each document, and the place to read the space key actually used.
+`something went wrong - request failed`:: Carries three lines: the status (`response`), what the server said (`reason`, Confluence's own sentence, which names the problem), and a `possible solution` for that status.
+Read `reason` first - it is the instance talking, while the hint is this project guessing.

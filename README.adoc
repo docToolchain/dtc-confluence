@@ -187,6 +187,13 @@ draw.io is never needed, in either direction.
 
 The last command, `wipe`, deletes every page in the configured space and refuses to run without `--yes-delete-every-page`.
 
+== Troubleshooting
+
+A publish that fails fails at one of three layers: the endpoint, the credentials, or the content it was pointed at.
+xref:docs/troubleshooting.adoc[The troubleshooting guide] settles each of them with a single command, in plain `curl`, `openssl` and `keytool`, so it serves a machine that has a terminal, a token and a problem rather than this project installed.
+
+It covers a 404 that names a space key, a token Confluence answers without a 401, a company certificate authority, a proxy, and how to read back what a published page really holds.
+
 == Design decisions
 
 See xref:docs/decisions.adoc[Design decisions].
