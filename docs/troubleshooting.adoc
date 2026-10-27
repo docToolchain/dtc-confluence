@@ -57,32 +57,30 @@ Try it with and without `/confluence` appended.
 `confluence.api` is deliberately forgiving: it takes anything from a host to a full API endpoint and derives the context path from it.
 Measured against a Data Center served under `/confluence`:
 
-[cols="2,1,2"]
+[cols="2,2"]
 |===
-|Configured |Works |Derived endpoint
+|Configured |Endpoint it calls
 
 |`https://host/confluence`
-|yes
 |`https://host/confluence/rest/api`
 
 |`https://host/confluence/rest/api`
-|yes
 |the same - `/rest/api` is recognised and not doubled
 
 |`https://host/confluence/rest/api/`
-|yes
 |the same - a trailing slash is harmless
 
 |`https://host`
-|*no*
-|`https://host/wiki/rest/api`
+|`https://host/rest/api` - a Data Center really served at the root
+
+|`https://tenant.atlassian.net`
+|`https://tenant.atlassian.net/wiki/rest/api` - Cloud serves Confluence under `/wiki`, and the host is what says this is Cloud
 |===
 
 [WARNING]
 ====
-A URL with no path at all is given Cloud's context path, `/wiki`.
-On a Data Center served at the root that is wrong, and the answer is a 404 carrying Confluence's own HTML error page rather than anything about the API.
-Name the context path explicitly, even where it feels redundant.
+Nothing can guess a context path, so name it where the instance has one.
+`https://host` for an instance served under `/confluence` calls `https://host/rest/api/user/current`, and the answer is a 404 carrying Confluence's own HTML error page - which is not an API answer at all, and is what the hint `a document came back rather than an API answer` reports.
 ====
 
 So the variable on this page holds the same string as `confluence.api`, minus `/rest/api` - which is why `$CONFLUENCE_API/rest/api/...` below is the address the tool itself calls.

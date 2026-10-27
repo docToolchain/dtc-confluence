@@ -141,7 +141,7 @@ public abstract class ConfluenceClient {
 
     private static String constructApiContext(String configItem) {
         try {
-            String apiContext = determineApiContext(new URIBuilder(configItem).getPath());
+            String apiContext = determineApiContext(new URIBuilder(configItem).getPath(), configItem);
             return apiContext.isEmpty() ? "" : "/" + apiContext;
         } catch (URISyntaxException e) {
             throw new IllegalArgumentException("confluence.api is not a valid URI: '" + configItem + "'", e);
@@ -152,10 +152,14 @@ public abstract class ConfluenceClient {
      * Derives the context path from whatever the user configured, which ranges from a bare host to
      * a full API endpoint.
      */
-    private static String determineApiContext(String apiPath) {
-        // no path at all, or just a slash
+    private static String determineApiContext(String apiPath, String configItem) {
+        // No path at all, or just a slash. Cloud serves Confluence under /wiki, so that is the
+        // right guess there and nowhere else: a Data Center at the root was sent to /wiki/rest/api
+        // and answered with Confluence's own 404 page, which says nothing about the cause. The
+        // host decides it, through the same test that picks the API version - deriving v1 from
+        // "not Cloud" while deriving Cloud's context path from the same URL was a contradiction.
         if (apiPath == null || apiPath.length() <= 1) {
-            return API_DEFAULT_CONTEXT;
+            return ConfluenceApiVersion.isCloud(configItem) ? API_DEFAULT_CONTEXT : "";
         }
         String remainder = apiPath
                 .substring(1)

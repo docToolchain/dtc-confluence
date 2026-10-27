@@ -180,15 +180,15 @@ class ConfluenceClientBaseSpec extends Specification {
         given: """Three faults look alike in the output of this check - a wrong address, a wrong
                   token, and something in front of Confluence answering in its place - and the
                   configured value does not say where the call goes: confluence.api takes anything
-                  from a bare host to a full endpoint, and a bare host, as here, is given Cloud's
-                  /wiki."""
+                  from a bare host to a full endpoint, and the context path is derived from
+                  it."""
             body = '{"type":"known","username":"ascheman","displayName":"Gerd Aschemann"}'
 
         when:
             def output = outputOf { client(bearerToken: 'a-personal-access-token').verifyCredentials() }
 
         then: 'the derived endpoint, printed before the answer it is about to fetch'
-            output.contains("http://127.0.0.1:${server.address.port}/wiki/rest/api/user/current")
+            output.contains("http://127.0.0.1:${server.address.port}/rest/api/user/current")
             output.indexOf('Verifying') < output.indexOf('Authenticated as')
 
         and: 'no part of the credentials is printed, not even a fragment of the token'
@@ -211,7 +211,7 @@ class ConfluenceClientBaseSpec extends Specification {
         then:
             def e = thrown(IllegalStateException)
             e.message.contains('did not answer as an API')
-            e.message.contains("http://127.0.0.1:${server.address.port}/wiki/rest/api/user/current")
+            e.message.contains("http://127.0.0.1:${server.address.port}/rest/api/user/current")
 
         and: 'the evidence that something other than the API answered'
             e.message.contains('200')
@@ -290,12 +290,15 @@ class ConfluenceClientBaseSpec extends Specification {
             'http://localhost:8090/confluence'             || 'http://localhost:8090/confluence'
             'confluence.example/confluence'                || ''
             // A Data Center served at the root, which is what a page URL of
-            // https://wiki.example/pages/... says. Naming the endpoint is what gets the context
-            // out of the way; naming the host alone would assume Cloud's /wiki.
+            // https://wiki.example/pages/... says. The host says it is not Cloud, so a URL
+            // without a path is taken at the root rather than given Cloud's /wiki.
             'https://wiki.example/rest/api'                || 'https://wiki.example'
             'https://wiki.example/rest/api/'               || 'https://wiki.example'
-            'https://wiki.example'                         || 'https://wiki.example/wiki'
-            'https://wiki.example/'                        || 'https://wiki.example/wiki'
+            'https://wiki.example'                         || 'https://wiki.example'
+            'https://wiki.example/'                        || 'https://wiki.example'
+            // Cloud without a path is the one place /wiki belongs, and the host is what says so.
+            'https://example.atlassian.net/'               || 'https://example.atlassian.net/wiki'
+            'https://EXAMPLE.ATLASSIAN.NET'                || 'https://EXAMPLE.ATLASSIAN.NET/wiki'
     }
 
     def 'retrievePageIdByName passes the title and space through to the query'() {
@@ -306,7 +309,7 @@ class ConfluenceClientBaseSpec extends Specification {
             client().retrievePageIdByName('Some Page', 'SPACE')
 
         then: 'the title is percent-encoded, not form-encoded, so a space stays a space'
-            paths.first() == '/wiki/rest/api/content?title=Some%20Page&spaceKey=SPACE'
+            paths.first() == '/rest/api/content?title=Some%20Page&spaceKey=SPACE'
     }
 
     def 'the names of a page attachments are read out of the listing'() {

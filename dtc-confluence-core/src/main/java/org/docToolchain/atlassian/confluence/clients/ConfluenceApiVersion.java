@@ -39,8 +39,12 @@ public final class ConfluenceApiVersion {
     /**
      * Recognises Cloud by host, not by substring: {@code https://example.atlassian.net.invalid/} is
      * not Cloud however much it reads like it, and a host is case insensitive.
+     *
+     * <p>Shared with {@code ConfluenceClient}, which derives the context path a URL without one
+     * gets. Two derivations from the same URL used to contradict each other: the version said
+     * Server or Data Center while the context path said Cloud.</p>
      */
-    private static boolean isCloud(String apiUrl) {
+    static boolean isCloud(String apiUrl) {
         try {
             String host = URI.create(apiUrl).getHost();
             return host != null && host.toLowerCase(Locale.ROOT).endsWith(CLOUD_HOST_SUFFIX);
