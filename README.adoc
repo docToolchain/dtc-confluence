@@ -51,6 +51,19 @@ Nothing outside the prefix is touched, so removing those two paths uninstalls it
 
 Running it needs a Java runtime of version 17 or newer, which the launcher looks for in `JAVA_HOME` and then on the `PATH`.
 
+Options for the JVM itself go in `DTC_CONFLUENCE_JAVA_OPTS`, which the launcher hands on unchanged - a truststore of your own, for instance:
+
+[source,bash]
+----
+export DTC_CONFLUENCE_JAVA_OPTS="-Djavax.net.ssl.trustStore=/etc/ssl/company.p12 \#<1>
+  -Djavax.net.ssl.trustStorePassword=secret" #<2>
+----
+<1> Replaces the JDK's own truststore, so it has to carry every authority the run needs, Confluence's among them.
+<2> Only needed if the store is password-protected; it guards the store's integrity, not its secrecy.
+
+A path that does not exist is not an error.
+The JVM falls back to its default truststore without a word, and the only symptom is a certificate that is still not trusted.
+
 == Using the command line tool
 
 Start with a configuration:
