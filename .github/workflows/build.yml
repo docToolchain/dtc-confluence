@@ -175,6 +175,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      # Whether an absent token is a fault or a fact of life: GitHub withholds
+      # secrets from a pull request raised out of a fork, and nothing in this
+      # repository can change that. Anywhere else an empty token means the secret
+      # was never set, which is a fault and is treated as one below.
+      FROM_A_FORK: >-
+        ${{ github.event_name == 'pull_request' &&
+            github.event.pull_request.head.repo.full_name != github.repository }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -192,6 +199,23 @@ jobs:
         # sonar.qualitygate.wait makes the job fail on a failing gate. Without it
         # the scanner only submits the analysis and CI stays green regardless.
         run: ./mvnw -B -ntp verify sonar:sonar -Dsonar.qualitygate.wait=true
-      - name: Skipped
-        if: env.SONAR_TOKEN == ''
-        run: echo "SONAR_TOKEN is not set - skipping analysis. See docs/decisions.adoc."
+      # A green check that analysed nothing is worse than a red one, and worse here
+      # than elsewhere: lint.yml leaves Java and Groovy to Sonar, so a silent skip
+      # means nothing analyses them while the workflow still reports success.
+      # Measured on 2026-10-27, on pull request #95: six green checks, and the
+      # Analyse step above had skipped itself on every run since the project began.
+      - name: No token where one was expected
+        if: env.SONAR_TOKEN == '' && env.FROM_A_FORK == 'false'
+        run: |
+          echo "::error::SONAR_TOKEN is not set in this repository, so nothing" \
+               "analysed Java or Groovy. Add the secret under Settings, Secrets" \
+               "and variables, Actions - or drop this job and move Java and Groovy" \
+               "back into lint.yml."
+          exit 1
+      # Not a misconfiguration, and not a contributor's to fix: the analysis
+      # follows when their branch is merged.
+      - name: Skipped for a pull request out of a fork
+        if: env.SONAR_TOKEN == '' && env.FROM_A_FORK == 'true'
+        run: |
+          echo "::warning::SONAR_TOKEN is unavailable to a pull request raised" \
+               "out of a fork - skipping analysis."
