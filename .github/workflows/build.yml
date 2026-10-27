@@ -102,6 +102,59 @@ jobs:
           asciidoctor --version | head -1
       - run: ./mvnw -B -ntp verify
 
+  # A second platform, because the ones this has cost us were platform bugs and
+  # nothing else: a path put into the configuration came out backslashed, and
+  # three specifications that had always asserted forward slashes went red on a
+  # Windows desk while every Linux run stayed green. The Java is the same; what
+  # differs is File.separator, the line endings git hands out, and the shell.
+  windows:
+    name: Windows, JDK ${{ matrix.java }}
+    runs-on: windows-latest
+    # Slower than the Linux job - a cold run is a few minutes - but nowhere near
+    # the six-hour default that a hung step would otherwise sit in.
+    timeout-minutes: 30
+    env:
+      ASCIIDOCTOR_VERSION: '2.0.26'
+    strategy:
+      fail-fast: false
+      matrix:
+        # One version here rather than three. The platform is what is under test,
+        # not the JDK, and 17 is what this releases for - so it is the one a
+        # reader on Windows is most likely to be running.
+        java: ['17']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+      # Ruby is already on the runner, so this is one gem and no cache entry -
+      # the same reasoning as on Linux. It earns its place here because the
+      # specifications it unskips are the file-writing ones: what AdocOutput
+      # writes, and whether an include lands where the directive says. Those are
+      # exactly the kind that a separator can break.
+      - name: Install asciidoctor
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          gem install --no-document asciidoctor -v "$ASCIIDOCTOR_VERSION"
+      # Not just reported: this fails the job when asciidoctor did not land on
+      # the PATH. Without it those specifications would skip themselves, the job
+      # would stay green, and the platform they are here to cover would go
+      # unchecked - quietly, which is the worst way for it to happen.
+      - name: Check the toolchain
+        run: asciidoctor --version
+      # No pandoc. Installing it here would mean a second pinned archive and a
+      # second checksum to carry, and what the one specification that needs it
+      # covers is pandoc's own text output, which does not change with the
+      # platform. It skips itself, and the run says so.
+      - name: Build
+        run: .\mvnw.cmd -B -ntp verify
+
   sonar:
     name: SonarQube Cloud
     # Analysis has to see every pull request, or the coverage number it guards
@@ -122,6 +175,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      # Whether an absent token is a fault or a fact of life: GitHub withholds
+      # secrets from a pull request raised out of a fork, and nothing in this
+      # repository can change that. Anywhere else an empty token means the secret
+      # was never set, which is a fault and is treated as one below.
+      FROM_A_FORK: >-
+        ${{ github.event_name == 'pull_request' &&
+            github.event.pull_request.head.repo.full_name != github.repository }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -139,6 +199,23 @@ jobs:
         # sonar.qualitygate.wait makes the job fail on a failing gate. Without it
         # the scanner only submits the analysis and CI stays green regardless.
         run: ./mvnw -B -ntp verify sonar:sonar -Dsonar.qualitygate.wait=true
-      - name: Skipped
-        if: env.SONAR_TOKEN == ''
-        run: echo "SONAR_TOKEN is not set - skipping analysis. See docs/decisions.adoc."
+      # A green check that analysed nothing is worse than a red one, and worse here
+      # than elsewhere: lint.yml leaves Java and Groovy to Sonar, so a silent skip
+      # means nothing analyses them while the workflow still reports success.
+      # Measured on 2026-10-27, on pull request #95: six green checks, and the
+      # Analyse step above had skipped itself on every run since the project began.
+      - name: No token where one was expected
+        if: env.SONAR_TOKEN == '' && env.FROM_A_FORK == 'false'
+        run: |
+          echo "::error::SONAR_TOKEN is not set in this repository, so nothing" \
+               "analysed Java or Groovy. Add the secret under Settings, Secrets" \
+               "and variables, Actions - or drop this job and move Java and Groovy" \
+               "back into lint.yml."
+          exit 1
+      # Not a misconfiguration, and not a contributor's to fix: the analysis
+      # follows when their branch is merged.
+      - name: Skipped for a pull request out of a fork
+        if: env.SONAR_TOKEN == '' && env.FROM_A_FORK == 'true'
+        run: |
+          echo "::warning::SONAR_TOKEN is unavailable to a pull request raised" \
+               "out of a fork - skipping analysis."

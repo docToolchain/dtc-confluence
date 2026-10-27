@@ -46,7 +46,10 @@ public class ConfigBuilder {
         ConfigObject config = isYaml(configFile.getName())
                 ? new YamlConfigReader().read(configFile.toPath())
                 : configSlurper.parse(readConfigFile());
-        config.put("docDir", configFile.getParent());
+        // With forward slashes whatever this machine separates paths with: the value is read
+        // back beside slashed paths from the document and joined with them, and a configuration
+        // written on one machine is read on another.
+        config.put("docDir", configFile.getParent().replace('\\', '/'));
         config.put("mainConfigFile", configFile.getName());
         return config;
     }

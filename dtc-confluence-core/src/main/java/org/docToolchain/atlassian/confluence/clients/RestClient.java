@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Set;
 
 import com.google.common.util.concurrent.RateLimiter;
+import groovy.json.JsonException;
 import groovy.json.JsonSlurper;
 import org.apache.hc.client5.http.ClientProtocolException;
 import org.apache.hc.core5.annotation.Contract;
@@ -25,6 +26,7 @@ import org.apache.hc.core5.http.message.BasicHeader;
 import org.apache.hc.core5.net.URIBuilder;
 import org.docToolchain.configuration.ConfigService;
 import org.docToolchain.http.BasicRestClient;
+import org.docToolchain.http.NonJsonResponseException;
 import org.docToolchain.http.RequestFailedException;
 
 /**
@@ -59,6 +61,18 @@ public class RestClient extends BasicRestClient {
          * @return {@code true} if the request should yield {@code null} instead of raising
          */
         boolean isAcceptable(ClassicHttpResponse response);
+    }
+
+    /**
+     * A successful answer as it came off the wire, before anything decided it was JSON.
+     *
+     * <p>The status and the type the server declared travel with the body because they are the
+     * evidence that something other than the API answered, and they are only in hand while the
+     * response still is. The status is the one of the last response the client was handed:
+     * measured, a {@code 302} to {@code /login.action} is followed, so a login page arrives here
+     * as a {@code 200} of {@code text/html}.</p>
+     */
+    private record ApiAnswer(int statusCode, String contentType, String body) {
     }
 
     public Object doRequestAndFailIfNot20x(ClassicHttpRequest httpRequest) {
@@ -139,8 +153,26 @@ public class RestClient extends BasicRestClient {
     private Object doRequest(ClassicHttpRequest httpRequest, RejectionPolicy onRejection) {
         rateLimiter.acquire();
         return doRequest(targetHost, httpRequest, new RestClientResponseHandler(onRejection))
-                .map(response -> (Object) new JsonSlurper().parseText(response))
+                .map(RestClient::parseJson)
                 .orElse(null);
+    }
+
+    /**
+     * @throws NonJsonResponseException where the body is not JSON, which is what an answer from
+     *         something other than the API looks like - and what the parser's own exception does
+     *         not say
+     */
+    private static Object parseJson(ApiAnswer answer) {
+        try {
+            return new JsonSlurper().parseText(answer.body());
+        } catch (JsonException | IllegalArgumentException notJson) {
+            // Both measured against a local server: an HTML document raises the JsonException
+            // ("the current character read is '<'"), an empty body the IllegalArgumentException
+            // ("Text must not be null or empty"). A body declared text/html that does hold JSON
+            // is parsed as before - what the content type says is not what decides this.
+            throw new NonJsonResponseException(answer.statusCode(), answer.contentType(),
+                    answer.body(), notJson);
+        }
     }
 
     private void initialize() {
@@ -211,7 +243,7 @@ public class RestClient extends BasicRestClient {
     }
 
     @Contract(threading = ThreadingBehavior.STATELESS)
-    private static class RestClientResponseHandler implements HttpClientResponseHandler<String> {
+    private static class RestClientResponseHandler implements HttpClientResponseHandler<ApiAnswer> {
 
         private final RejectionPolicy onRejection;
 
@@ -220,7 +252,7 @@ public class RestClient extends BasicRestClient {
         }
 
         @Override
-        public String handleResponse(ClassicHttpResponse response) throws IOException {
+        public ApiAnswer handleResponse(ClassicHttpResponse response) throws IOException {
             HttpEntity entity = response.getEntity();
             if (isNotSuccessful(response)) {
                 // Read here and nowhere else. Reading the entity after this check is what used to
@@ -234,7 +266,11 @@ public class RestClient extends BasicRestClient {
                 System.out.println("Got status code " + response.getCode());
                 return null;
             }
-            return entity == null ? null : readEntity(entity);
+            if (entity == null) {
+                return null;
+            }
+            // The type comes off the entity, and has to be read before readEntity consumes it.
+            return new ApiAnswer(response.getCode(), entity.getContentType(), readEntity(entity));
         }
 
         private static String readEntity(HttpEntity entity) throws IOException {

@@ -30,7 +30,7 @@ class RequestFailedExceptionSpec extends Specification {
             HttpStatus.SC_BAD_REQUEST        || 'please check your config file or passed parameters'
             HttpStatus.SC_UNAUTHORIZED       || 'please check your credentials'
             HttpStatus.SC_TOO_MANY_REQUESTS  || 'decrease the rate limit'
-            HttpStatus.SC_NOT_FOUND          || 'please open an issue at'
+            HttpStatus.SC_NOT_FOUND          || 'please check the space key, page titles and ancestor ids'
             HttpStatus.SC_INTERNAL_SERVER_ERROR || 'please open an issue at'
     }
 
@@ -44,6 +44,48 @@ class RequestFailedExceptionSpec extends Specification {
         and: 'and it points at the two things that can cause it'
             exception.message.contains('please check the configured API URL and network access')
             exception.message.contains('response: <none>')
+    }
+
+    def 'a document that came back instead of an API answer blames the address'() {
+        given: "what a Data Center answers a URL whose context path is missing: its own error page"
+            def errorPage = '<!DOCTYPE html> <html lang="en-GB"><head><title>Page Not Found</title>'
+
+        when:
+            def exception = new RequestFailedException(
+                    response(HttpStatus.SC_NOT_FOUND, 'Not Found'), errorPage, null)
+
+        then: 'the hint is about where the request went, not about what it asked for'
+            exception.message.contains('did not reach a REST endpoint')
+            exception.message.contains('context path in confluence.api')
+
+        and: 'not the content hint, which would send the reader to a space key that is not in question'
+            !exception.message.contains('space key, page titles')
+    }
+
+    def 'a login page answered with 200 is told from a rejected user'() {
+        given: 'an SSO proxy in front of Confluence, which answers the REST call with its own page'
+            def loginPage = '<html><head><title>Log in</title></head><body>Please log in</body></html>'
+
+        when:
+            def exception = new RequestFailedException(
+                    response(HttpStatus.SC_UNAUTHORIZED, 'Unauthorized'), loginPage, null)
+
+        then: 'the credentials are not blamed for an answer that never came from the API'
+            exception.message.contains('did not reach a REST endpoint')
+            !exception.message.contains('please check your credentials')
+    }
+
+    def "Confluence's own JSON keeps the hint for its status"() {
+        given: 'the API talking, which is the case the status code describes'
+            def said = '{"statusCode":404,"message":"No space with key : NOPE"}'
+
+        when:
+            def exception = new RequestFailedException(
+                    response(HttpStatus.SC_NOT_FOUND, 'Not Found'), said, null)
+
+        then:
+            exception.message.contains('please check the space key, page titles and ancestor ids')
+            !exception.message.contains('did not reach a REST endpoint')
     }
 
     def 'the underlying reason is carried, as message and as cause'() {

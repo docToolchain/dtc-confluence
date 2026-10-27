@@ -32,8 +32,11 @@ fi
     fail "cannot find dtc-confluence.jar below ${script_dir}/.. - is the installation complete?"
 
 # "17.0.9" and "21" both mean 17 or 21; "1.8.0_352" means 8.
+# The version line is picked out of the whole output rather than taken as the first one:
+# with JAVA_TOOL_OPTIONS or _JAVA_OPTIONS set, the JVM announces that first and the version
+# follows below it.
 java_major() {
-    version=$("$1" -version 2>&1 | head -1 | sed -n 's/.*version "\([^"]*\)".*/\1/p')
+    version=$("$1" -version 2>&1 | sed -n 's/.*version "\([^"]*\)".*/\1/p' | head -1)
     case "${version}" in
         1.*) echo "${version#1.}" | cut -d. -f1 ;;
         '')  echo 0 ;;
@@ -54,4 +57,8 @@ if [ "${major}" -lt "${MINIMUM_JAVA}" ]; then
     fail "${java_cmd} is Java ${major}, but ${MINIMUM_JAVA} or newer is required. Set JAVA_HOME to one."
 fi
 
-exec "${java_cmd}" -jar "${jar}" "$@"
+# Options for the JVM itself, which the tool's own arguments cannot carry - a company truststore,
+# say: DTC_CONFLUENCE_JAVA_OPTS="-Djavax.net.ssl.trustStore=/etc/ssl/company.p12". Unquoted on
+# purpose, so that several options in one variable are passed as several arguments.
+# shellcheck disable=SC2086
+exec "${java_cmd}" ${DTC_CONFLUENCE_JAVA_OPTS:-} -jar "${jar}" "$@"

@@ -1,0 +1,14 @@
+# Rendered from the environment by run.sh into .dtc-confluence.yaml (git-ignored,
+# overwritten on every run). Edit THIS template, not the rendered file.
+#
+# Publishes ONLY to the space named in CONFLUENCE_SPACE. Point it at a space you
+# own; never at a space you only have read access to.
+confluence:
+  api: ${CONFLUENCE_API}
+  spaceKey: ${CONFLUENCE_SPACE}
+  subpagesForSections: 0
+  # draw.io diagrams arrive as attachments, so this has to be on.
+  enableAttachments: true
+  input:
+    - file: architecture.html
+      ancestorId: '${CONFLUENCE_ANCESTOR_ID}'

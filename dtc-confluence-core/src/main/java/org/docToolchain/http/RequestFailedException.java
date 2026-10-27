@@ -66,7 +66,7 @@ public class RequestFailedException extends RuntimeException {
         return "something went wrong - request failed ("
                 + "\nresponse: " + responseLog + ", "
                 + "\nreason: " + reasonLog + ", "
-                + "\npossible solution: " + possibleSolution(response)
+                + "\npossible solution: " + possibleSolution(response, body)
                 + ")";
     }
 
@@ -76,8 +76,11 @@ public class RequestFailedException extends RuntimeException {
      *
      * <p>One line because a message spread over the twenty lines of an HTML error page is harder
      * to read than one that is cut off, and because the lines around it are single lines too.</p>
+     *
+     * <p>Shared with {@link NonJsonResponseException}, which reads a body the server sent with a
+     * 2xx and has the same two reasons to bound and flatten it.</p>
      */
-    private static String serverSaid(String body) {
+    static String serverSaid(String body) {
         if (body == null || body.isBlank()) {
             return NONE;
         }
@@ -87,9 +90,19 @@ public class RequestFailedException extends RuntimeException {
                 : oneLine.substring(0, BODY_LIMIT) + CUT_OFF;
     }
 
-    private static String possibleSolution(HttpResponse response) {
+    private static String possibleSolution(HttpResponse response, String body) {
         if (response == null) {
             return "no response was received - please check the configured API URL and network access";
+        }
+        // Before the status code, because the status says what went wrong with the request while
+        // this says the request never reached the API at all. Measured: a configured URL without
+        // a context path was answered 404 with Confluence's own error page, and the hint sent the
+        // reader to the space key, where there was no space in the question.
+        if (looksLikeADocument(body)) {
+            return "a document came back rather than an API answer, so the request did not reach "
+                    + "a REST endpoint - please check the context path in confluence.api, and "
+                    + "whether something in front of Confluence, an SSO proxy for instance, "
+                    + "answered in its place";
         }
         return switch (response.getCode()) {
             case HttpStatus.SC_BAD_REQUEST ->
@@ -98,10 +111,27 @@ public class RequestFailedException extends RuntimeException {
                     "please check your credentials in config file or passed parameters";
             case HttpStatus.SC_TOO_MANY_REQUESTS ->
                     "please check if you need to decrease the rate limit in your config file";
+            // Confluence answers 404 for what is not there and for what this account may not see
+            // alike - "No space with key : X" reads like a typo either way - so the hint names
+            // both, and the one trap that looks like neither: the key is case sensitive.
+            case HttpStatus.SC_NOT_FOUND ->
+                    "please check the space key, page titles and ancestor ids in your config - "
+                            + "Confluence answers 404 both for something that is not there and "
+                            + "for something this account may not see, and a space key is "
+                            + "case sensitive";
             default ->
                     "please check your config. If you are sure that everything is correct, "
                             + "please open an issue at " + ISSUE_TRACKER;
         };
+    }
+
+    /**
+     * @return whether the body is markup rather than the JSON the API answers with - an HTML error
+     *         page, a login page, or the XML a servlet container serves. Anything that opens with
+     *         a tag qualifies: what it is matters less than what it is not.
+     */
+    private static boolean looksLikeADocument(String body) {
+        return body != null && body.stripLeading().startsWith("<");
     }
 
     private static String statusLine(HttpResponse response) {

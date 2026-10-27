@@ -89,6 +89,11 @@ publisher verified against a real instance (ASF cwiki, Confluence Data Center 9.
   still read, so an existing project keeps working unconverted.
 - `init` writes a configuration to start from; `verify` checks URL and credentials; `wipe` deletes
   every page in a space and refuses to run without `--yes-delete-every-page`.
+- `verify` prints the endpoint it derived from `confluence.api` before it asks - the configured
+  value ranges from a bare host, which is given Cloud's `/wiki`, to a full endpoint - and tells an
+  answer that is not an API answer from a rejected user. A REST call that lands on an SSO login
+  page is answered with an HTML page and status 200; that used to be reported as "the API resolved
+  to an anonymous user", which sent the reader to a token that was correct all along.
 - Credentials come from the environment (`CONFLUENCE_BEARER_TOKEN` or `CONFLUENCE_CREDENTIALS`),
   never from the configuration file.
 

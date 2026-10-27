@@ -26,7 +26,16 @@ public class ConfluenceCli implements Runnable {
         spec.commandLine().usage(spec.commandLine().getOut());
     }
 
+    /**
+     * @return the command line as this program runs it, which a test runs too - a handler
+     *         installed in {@link #main} alone would be the one thing no specification sees
+     */
+    static CommandLine commandLine() {
+        return new CommandLine(new ConfluenceCli())
+                .setExecutionExceptionHandler(new CommandFailureHandler());
+    }
+
     public static void main(String[] args) {
-        System.exit(new CommandLine(new ConfluenceCli()).execute(args));
+        System.exit(commandLine().execute(args));
     }
 }

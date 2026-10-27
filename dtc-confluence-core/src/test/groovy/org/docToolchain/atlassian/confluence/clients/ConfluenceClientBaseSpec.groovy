@@ -18,8 +18,17 @@ class ConfluenceClientBaseSpec extends Specification {
     @Shared
     int status = 200
 
+    /** The body to answer with, or null to answer with no body at all. */
     @Shared
     String body = ''
+
+    /** What the server declares the body to be; a login page says text/html. */
+    @Shared
+    String contentType = null
+
+    /** Where a REST call is sent instead of being answered, as an SSO proxy sends it. */
+    @Shared
+    String redirectTo = null
 
     @Shared
     List<String> paths = []
@@ -28,6 +37,20 @@ class ConfluenceClientBaseSpec extends Specification {
         server = HttpServer.create(new InetSocketAddress('127.0.0.1', 0), 0)
         server.createContext('/') { exchange ->
             paths << exchange.requestURI.toString()
+            if (redirectTo != null && exchange.requestURI.toString().contains('/rest/api')) {
+                exchange.responseHeaders.set('Location', redirectTo)
+                exchange.sendResponseHeaders(302, -1)
+                exchange.close()
+                return
+            }
+            if (contentType != null) {
+                exchange.responseHeaders.set('Content-Type', contentType)
+            }
+            if (body == null) {
+                exchange.sendResponseHeaders(status, -1)
+                exchange.close()
+                return
+            }
             byte[] payload = body.bytes
             exchange.sendResponseHeaders(status, payload.length)
             exchange.responseBody.withStream { it.write(payload) }
@@ -42,12 +65,28 @@ class ConfluenceClientBaseSpec extends Specification {
     def setup() {
         paths.clear()
         status = 200
+        body = ''
+        contentType = null
+        redirectTo = null
     }
 
-    private ConfluenceClient client() {
+    private ConfluenceClient client(Map alsoConfigured = [:]) {
         ConfigObject config = new ConfigObject()
-        config.confluence = [api: "http://127.0.0.1:${server.address.port}", credentials: 'x']
+        config.confluence = [api: "http://127.0.0.1:${server.address.port}",
+                             credentials: 'x'] + alsoConfigured
         return new ConfluenceClientV1(new ConfigService(config))
+    }
+
+    private String outputOf(Closure work) {
+        def captured = new ByteArrayOutputStream()
+        def previous = System.out
+        System.out = new PrintStream(captured, true, 'UTF-8')
+        try {
+            work()
+        } finally {
+            System.out = previous
+        }
+        return captured.toString('UTF-8')
     }
 
     def 'the hash in a version comment is read only where it is one of ours'() {
@@ -137,6 +176,85 @@ class ConfluenceClientBaseSpec extends Specification {
             thrown(RequestFailedException)
     }
 
+    def 'verifyCredentials names the address it is about to use'() {
+        given: """Three faults look alike in the output of this check - a wrong address, a wrong
+                  token, and something in front of Confluence answering in its place - and the
+                  configured value does not say where the call goes: confluence.api takes anything
+                  from a bare host to a full endpoint, and the context path is derived from
+                  it."""
+            body = '{"type":"known","username":"ascheman","displayName":"Gerd Aschemann"}'
+
+        when:
+            def output = outputOf { client(bearerToken: 'a-personal-access-token').verifyCredentials() }
+
+        then: 'the derived endpoint, printed before the answer it is about to fetch'
+            output.contains("http://127.0.0.1:${server.address.port}/rest/api/user/current")
+            output.indexOf('Verifying') < output.indexOf('Authenticated as')
+
+        and: 'no part of the credentials is printed, not even a fragment of the token'
+            !output.contains('a-personal-access-token')
+            !output.contains('a-personal')
+    }
+
+    def 'verifyCredentials blames the address, not the credentials, for a login page'() {
+        given: """What a customer instance behind an SSO proxy answers: the REST call is redirected
+                  to a login page, the client follows it, and an HTML document arrives with status
+                  200. Reported as an anonymous user, that sent the reader to the token while the
+                  request had never reached a REST endpoint."""
+            redirectTo = '/login.action?os_destination=%2Frest%2Fapi'
+            contentType = 'text/html;charset=UTF-8'
+            body = '<html><head><title>Log in</title></head><body>Please log in</body></html>'
+
+        when:
+            client().verifyCredentials()
+
+        then:
+            def e = thrown(IllegalStateException)
+            e.message.contains('did not answer as an API')
+            e.message.contains("http://127.0.0.1:${server.address.port}/rest/api/user/current")
+
+        and: 'the evidence that something other than the API answered'
+            e.message.contains('200')
+            e.message.contains('text/html')
+
+        and: 'the two things that cause it, and the one thing that does not'
+            e.message.contains('context path')
+            e.message.contains('SSO proxy')
+            e.message.contains('credentials are not implicated')
+            !e.message.contains('anonymous')
+            !e.message.contains('bearerToken')
+    }
+
+    def 'verifyCredentials reports a web page served without a redirect the same way'() {
+        given: 'a gateway that answers in place of Confluence need not redirect first'
+            contentType = 'text/html'
+            body = '<html><body>Not Confluence</body></html>'
+
+        when:
+            client().verifyCredentials()
+
+        then:
+            def e = thrown(IllegalStateException)
+            e.message.contains('did not answer as an API')
+            !e.message.contains('anonymous')
+    }
+
+    def 'verifyCredentials does not blame the credentials for an answer with no content'() {
+        given: """An answer carrying nothing parsed to nothing, and nothing was read as an
+                  anonymous user - the same misdiagnosis by another route. 204 is what reaches
+                  this: the client hands over a response without an entity at all."""
+            status = 204
+            body = null
+
+        when:
+            client().verifyCredentials()
+
+        then:
+            def e = thrown(IllegalStateException)
+            e.message.contains('did not answer as an API')
+            !e.message.contains('bearerToken')
+    }
+
     def 'retrieveFullPageById answers an empty map when there is no such page'() {
         given:
             status = 404
@@ -171,6 +289,16 @@ class ConfluenceClientBaseSpec extends Specification {
             'https://example.atlassian.net'                || 'https://example.atlassian.net/wiki'
             'http://localhost:8090/confluence'             || 'http://localhost:8090/confluence'
             'confluence.example/confluence'                || ''
+            // A Data Center served at the root, which is what a page URL of
+            // https://wiki.example/pages/... says. The host says it is not Cloud, so a URL
+            // without a path is taken at the root rather than given Cloud's /wiki.
+            'https://wiki.example/rest/api'                || 'https://wiki.example'
+            'https://wiki.example/rest/api/'               || 'https://wiki.example'
+            'https://wiki.example'                         || 'https://wiki.example'
+            'https://wiki.example/'                        || 'https://wiki.example'
+            // Cloud without a path is the one place /wiki belongs, and the host is what says so.
+            'https://example.atlassian.net/'               || 'https://example.atlassian.net/wiki'
+            'https://EXAMPLE.ATLASSIAN.NET'                || 'https://EXAMPLE.ATLASSIAN.NET/wiki'
     }
 
     def 'retrievePageIdByName passes the title and space through to the query'() {
@@ -181,7 +309,7 @@ class ConfluenceClientBaseSpec extends Specification {
             client().retrievePageIdByName('Some Page', 'SPACE')
 
         then: 'the title is percent-encoded, not form-encoded, so a space stays a space'
-            paths.first() == '/wiki/rest/api/content?title=Some%20Page&spaceKey=SPACE'
+            paths.first() == '/rest/api/content?title=Some%20Page&spaceKey=SPACE'
     }
 
     def 'the names of a page attachments are read out of the listing'() {

@@ -1,0 +1,164 @@
+= Confluence Round-Trip Example
+:toc:
+
+From a Bausteinsicht model to editable draw.io diagrams on a single Confluence
+page, with nothing but the two CLIs - and the same document rendering cleanly as
+plain pictures everywhere else (HTML, JBake, PDF).
+
+The model here is `dtc-confluence`'s own architecture, so the example documents
+the very tool it publishes with.
+
+[IMPORTANT]
+====
+This is _variant B_: one draw.io file, several views on one page.
+It is runnable with `dtc-confluence` built from the `feature/drawio-aspect-publish`
+branch - its publish resolves the shared `architecture.drawio` from the per-view
+image names; the single-view `develop` path does not do the shared-file arrangement.
+The decisions behind it, and what was measured to reach them, are in
+`../../docs/decisions.adoc` under "Several views of one diagram"; the
+dtc-confluence task is in `HANDOFF-dtc-confluence-aspect-publish.adoc`.
+====
+
+== What it demonstrates
+
+One model, one Confluence page, three views, one shared draw.io file.
+Each view arrives as a draw.io diagram the reader can open and edit in
+Confluence, not a flat picture, and all three are backed by the single file.
+The same `architecture.adoc` renders as plain SVG images in any other
+Asciidoctor target.
+
+== How the pieces divide
+
+* The author writes `architecture.adoc` by hand, with plain
+  `image::architecture-<view>.svg[]` lines.
+  It stays a portable, target-neutral document.
+* Bausteinsicht generates what the document points at: `architecture.drawio`
+  (via `sync`) and one plain SVG per view (via `export`), named
+  `architecture-<view>.svg` - its native output, no special naming needed.
+  The images carry no embedded model.
+* Asciidoctor renders `architecture.adoc` to each target; outside Confluence
+  the views are just SVG pictures.
+* `dtc-confluence publish` attaches the single `architecture.drawio` once and
+  emits one editable `drawio` macro per view, each set to arrive on its view via
+  `aspect`, with `links=none`.
+  No parameter fully locks a spot while keeping it editable, but the page
+  self-heals to the right view on reload, so paging away is transient.
+  Per-view previews are rendered by `dtc-confluence` from the attached file
+  behind a config switch (default on); turn it off for a purely in-browser
+  workflow.
+
+== Prerequisites
+
+* `bausteinsicht` on `PATH`, or `BAUSTEINSICHT` pointing at the binary.
+* `dtc-confluence.jar`, with `DTC_CONFLUENCE_JAR` pointing at it.
+* `asciidoctor` and a draw.io CLI (`bausteinsicht` finds draw.io on its own).
+* A Confluence Data Center instance and a personal access token.
+
+== Configuration
+
+Everything site-specific comes from the environment, so no secret and no URL is
+ever written to a file or put on a command line.
+Set these before running:
+
+[source,bash]
+----
+export CONFLUENCE_API=https://wiki.example.com/confluence
+export CONFLUENCE_SPACE=YOURSPACE          # a space you OWN, not a read-only one
+export CONFLUENCE_ANCESTOR_ID=123456       # parent page new pages hang under
+export CONFLUENCE_BEARER_TOKEN=...         # or CONFLUENCE_CREDENTIALS=user:token
+----
+
+`run.sh` renders `.dtc-confluence.yaml` from `dtc-confluence.yaml.template` with
+these values; the rendered file is git-ignored.
+Keep the token in direnv or a secrets manager:
+
+[source,bash]
+----
+direnv exec /path/to/secrets-dir sh -c \
+  'CONFLUENCE_BEARER_TOKEN="$MY_TOKEN" ./run.sh publish'
+----
+
+== The recipe
+
+[source,bash]
+----
+./run.sh build              # legs 1-3, local only, writes no Confluence
+./run.sh publish --dry-run  # read everything, write nothing - run this first
+./run.sh publish            # publish for real
+./run.sh back               # export the page back (needs CONFLUENCE_ROOT_PAGE_ID)
+----
+
+The legs `run.sh` chains:
+
+. `bausteinsicht sync` turns the model into `architecture.drawio` - one `mxfile`,
+  one `<diagram>` per view, with deterministic ids `view-<key>`.
+. `bausteinsicht export` writes one plain SVG per view, named
+  `architecture-<view>.svg`, carrying no embedded model.
+. `asciidoctor` renders `architecture.adoc` to the HTML that is published.
+  The only lines that matter are the `image::architecture-<view>.svg[...]` ones.
+. `dtc-confluence publish` resolves the shared `architecture.drawio` from the
+  image names (matching each name to a page in the file), attaches it once, and
+  writes one `drawio` macro per view with the right `aspect`.
+
+== Why SVG
+
+SVG scales without quality loss and renders in every non-Confluence target -
+plain Asciidoctor HTML, GitHub Pages, the IntelliJ AsciiDoc plugin, JBake - and
+matches the repository's "commit diagrams as SVG" convention.
+On screen in Confluence the diagram is drawn live from the attached draw.io
+file; `dtc-confluence` also renders a per-view preview (default on) so the
+Confluence page exports correctly.
+A PNG emitted by Bausteinsicht is only a separate fallback for a non-Confluence
+PDF toolchain that cannot render the SVG (see `../../docs/decisions.adoc`,
+`Q-format`).
+
+== Rules that are not negotiable
+
+* Publish ONLY to a space you own.
+  Reading another space is fine; writing to it is not.
+* `--dry-run` reads everything and writes nothing - run it first whenever the
+  document changed.
+* The token is passed through the environment, never printed, never written to
+  a file, never put on a command line.
+* Content published to a shared space (e.g. the ASF wiki) is written in English.
+
+== What it produces, measured
+
+Published to a Confluence Data Center 9.2.21 and read back over REST, not inferred:
+
+[source]
+----
+attachments:  architecture   46850 bytes        <1>
+
+aspect=view-context          height=515  links=none
+aspect=view-building-blocks  height=808  links=none
+aspect=view-core             height=659  links=none
+
+view-file macros: 0 | ac:image elements: 0      <2>
+----
+<1> One attachment for three views, extension-less, which is what the draw.io app binds to.
+<2> The diagram is attached outright, so nothing has to be linked to make that possible.
+
+Each view keeps its own shape: the three are 944x694, 844x974 and 844x794, and a height taken from the diagram they share would have squashed two of them by a third.
+
+=== How a name is read
+
+A hyphen is ordinary in file names, so the name alone decides nothing.
+It only offers readings, and the directory settles them: `architecture-building-blocks.svg` could be the `blocks` view of `architecture-building` or the `building-blocks` view of `architecture`, and only the second file is there.
+A `build-pipeline.svg` with no `build.drawio` beside it is a picture, which is the ordinary case and stays silent.
+
+The diagram has the last word on the view as well.
+A picture called `architecture-core.svg` points at a page the file spells `view-core`, so the page is looked up rather than guessed - by its whole id, or by its tail where exactly one page answers.
+That keeps the convention free of any one generator's prefix.
+
+=== Why the pictures must carry nothing
+
+`run.sh` fails the build when an exported SVG still holds a model, and the publisher warns when it meets one.
+Both guard the same mistake: draw.io embeds the *whole* model into every picture it exports, so three views exported that way become three attachments each holding all three, and editing one changes nothing in the other two.
+The document looks identical either way.
+Published that way once by accident, which is how the difference got measured.
+
+=== What is not here yet
+
+Previews:: nothing but the diagram is uploaded. The app draws every view live from it and never creates a preview by itself, so an export of the page to PDF is blank where the diagrams are. Whether to upload `<diagram>-<sha1 of the aspect>.png` per view is a configuration, and it is not built yet.
+A hard view lock:: there is none on Confluence DC 9.2.21. `aspect` sets the view a spot arrives at; a reader can page away and a reload puts them back. The toolbar that lets them page away is the same one that opens the editor, so the wandering cannot be removed without removing the editing. Measured in `../aspect-baseline/MEASURED.adoc`.

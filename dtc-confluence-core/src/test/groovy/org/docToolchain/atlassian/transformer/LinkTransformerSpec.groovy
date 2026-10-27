@@ -25,7 +25,7 @@ class LinkTransformerSpec extends Specification {
             def body = bodyOf('<a href="#sect-two">Section Two</a>')
 
         when:
-            new LinkTransformer().transformLinks(body, ['sect-two': 'Target Page'], [:], '', '', JIRA_API, null)
+            new LinkTransformer().transformLinks(body, ['sect-two': 'Target Page'], [:], '', '', JIRA_API, null, DocumentLinks.NONE, '')
 
         then: 'the link text is moved into the CDATA placeholder, which sanitizeBody turns into CDATA'
             body.html() == '<ac:link ac:anchor="sect-two">' +
@@ -39,7 +39,7 @@ class LinkTransformerSpec extends Specification {
             def body = bodyOf('<a href="#page-three">Page Three</a>')
 
         when:
-            new LinkTransformer().transformLinks(body, [:], ['page-three': 'Page Three Title'], '', '', JIRA_API, null)
+            new LinkTransformer().transformLinks(body, [:], ['page-three': 'Page Three Title'], '', '', JIRA_API, null, DocumentLinks.NONE, '')
 
         then:
             body.html().startsWith('<ac:link><ri:page ri:content-title="Page Three Title" />')
@@ -50,7 +50,7 @@ class LinkTransformerSpec extends Specification {
             def body = bodyOf('<a href="#sect">Text</a>')
 
         when:
-            new LinkTransformer().transformLinks(body, ['sect': 'Title'], [:], 'PRE-', '-SUF', JIRA_API, null)
+            new LinkTransformer().transformLinks(body, ['sect': 'Title'], [:], 'PRE-', '-SUF', JIRA_API, null, DocumentLinks.NONE, '')
 
         then:
             body.html().contains('ri:content-title="PRE-Title-SUF"')
@@ -61,7 +61,7 @@ class LinkTransformerSpec extends Specification {
             def body = bodyOf('<a href="#nowhere">Text</a>')
 
         when:
-            new LinkTransformer().transformLinks(body, [:], [:], '', '', JIRA_API, null)
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', JIRA_API, null, DocumentLinks.NONE, '')
 
         then:
             body.html() == '<a href="#nowhere">Text</a>'
@@ -72,7 +72,7 @@ class LinkTransformerSpec extends Specification {
             def body = bodyOf('<a href="#sect"></a>')
 
         when:
-            new LinkTransformer().transformLinks(body, ['sect': 'Title'], [:], '', '', JIRA_API, null)
+            new LinkTransformer().transformLinks(body, ['sect': 'Title'], [:], '', '', JIRA_API, null, DocumentLinks.NONE, '')
 
         then:
             body.html() == '<a href="#sect"></a>'
@@ -83,7 +83,7 @@ class LinkTransformerSpec extends Specification {
             def body = bodyOf('<a href="https://jira.example.com/browse/ABC-1">ABC-1</a>')
 
         when:
-            new LinkTransformer().transformLinks(body, [:], [:], '', '', JIRA_API, null)
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', JIRA_API, null, DocumentLinks.NONE, '')
 
         then:
             body.html().contains('<ac:structured-macro ac:name="jira" ac:schema-version="1">')
@@ -101,7 +101,7 @@ class LinkTransformerSpec extends Specification {
             def body = bodyOf('<a href="https://jira.example.com/browse/ABC-1">ABC-1</a>')
 
         when:
-            new LinkTransformer().transformLinks(body, [:], [:], '', '', JIRA_API, 'SRV-9')
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', JIRA_API, 'SRV-9', DocumentLinks.NONE, '')
 
         then:
             body.html().contains('<ac:parameter ac:name="serverId">SRV-9</ac:parameter>')
@@ -112,7 +112,7 @@ class LinkTransformerSpec extends Specification {
             def body = bodyOf('<a href="https://jira.example.com/browse/ABC-1">ABC-1</a>')
 
         when: 'the API URL carries the default port explicitly'
-            new LinkTransformer().transformLinks(body, [:], [:], '', '', 'https://jira.example.com:443/rest/api/2', null)
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', 'https://jira.example.com:443/rest/api/2', null, DocumentLinks.NONE, '')
 
         then: 'the link is still recognised, so the port was not part of the comparison'
             body.select('a').isEmpty()
@@ -123,7 +123,7 @@ class LinkTransformerSpec extends Specification {
             def body = bodyOf('<a href="https://jira.example.com:8443/browse/ABC-1">ABC-1</a>')
 
         when:
-            new LinkTransformer().transformLinks(body, [:], [:], '', '', 'https://jira.example.com:8443/rest/api/2', null)
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', 'https://jira.example.com:8443/rest/api/2', null, DocumentLinks.NONE, '')
 
         then:
             body.select('a').isEmpty()
@@ -134,7 +134,7 @@ class LinkTransformerSpec extends Specification {
             def body = bodyOf('<a href="https://elsewhere.example/browse/ABC-1">elsewhere</a>')
 
         when:
-            new LinkTransformer().transformLinks(body, [:], [:], '', '', JIRA_API, null)
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', JIRA_API, null, DocumentLinks.NONE, '')
 
         then:
             body.html() == '<a href="https://elsewhere.example/browse/ABC-1">elsewhere</a>'
@@ -143,11 +143,265 @@ class LinkTransformerSpec extends Specification {
     def 'without a configured Jira API nothing is rewritten as a Jira macro'() {
         given:
             def body = bodyOf('<a href="https://jira.example.com/browse/ABC-1">ABC-1</a>')
+            def said = new ByteArrayOutputStream()
+            def wasOut = System.out
+            System.out = new PrintStream(said, true, 'UTF-8')
 
         when:
-            new LinkTransformer().transformLinks(body, [:], [:], '', '', null, null)
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', null, null, DocumentLinks.NONE, 'manual.html')
+            System.out = wasOut
 
         then:
             body.html() == '<a href="https://jira.example.com/browse/ABC-1">ABC-1</a>'
+
+        and: 'and the missing configuration is reported, because here it cost something'
+            said.toString('UTF-8').contains('WARN')
+            said.toString('UTF-8').contains('browse/ABC-1')
+    }
+
+    def 'a document with no Jira link is not told about Jira at all'() {
+        given: '''Most documents have nothing to do with Jira, and the warning used to appear once
+                  per page of every one of them.'''
+            def body = bodyOf('<p>Plain text and <a href="https://elsewhere.example/">a link</a>.</p>')
+            def said = new ByteArrayOutputStream()
+            def wasOut = System.out
+            System.out = new PrintStream(said, true, 'UTF-8')
+
+        when:
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', null, null, DocumentLinks.NONE, 'manual.html')
+            System.out = wasOut
+
+        then:
+            said.toString('UTF-8').isEmpty()
+    }
+
+    def 'several Jira links are reported once, not once each'() {
+        given:
+            def body = bodyOf('<a href="https://jira.example.com/browse/ABC-1">one</a>' +
+                '<a href="https://jira.example.com/browse/ABC-2">two</a>' +
+                '<a href="https://jira.example.com/jira/browse/XY_Z-317">three</a>')
+            def said = new ByteArrayOutputStream()
+            def wasOut = System.out
+            System.out = new PrintStream(said, true, 'UTF-8')
+
+        when:
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', null, null, DocumentLinks.NONE, 'manual.html')
+            System.out = wasOut
+
+        then: 'the point is the missing configuration, which repeating says nothing more about'
+            said.toString('UTF-8').count('WARN') == 1
+    }
+
+    def 'a link that merely looks a little like Jira is not reported'() {
+        given: 'a false alarm is worse than silence here: it sends the reader after a setting they do not need'
+            def body = bodyOf('<a href="https://example.com/browse/catalogue">browse</a>' +
+                '<a href="https://example.com/browse/abc-1">lowercase</a>' +
+                '<a href="/browse/ABC-1">relative</a>')
+            def said = new ByteArrayOutputStream()
+            def wasOut = System.out
+            System.out = new PrintStream(said, true, 'UTF-8')
+
+        when:
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', null, null, DocumentLinks.NONE, 'manual.html')
+            System.out = wasOut
+
+        then:
+            said.toString('UTF-8').isEmpty()
+    }
+
+    def 'a Jira API URL that is not a URI is still reported'() {
+        given: 'that is a broken configuration rather than an absent one, whatever the document holds'
+            def body = bodyOf('<p>Nothing to do with Jira.</p>')
+            def said = new ByteArrayOutputStream()
+            def wasOut = System.out
+            System.out = new PrintStream(said, true, 'UTF-8')
+
+        when:
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', 'not a uri at all', null,
+                DocumentLinks.NONE, 'manual.html')
+            System.out = wasOut
+
+        then:
+            said.toString('UTF-8').contains('WARN')
+            said.toString('UTF-8').contains('not a valid URI')
+    }
+
+    private static DocumentLinks twoDocuments() {
+        return DocumentLinks.of()
+            .add('architecture.html', 'PRE-Architecture-SUF',
+                ['decisions': 'PRE-Architecture-SUF', '_end_to_end': 'PRE-Architecture-SUF'],
+                ['blocks': 'PRE-Building Blocks-SUF'])
+            .build()
+    }
+
+    def 'a link to another document of this run becomes a link to its page'() {
+        given: '''An xref:other.adoc[] is an <a href="other.html"> by now, and on a Confluence page
+                  that is a link to a file nobody ever put there.'''
+            def body = bodyOf('<a href="architecture.html">Architecture</a>')
+
+        when:
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', JIRA_API, null,
+                twoDocuments(), 'manual.html')
+
+        then:
+            body.html() == '<ac:link>' +
+                '<ri:page ri:content-title="PRE-Architecture-SUF" />' +
+                '<ac:plain-text-link-body><cdata-placeholder>Architecture</cdata-placeholder></ac:plain-text-link-body>' +
+                '</ac:link>'
+    }
+
+    def 'the title carries the prefix of the document it points at'() {
+        given: '''and not of the one the link sits in. Two inputs may be configured differently,
+                  and a page is found by the title it was actually published under.'''
+            def body = bodyOf('<a href="architecture.html">Architecture</a>')
+
+        when:
+            new LinkTransformer().transformLinks(body, [:], [:], 'OTHER-', '-ONE', JIRA_API, null,
+                twoDocuments(), 'manual.html')
+
+        then:
+            body.html().contains('ri:content-title="PRE-Architecture-SUF"')
+            !body.html().contains('OTHER-')
+    }
+
+    def 'a fragment becomes an anchor on the link'() {
+        given:
+            def body = bodyOf('<a href="architecture.html#decisions">Decisions</a>')
+
+        when:
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', JIRA_API, null,
+                twoDocuments(), 'manual.html')
+
+        then:
+            body.html().startsWith('<ac:link ac:anchor="decisions">')
+    }
+
+    def 'a fragment that became a page of its own carries no anchor'() {
+        given:
+            def body = bodyOf('<a href="architecture.html#blocks">Blocks</a>')
+
+        when:
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', JIRA_API, null,
+                twoDocuments(), 'manual.html')
+
+        then:
+            body.html().startsWith('<ac:link><ri:page ri:content-title="PRE-Building Blocks-SUF" />')
+    }
+
+    def 'a link to a document this run does not publish is left alone, and said so'() {
+        given:
+            def body = bodyOf('<a href="glossary.html">Glossary</a>')
+            def said = new ByteArrayOutputStream()
+            def wasOut = System.out
+            System.out = new PrintStream(said, true, 'UTF-8')
+
+        when:
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', JIRA_API, null,
+                twoDocuments(), 'manual.html')
+            System.out = wasOut
+
+        then: 'exactly as it was - a reader would otherwise find out by clicking it'
+            body.html() == '<a href="glossary.html">Glossary</a>'
+
+        and:
+            said.toString('UTF-8').contains('WARN')
+            said.toString('UTF-8').contains('glossary.html')
+
+        and: 'about the document, which is what is missing here'
+            said.toString('UTF-8').contains('does not publish')
+    }
+
+    def 'a link at an anchor the other document does not have lands on its page'() {
+        given: '''The document is published, only the spot within it is not there. A link to the
+                  page is not what was asked for, but it works, and a relative .html link does
+                  not.'''
+            def body = bodyOf('<a href="architecture.html#nowhere">Nowhere</a>')
+            def said = new ByteArrayOutputStream()
+            def wasOut = System.out
+            System.out = new PrintStream(said, true, 'UTF-8')
+
+        when:
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', JIRA_API, null,
+                twoDocuments(), 'manual.html')
+            System.out = wasOut
+
+        then:
+            body.html() == '<ac:link>' +
+                '<ri:page ri:content-title="PRE-Architecture-SUF" />' +
+                '<ac:plain-text-link-body><cdata-placeholder>Nowhere</cdata-placeholder></ac:plain-text-link-body>' +
+                '</ac:link>'
+
+        and: 'and the anchor is named, not the document - the document is there'
+            said.toString('UTF-8').contains('WARN')
+            said.toString('UTF-8').contains("carries no anchor 'nowhere'")
+            !said.toString('UTF-8').contains('does not publish')
+    }
+
+    def 'an extension left behind the hash is pointed out'() {
+        given: '''xref:architecture#decisions.adoc[] puts the extension on the anchor rather than
+                  on the file. Nothing in the document shows it; only the dead link does.'''
+            def body = bodyOf('<a href="architecture.html#decisions.adoc">Decisions</a>')
+            def said = new ByteArrayOutputStream()
+            def wasOut = System.out
+            System.out = new PrintStream(said, true, 'UTF-8')
+
+        when:
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', JIRA_API, null,
+                twoDocuments(), 'manual.html')
+            System.out = wasOut
+
+        then:
+            said.toString('UTF-8').contains("Did you mean '#decisions'?")
+            said.toString('UTF-8').contains("anchor ends in '.adoc'")
+    }
+
+    def 'a generated heading id written with hyphens is pointed at the real one'() {
+        given: '''AsciiDoctor joins a generated id with '_'; the reference was written with '-'.
+                  This is what the warning is for - the document shows nothing of it.'''
+            def body = bodyOf('<a href="architecture.html#_end-to-end">End to end</a>')
+            def said = new ByteArrayOutputStream()
+            def wasOut = System.out
+            System.out = new PrintStream(said, true, 'UTF-8')
+
+        when:
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', JIRA_API, null,
+                twoDocuments(), 'manual.html')
+            System.out = wasOut
+
+        then:
+            said.toString('UTF-8').contains("Did you mean '#_end_to_end'?")
+
+        and: 'and nothing about extensions, which would only mislead here'
+            !said.toString('UTF-8').contains('extension')
+    }
+
+    def 'a relative link to something that is not a document is not touched or reported'() {
+        given: '''Judged by the extension on purpose: a link to a file is the attachment handling's
+                  business, and warning about every one of them would bury the links that matter.'''
+            def body = bodyOf('<a href="handbook.pdf">Handbook</a>')
+            def said = new ByteArrayOutputStream()
+            def wasOut = System.out
+            System.out = new PrintStream(said, true, 'UTF-8')
+
+        when:
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', JIRA_API, null,
+                twoDocuments(), 'manual.html')
+            System.out = wasOut
+
+        then:
+            body.html() == '<a href="handbook.pdf">Handbook</a>'
+            !said.toString('UTF-8').contains('WARN')
+    }
+
+    def 'a link to a page on another host is left alone'() {
+        given:
+            def body = bodyOf('<a href="https://elsewhere.example/doc.html">Elsewhere</a>')
+
+        when:
+            new LinkTransformer().transformLinks(body, [:], [:], '', '', JIRA_API, null,
+                twoDocuments(), 'manual.html')
+
+        then:
+            body.html() == '<a href="https://elsewhere.example/doc.html">Elsewhere</a>'
     }
 }

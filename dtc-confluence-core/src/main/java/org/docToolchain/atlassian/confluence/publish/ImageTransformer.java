@@ -284,8 +284,10 @@ public class ImageTransformer {
         byte[] picture = readOrNull(url);
         Optional<String> found = EmbeddedDiagram.of(picture);
         if (found.isEmpty()) {
-            return false;
+            return asViewOfASharedDiagram(image, url, fileName, width, diagramVersion, uploads,
+                    diagrams);
         }
+        sayWhereTheTwoArmsMeet(url, fileName);
         String diagram = found.get();
         String name = withoutExtension(fileName);
         Diagram alreadyThere = diagrams.get(name);
@@ -318,6 +320,154 @@ public class ImageTransformer {
         System.out.println("    diagram: " + fileName + " carries one, published as the editable"
                 + " diagram '" + name + "' with " + name + ".png as its preview");
         return true;
+    }
+
+    /**
+     * Says so where a picture would fit both arms, because only one of them can have it.
+     *
+     * <p>A picture that carries a diagram <em>and</em> names a view of one beside it is published
+     * as the diagram it carries: the file decides, which is the rule everywhere else here, and
+     * changing that silently would move every such page onto a different attachment. But it is
+     * worth a word, because the two arrangements look the same in the document and are not the
+     * same page at all - draw.io embeds the whole model into every picture it exports, so a model
+     * with three views published this way is three attachments each holding all three, and
+     * editing one of them changes nothing in the other two.</p>
+     */
+    private static void sayWhereTheTwoArmsMeet(String url, String fileName) {
+        shared(url, fileName).ifPresent(shared -> System.out.println(">>> WARN: " + fileName
+                + " carries a draw.io diagram of its own, and there is a "
+                + shared.view().sourceFileName() + " beside it. The diagram inside the picture is"
+                + " what gets published, so this becomes a diagram of its own rather than a view"
+                + " of the shared one, and every other view of that model attaches a whole copy"
+                + " of it too. Export the pictures without the embedded model to publish them as"
+                + " views of " + shared.view().sourceFileName() + "."));
+    }
+
+    /**
+     * Which shared diagram a picture is a view of, where it is one.
+     *
+     * <p>The name only offers readings; what decides is the directory. Each reading is tried in
+     * turn, longest diagram name first, and the first whose file is there <em>and</em> holds a
+     * page the name points at is the answer. Both halves matter: a file that is not there means
+     * the picture is a picture, and a file that is there but has no such page means the name
+     * pointed at something else, which is still a picture rather than a macro pinned to nothing.
+     * </p>
+     */
+    private static Optional<SharedDiagram> shared(String url, String fileName) {
+        String directory = url.substring(0, url.lastIndexOf('/') + 1);
+        for (ViewReference candidate : ViewReference.candidatesIn(fileName)) {
+            byte[] source = readOrNull(directory + candidate.sourceFileName());
+            if (source == null) {
+                continue;
+            }
+            String diagram = new String(source, StandardCharsets.UTF_8);
+            Optional<String> page = candidate.pageOf(diagram);
+            if (page.isPresent()) {
+                return Optional.of(new SharedDiagram(candidate,
+                        directory + candidate.sourceFileName(), diagram, page.get()));
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * @param view    how the picture's name was read
+     * @param url     where the diagram is on this machine
+     * @param source  its contents
+     * @param page    the id of the page to pin to, as the diagram itself spells it
+     */
+    private record SharedDiagram(ViewReference view, String url, String source, String page) {
+    }
+
+    /**
+     * Writes a pinned draw.io macro in place of a picture that only <em>names</em> its diagram.
+     *
+     * <p>The other arm reads the diagram out of the picture. This one is for pictures that carry
+     * nothing: a generator draws several views of one model into one {@code .drawio} and exports a
+     * flat picture per view, and the pictures say which view they are of by their name alone - see
+     * {@link ViewReference}. The diagram is the sibling file, attached once under its own name
+     * with no extension, and each picture of it becomes a macro pinned to its own view.</p>
+     *
+     * <p>Nothing is uploaded but the diagram. The app renders every view live from it, and the
+     * pictures themselves are for the targets that are not Confluence - an SVG would not render
+     * inline there anyway. What that costs is the static picture an export to PDF would use,
+     * which is a separate decision and a separate upload.</p>
+     *
+     * <p>A name that does not follow the convention, and a name that does with no such file beside
+     * it, both leave the picture a picture without a word: one underscore too many in a file name
+     * is far likelier than a diagram somebody forgot to commit, and a warning on every such name
+     * would bury the ones that matter.</p>
+     *
+     * @return whether this image became a diagram, so that the caller leaves the picture alone
+     */
+    private boolean asViewOfASharedDiagram(Element image, String url, String fileName,
+                                           String width, int diagramVersion,
+                                           List<Upload> uploads, Map<String, Diagram> diagrams) {
+        // Beside the picture rather than beside the document: a document may keep its pictures in
+        // a directory of their own, and the diagram belongs with them.
+        Optional<SharedDiagram> referred = shared(url, fileName);
+        if (referred.isEmpty()) {
+            return false;
+        }
+        SharedDiagram shared = referred.get();
+        String name = shared.view().diagramName();
+        String diagram = shared.source();
+        // Off this picture and not off the diagram the views share: measured on three views of
+        // one model, the shapes were 944x694, 844x974 and 844x794, so a height taken from
+        // whichever view came first squashed the other two by a third.
+        String height = new Diagram(diagram, shapeOf(url)).heightAt(width);
+
+        Diagram alreadyThere = diagrams.get(name);
+        if (alreadyThere != null) {
+            return pinnedAgain(image, fileName, name, width, height, shared.page(), alreadyThere,
+                    diagram);
+        }
+        diagrams.put(name, new Diagram(diagram, null));
+        uploads.add(new Upload(shared.url(), name, DIAGRAM_COMMENT, diagramVersion));
+        image.after(DrawioMacro.pinnedTo(name, width, height, shared.page()));
+        System.out.println("    diagram: " + fileName + " is a view of '"
+                + shared.view().sourceFileName() + "', published as the editable diagram '" + name
+                + "' pinned to '" + shared.page() + "'");
+        return true;
+    }
+
+    /**
+     * What to do about a second picture of this page naming the same shared diagram.
+     *
+     * <p>Which is the ordinary case here rather than the exception: several views of one model on
+     * one page is what this arm is for. One attachment and a macro per view, each pinned to its
+     * own, and each as tall as its own picture - the shape travels with the spot here and not
+     * with the diagram, because the views of one model are not the same shape.</p>
+     *
+     * <p>Two different files claiming one diagram name is the collision the other arm has, and it
+     * is reported the same way.</p>
+     */
+    private static boolean pinnedAgain(Element image, String fileName, String name, String width,
+                                       String height, String aspect, Diagram alreadyThere,
+                                       String diagram) {
+        if (!alreadyThere.source().equals(diagram)) {
+            System.out.println(">>> WARN: " + fileName + " is a view of a draw.io diagram that"
+                    + " would be attached as '" + name + "', and another picture of this page has"
+                    + " already put a different diagram there. Confluence holds one attachment of"
+                    + " that name, so this one stays a picture; rename one of the two diagrams to"
+                    + " publish both.");
+            return false;
+        }
+        image.after(DrawioMacro.pinnedTo(name, width, height, aspect));
+        System.out.println("    diagram: " + fileName + " shows '" + name + "' pinned to '"
+                + aspect + "'");
+        return true;
+    }
+
+    /**
+     * @return the shape to size a macro by, read off the PNG beside the picture where there is
+     *         one - a picture that is itself a PNG is its own. Null where there is none: the
+     *         macro then carries no height, which is better than a number nobody measured.
+     */
+    private static EmbeddedDiagram.Size shapeOf(String url) {
+        String previewUrl = previewUrlOf(url);
+        byte[] preview = readOrNull(previewUrl);
+        return preview == null ? null : EmbeddedDiagram.sizeOfPng(preview).orElse(null);
     }
 
     /**

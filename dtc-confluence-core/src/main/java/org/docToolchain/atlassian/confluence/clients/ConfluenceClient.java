@@ -22,6 +22,7 @@ import org.apache.hc.core5.http.HttpEntity;
 import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.hc.core5.net.URIBuilder;
 import org.docToolchain.configuration.ConfigService;
+import org.docToolchain.http.NonJsonResponseException;
 
 /**
  * Common ground for the two Confluence REST APIs: works out where the API lives, carries the
@@ -34,6 +35,9 @@ public abstract class ConfluenceClient {
 
     private static final String API_V1_IDENTIFIER = "/rest/api";
     private static final String API_V2_IDENTIFIER = "/api/v2";
+
+    /** What the credentials check asks: the endpoint that reports who they belong to. */
+    private static final String CURRENT_USER = "/user/current";
 
     /**
      * The content hash an upload of ours leaves in the version comment, between two hash marks.
@@ -102,6 +106,16 @@ public abstract class ConfluenceClient {
 
     protected final String API_V1_PATH;
     protected final String API_V2_PATH;
+
+    /**
+     * The REST v1 endpoint as a URL a reader can compare against the address bar of a browser.
+     *
+     * <p>Kept because {@link #verifyCredentials()} prints it, and because the request itself
+     * carries only {@link #API_V1_PATH}: the host lives in the REST client, so the output of a
+     * failing check named no address at all.</p>
+     */
+    private final String apiV1Url;
+
     protected final String editorVersion;
     protected RestClient restClient;
 
@@ -119,12 +133,15 @@ public abstract class ConfluenceClient {
         String apiContext = constructApiContext(apiConfigItem);
         this.API_V1_PATH = apiContext + API_V1_IDENTIFIER;
         this.API_V2_PATH = apiContext + API_V2_IDENTIFIER;
+        // baseUrlFor already ends with the derived context path, which is the half of
+        // apiV1PathFor that is not the identifier - appending the whole path would repeat it.
+        this.apiV1Url = baseUrlFor(configService) + API_V1_IDENTIFIER;
         this.editorVersion = determineEditorVersion(configService);
     }
 
     private static String constructApiContext(String configItem) {
         try {
-            String apiContext = determineApiContext(new URIBuilder(configItem).getPath());
+            String apiContext = determineApiContext(new URIBuilder(configItem).getPath(), configItem);
             return apiContext.isEmpty() ? "" : "/" + apiContext;
         } catch (URISyntaxException e) {
             throw new IllegalArgumentException("confluence.api is not a valid URI: '" + configItem + "'", e);
@@ -135,10 +152,14 @@ public abstract class ConfluenceClient {
      * Derives the context path from whatever the user configured, which ranges from a bare host to
      * a full API endpoint.
      */
-    private static String determineApiContext(String apiPath) {
-        // no path at all, or just a slash
+    private static String determineApiContext(String apiPath, String configItem) {
+        // No path at all, or just a slash. Cloud serves Confluence under /wiki, so that is the
+        // right guess there and nowhere else: a Data Center at the root was sent to /wiki/rest/api
+        // and answered with Confluence's own 404 page, which says nothing about the cause. The
+        // host decides it, through the same test that picks the API version - deriving v1 from
+        // "not Cloud" while deriving Cloud's context path from the same URL was a contradiction.
         if (apiPath == null || apiPath.length() <= 1) {
-            return API_DEFAULT_CONTEXT;
+            return ConfluenceApiVersion.isCloud(configItem) ? API_DEFAULT_CONTEXT : "";
         }
         String remainder = apiPath
                 .substring(1)
@@ -154,24 +175,70 @@ public abstract class ConfluenceClient {
     }
 
     /**
-     * Confirms that the configured credentials resolve to a real user.
+     * Confirms that the configured credentials resolve to a real user, and says where it looked.
      *
      * <p>Confluence Data Center answers {@code /user/current} with HTTP 200 and a body of
      * {@code {"type":"anonymous"}} when the credentials are invalid, rather than 401. Checking the
      * status code alone therefore reports success for any token.</p>
+     *
+     * <p>The address is printed before the request, and an answer that is not an API answer is
+     * told apart from a rejected user, because three different faults were indistinguishable in
+     * the output of this check: a wrong address, a wrong token, and something in front of
+     * Confluence answering in its place. Measured against a customer instance, a request that
+     * landed on an SSO login page was reported as "the API resolved to an anonymous user", which
+     * sent the reader to the token while the request had never reached a REST endpoint. The
+     * address has to be the derived one: {@code confluence.api} takes anything from a bare host
+     * to a full endpoint, and a bare host is given Cloud's {@code /wiki}, so the configured value
+     * does not say where the call goes.</p>
      */
     public Object verifyCredentials() {
-        Object response = callApiAndFailIfNot20x(new HttpGet(API_V1_PATH + "/user/current"));
-        Map<?, ?> user = response instanceof Map<?, ?> map ? map : null;
-        Object identity = user == null ? null : identityOf(user);
-        if (user == null || "anonymous".equals(user.get("type")) || identity == null) {
+        String endpoint = apiV1Url + CURRENT_USER;
+        System.out.println("Verifying " + endpoint + " (derived from confluence.api)");
+        Object response;
+        try {
+            response = callApiAndFailIfNot20x(new HttpGet(API_V1_PATH + CURRENT_USER));
+        } catch (NonJsonResponseException notAnApi) {
+            throw didNotAnswerAsAnApi(endpoint, notAnApi.getMessage(), notAnApi);
+        }
+        if (response == null) {
+            throw didNotAnswerAsAnApi(endpoint, "the endpoint answered without a body", null);
+        }
+        if (!(response instanceof Map<?, ?> user)) {
+            throw didNotAnswerAsAnApi(endpoint, "the endpoint answered JSON, but not a user", null);
+        }
+        if ("anonymous".equals(user.get("type"))) {
             throw new IllegalStateException(
                     "Confluence did not accept the credentials: the API resolved to an anonymous user. "
                             + "Check confluence.bearerToken (Data Center: personal access token) "
                             + "or confluence.credentials.");
         }
+        Object identity = identityOf(user);
+        if (identity == null) {
+            throw new IllegalStateException(
+                    "Confluence answered a user this check cannot confirm: it carries neither a "
+                            + "username, nor an accountId, nor a userKey.");
+        }
         System.out.println("Authenticated as '" + identity + "' (" + user.get("displayName") + ")");
         return user;
+    }
+
+    /**
+     * Says that whatever answered was not the API, and names the two things that cause it.
+     *
+     * <p>Kept apart from the credentials message on purpose: an answer that is not an API answer
+     * says nothing whatsoever about the credentials.</p>
+     *
+     * @param whatCameBack what did answer, as a sentence fragment - the status and the declared
+     *                     type are the evidence, and no part of the configuration is printed here
+     */
+    private static IllegalStateException didNotAnswerAsAnApi(String endpoint, String whatCameBack,
+                                                             Exception cause) {
+        return new IllegalStateException("Confluence did not answer as an API at '" + endpoint
+                + "': " + whatCameBack + "."
+                + "\nEither confluence.api names the wrong context path, or something in front of "
+                + "Confluence - an SSO proxy, for instance - answered in its place."
+                + "\nThe credentials are not implicated: the request did not reach a REST endpoint.",
+                cause);
     }
 
     /**
