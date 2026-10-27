@@ -66,7 +66,7 @@ public class RequestFailedException extends RuntimeException {
         return "something went wrong - request failed ("
                 + "\nresponse: " + responseLog + ", "
                 + "\nreason: " + reasonLog + ", "
-                + "\npossible solution: " + possibleSolution(response)
+                + "\npossible solution: " + possibleSolution(response, body)
                 + ")";
     }
 
@@ -90,9 +90,19 @@ public class RequestFailedException extends RuntimeException {
                 : oneLine.substring(0, BODY_LIMIT) + CUT_OFF;
     }
 
-    private static String possibleSolution(HttpResponse response) {
+    private static String possibleSolution(HttpResponse response, String body) {
         if (response == null) {
             return "no response was received - please check the configured API URL and network access";
+        }
+        // Before the status code, because the status says what went wrong with the request while
+        // this says the request never reached the API at all. Measured: a configured URL without
+        // a context path was answered 404 with Confluence's own error page, and the hint sent the
+        // reader to the space key, where there was no space in the question.
+        if (looksLikeADocument(body)) {
+            return "a document came back rather than an API answer, so the request did not reach "
+                    + "a REST endpoint - please check the context path in confluence.api, and "
+                    + "whether something in front of Confluence, an SSO proxy for instance, "
+                    + "answered in its place";
         }
         return switch (response.getCode()) {
             case HttpStatus.SC_BAD_REQUEST ->
@@ -113,6 +123,15 @@ public class RequestFailedException extends RuntimeException {
                     "please check your config. If you are sure that everything is correct, "
                             + "please open an issue at " + ISSUE_TRACKER;
         };
+    }
+
+    /**
+     * @return whether the body is markup rather than the JSON the API answers with - an HTML error
+     *         page, a login page, or the XML a servlet container serves. Anything that opens with
+     *         a tag qualifies: what it is matters less than what it is not.
+     */
+    private static boolean looksLikeADocument(String body) {
+        return body != null && body.stripLeading().startsWith("<");
     }
 
     private static String statusLine(HttpResponse response) {
