@@ -65,7 +65,7 @@
     <groovy.version>4.0.33</groovy.version>
     <jsoup.version>1.23.2</jsoup.version>
     <httpclient5.version>5.6.5</httpclient5.version>
-    <guava.version>33.7.2-jre</guava.version>
+    <guava.version>33.8.0-jre</guava.version>
     <snakeyaml.version>2.7</snakeyaml.version>
     <!-- Spock caps Groovy at 4.x: there is no Groovy 5 build of spock-core.
          Groovy 5 fails the build outright, see .github/dependabot.yml. -->
